@@ -1,0 +1,25 @@
+{
+  "name": "@rove/engine",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch --import tsx src/server.ts",
+    "start": "node --import tsx src/server.ts",
+    "proof:evidence": "node --import tsx src/prove-evidence.ts",
+    "probe:payment": "node --import tsx src/probe-payment.ts",
+    "proof:payment": "node --import tsx src/prove-payment.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@rove/config": "workspace:*",
+    "@rove/contracts": "workspace:*",
+    "@rove/evidence": "workspace:*",
+    "@rove/tempo": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.2"
+  }
+}

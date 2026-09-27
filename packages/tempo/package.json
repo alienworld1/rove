@@ -1,0 +1,19 @@
+{
+  "name": "@rove/tempo",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "viem": "^2.56.9"
+  }
+}

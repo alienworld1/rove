@@ -1,26 +1,27 @@
 @import "tailwindcss";
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-mono/400.css";
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-canvas: #f1f3f2;
+  --color-raised: #f8f9f7;
+  --color-pure: #ffffff;
+  --color-selection: #e2e7e5;
+  --color-ink: #18201e;
+  --color-ink-secondary: #47514e;
+  --color-ink-tertiary: #737d79;
+  --color-line: #bec6c2;
+  --color-line-strong: #818d88;
+  --color-protected: #167768;
+  --color-risk: #b57918;
+  --color-info: #4d6672;
+  --font-sans: "IBM Plex Sans", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+  --radius-sm: 2px;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-ink);
 }
