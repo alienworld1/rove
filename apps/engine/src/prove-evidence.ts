@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { readEvidenceConfig } from "@rove/config";
 import { verifyOcmf } from "@rove/evidence";
 
 const fixture = JSON.parse(
@@ -14,6 +15,17 @@ const fixture = JSON.parse(
   publicKeyHex: string;
   transportSessionId: string;
 };
+const settings = readEvidenceConfig({
+  ...process.env,
+  EVIDENCE_PROFILE_ID:
+    process.env.EVIDENCE_PROFILE_ID || "ocmf-secp256r1-sha256",
+  EVIDENCE_METER_ID: process.env.EVIDENCE_METER_ID || "17619300",
+  EVIDENCE_SESSION_ID:
+    process.env.EVIDENCE_SESSION_ID || fixture.transportSessionId,
+  EVIDENCE_PUBLIC_KEY_HEX:
+    process.env.EVIDENCE_PUBLIC_KEY_HEX || fixture.publicKeyHex,
+  EVIDENCE_MAX_AGE_MS: process.env.EVIDENCE_MAX_AGE_MS || "60000",
+});
 const variant = process.argv[2] ?? "accepted";
 const known = [
   "accepted",
@@ -30,13 +42,16 @@ if (!known.includes(variant))
 
 const input = {
   ...fixture,
+  publicKeyHex: settings.EVIDENCE_PUBLIC_KEY_HEX,
   raw:
     variant === "tampered"
       ? fixture.raw.replace("0.2597", "0.2598")
       : fixture.raw,
-  expectedMeterId: variant === "wrong-meter" ? "different" : "17619300",
-  expectedSessionId: variant === "wrong-session" ? "different" : "29",
-  maxAgeMs: 60_000,
+  expectedMeterId:
+    variant === "wrong-meter" ? "different" : settings.EVIDENCE_METER_ID,
+  expectedSessionId:
+    variant === "wrong-session" ? "different" : settings.EVIDENCE_SESSION_ID,
+  maxAgeMs: settings.EVIDENCE_MAX_AGE_MS,
   now: new Date(
     variant === "stale" ? "2019-08-13T10:05:00Z" : "2019-08-13T10:03:37Z",
   ),
