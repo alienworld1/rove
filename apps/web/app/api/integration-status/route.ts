@@ -1,27 +1,16 @@
 import { timingSafeEqual } from "node:crypto";
 import { readBaseConfig, proofPrerequisites } from "@rove/config";
 import { integrationStatusSchema } from "@rove/contracts";
+import { hasDemoSession } from "../demo-session";
 
 export const runtime = "nodejs";
-
-function authorized(request: Request, token: string) {
-  const supplied = request.headers
-    .get("cookie")
-    ?.split("; ")
-    .find((part) => part.startsWith("rove_demo="))
-    ?.slice("rove_demo=".length);
-  if (!supplied) return false;
-  const actual = Buffer.from(supplied);
-  const expected = Buffer.from(token);
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
 
 export async function GET(request: Request) {
   const config = readBaseConfig();
   if (
     config.NODE_ENV !== "development" ||
     !config.DEMO_SESSION_TOKEN ||
-    !authorized(request, config.DEMO_SESSION_TOKEN)
+    !hasDemoSession(request, config.DEMO_SESSION_TOKEN)
   ) {
     return Response.json(
       { message: "This view isn't available in this session" },
@@ -53,7 +42,7 @@ export async function POST(request: Request) {
   return new Response(null, {
     status: 204,
     headers: {
-      "set-cookie": `rove_demo=${config.DEMO_SESSION_TOKEN}; HttpOnly; SameSite=Strict; Path=/api/integration-status`,
+      "set-cookie": `rove_demo=${config.DEMO_SESSION_TOKEN}; HttpOnly; SameSite=Strict; Path=/api`,
       "cache-control": "no-store",
     },
   });
