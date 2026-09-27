@@ -8,13 +8,18 @@
     "proof:evidence": "node --import tsx src/prove-evidence.ts",
     "probe:payment": "node --import tsx src/probe-payment.ts",
     "proof:payment": "node --import tsx src/prove-payment.ts",
+    "simulate:charging": "node --import tsx src/simulate-charging.ts",
     "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test src/*.test.ts",
     "build": "tsc --noEmit"
   },
   "dependencies": {
     "@rove/config": "workspace:*",
     "@rove/contracts": "workspace:*",
+    "@rove/domain": "workspace:*",
     "@rove/evidence": "workspace:*",
+    "@rove/persistence": "workspace:*",
+    "@rove/protection": "workspace:*",
     "@rove/tempo": "workspace:*"
   },
   "devDependencies": {

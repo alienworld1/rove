@@ -21,6 +21,7 @@ export type EvidenceResult = {
   sequence?: number;
   observedAt?: string;
   cumulativeWh?: string;
+  cumulativeMilliWh?: string;
   signatureValid: boolean;
   continuityValid: boolean;
   freshnessValid: boolean;
@@ -193,6 +194,7 @@ export function verifyOcmf(input: EvidenceInput): EvidenceResult {
       return reject(result, "EVIDENCE_STALE");
     result.freshnessValid = true;
     result.cumulativeWh = (priorMilliWh! / 1000n).toString();
+    result.cumulativeMilliWh = priorMilliWh!.toString();
     result.accepted = true;
     return result;
   } catch {

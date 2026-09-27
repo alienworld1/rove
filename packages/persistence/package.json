@@ -1,5 +1,32 @@
 {
   "name": "@rove/persistence",
   "private": true,
-  "version": "0.0.0"
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "test": "node --import tsx --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@rove/contracts": "workspace:*",
+    "@rove/domain": "workspace:*",
+    "@rove/evidence": "workspace:*",
+    "@rove/protection": "workspace:*",
+    "drizzle-orm": "^0.45.3",
+    "fast-json-stable-stringify": "^2.1.0",
+    "postgres": "^3.4.9"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "drizzle-kit": "^0.31.11",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.2"
+  }
 }

@@ -10,6 +10,7 @@
     "build": "tsc --noEmit"
   },
   "dependencies": {
+    "@rove/domain": "workspace:*",
     "zod": "^4.1.0"
   },
   "devDependencies": {

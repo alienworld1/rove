@@ -14,5 +14,8 @@
     "@types/node": "^20",
     "tsx": "^4.20.0",
     "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@rove/domain": "workspace:*"
   }
 }

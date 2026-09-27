@@ -1,4 +1,5 @@
 import { z } from "zod";
+export * from "./charging.ts";
 
 export const readinessSchema = z.object({
   status: z.enum(["checking", "ready", "blocked"]),

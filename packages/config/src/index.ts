@@ -12,6 +12,7 @@ const baseSchema = z.object({
   ENGINE_ORIGIN: localUrl.default("http://127.0.0.1:4100"),
   ENGINE_HOST: z.string().min(1).default("127.0.0.1"),
   ENGINE_PORT: z.coerce.number().int().min(1).max(65535).default(4100),
+  DATABASE_URL: z.url().optional(),
   DEMO_SESSION_TOKEN: z.preprocess(
     (value) => (value === "" ? undefined : value),
     z

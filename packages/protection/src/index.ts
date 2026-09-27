@@ -1,4 +1,5 @@
 export type ExposureState = "within_limit" | "at_limit" | "over_limit";
+export { transitionLane } from "./transition.js";
 
 export function nonnegativeInteger(value: number | bigint | string): bigint {
   if (typeof value === "number" && (!Number.isSafeInteger(value) || value < 0))

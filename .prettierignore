@@ -3,3 +3,4 @@
 **/pnpm-lock.yaml
 agent-docs/**
 AGENTS.md
+packages/persistence/drizzle/meta/**
