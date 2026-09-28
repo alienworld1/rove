@@ -21,7 +21,7 @@ Open `http://localhost:3000`. The page checks the web route and the engine at `h
 
 Copy `.env.example` to an ignored `.env` file for local settings. The engine reads settings from its process environment; shell values may be loaded with `set -a; . ./.env; set +a` before starting it. The web process needs the same `ENGINE_ORIGIN` and `DEMO_SESSION_TOKEN` values. Generate a random hexadecimal token of at least 48 characters for the local integration status view. The token is entered in that view and kept in an HTTP-only cookie.
 
-Basic readiness requires PostgreSQL but no payer key. Run `pnpm --filter @rove/persistence db:migrate` after setting `DATABASE_URL`. The integration status view reports only whether the proof settings are configured. A ready page confirms service response, not a verified channel or meter record. See [charging storage and local checks](docs/charging-storage.md) for the controlled create/read path and a signed local simulation.
+Basic readiness requires PostgreSQL but no payer key. Run `pnpm --filter @rove/persistence db:migrate` after setting `DATABASE_URL`. The integration status view reports only whether the proof settings are configured. A ready page confirms service response, not a verified channel or meter record. See [charging storage and local checks](docs/charging-storage.md) for the controlled live session path and the clearly labeled local simulation.
 
 ## Verification
 

@@ -1,0 +1,31 @@
+{
+  "corridor": {
+    "name": "Northstar Mobility and Voltway",
+    "payerEmsp": "northstar-mobility",
+    "payeeCpo": "voltway",
+    "tariff": { "perKwh": "1", "tariffDecimals": 0, "assetDecimals": 6 },
+    "protectionPolicy": {
+      "warningThreshold": "25000",
+      "riskThreshold": "50000",
+      "maxUnprotectedExposure": "100000",
+      "evidenceMaxAgeMs": 60000,
+      "chainMaxAgeMs": 60000,
+      "zeroGrace": false,
+      "lowHeadroomThreshold": "100000"
+    },
+    "reservePolicy": {
+      "initialDeposit": "1000000",
+      "topUpIncrement": "500000"
+    },
+    "settlementPolicy": {
+      "minimumIntervalMs": 1000,
+      "minimumUnsettledProtectedValue": "200000"
+    }
+  },
+  "lane": {
+    "externalSessionId": "change-this-for-each-session",
+    "chargerId": "charger-1",
+    "maxPowerWatts": "3600",
+    "expectedProofIntervalMs": 1000
+  }
+}

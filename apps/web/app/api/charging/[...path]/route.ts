@@ -20,8 +20,9 @@ export async function GET(
   const { path } = await context.params;
   if (
     path.length < 1 ||
-    path.length > 2 ||
+    path.length > 3 ||
     !["corridors", "lanes"].includes(path[0]) ||
+    (path.length === 3 && !(path[0] === "lanes" && path[2] === "inspector")) ||
     path.some(
       (segment) =>
         segment === "." ||
