@@ -13,28 +13,43 @@ if (config.NODE_ENV !== "development" || !config.DATABASE_URL)
   throw new Error("A local development database is required");
 const store = new ChargingStore(config.DATABASE_URL);
 try {
-  const lane = await store.getLane(laneId);
   const now =
     action === "tick" ? instantSchema.parse(detail) : new Date().toISOString();
-  const payload =
-    action === "tick"
-      ? { type: "TickProtectionClock" as const }
-      : {
-          type: "ObserveEvidence" as const,
-          raw: await readFile(detail, "utf8"),
-          transportSessionId: lane.externalSessionId,
-        };
-  const result = await store.advanceLane(
-    {
-      commandId: randomUUID(),
-      correlationId: randomUUID(),
-      laneId,
-      expectedVersion: lane.version,
-      now,
-      payload,
-    },
-    "controlled-session",
-  );
+  const raw = action === "evidence" ? await readFile(detail, "utf8") : null;
+  const commandId = randomUUID();
+  const correlationId = randomUUID();
+  let result;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const lane = await store.getLane(laneId);
+    try {
+      result = await store.advanceLane(
+        {
+          commandId,
+          correlationId,
+          laneId,
+          expectedVersion: lane.version,
+          now,
+          payload:
+            raw === null
+              ? { type: "TickProtectionClock" }
+              : {
+                  type: "ObserveEvidence",
+                  raw,
+                  transportSessionId: lane.externalSessionId,
+                },
+        },
+        "controlled-session",
+      );
+      break;
+    } catch (error) {
+      if (
+        !(error instanceof Error && error.message === "VERSION_CONFLICT") ||
+        attempt === 2
+      )
+        throw error;
+    }
+  }
+  if (!result) throw new Error("VERSION_CONFLICT");
   process.stdout.write(
     `${JSON.stringify({
       laneId,

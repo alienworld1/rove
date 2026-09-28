@@ -286,7 +286,10 @@ if (store) {
           Date.parse(now) - Date.parse(lane.lastChainObservedAt) >
             lane.policy.chainMaxAgeMs;
         const boundGrowing = lane.evidenceHealth !== "fresh" || evidenceDue;
-        const chainNeedsObservation = lane.chainHealth === "fresh" && chainDue;
+        const chainNeedsObservation =
+          lane.channelId !== null &&
+          lane.confirmedDeposit !== null &&
+          (lane.chainHealth !== "fresh" || chainDue);
         if (!boundGrowing && !chainNeedsObservation) continue;
         try {
           if (paymentEffects && chainNeedsObservation) {
