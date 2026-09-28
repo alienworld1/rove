@@ -18,6 +18,7 @@ const evidence = readEvidenceConfig();
 const input = JSON.parse(await readFile(inputPath, "utf8")) as {
   corridor: Record<string, unknown>;
   lane: Record<string, unknown>;
+  meterSource?: "meter" | "controlled-fixture";
 };
 const externalSessionId = String(input.lane?.externalSessionId ?? "");
 const stableId = (kind: string) =>
@@ -35,6 +36,7 @@ const corridorInput = createCorridorSchema.parse({
       fingerprint: createHash("sha256")
         .update(evidence.EVIDENCE_PUBLIC_KEY_HEX)
         .digest("hex"),
+      source: input.meterSource ?? "meter",
     },
   ],
 });

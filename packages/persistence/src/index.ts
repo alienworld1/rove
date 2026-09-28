@@ -290,6 +290,7 @@ export class ChargingStore {
           algorithm: "secp256r1-sha256",
           fingerprint: meter.fingerprint,
           enabled: true,
+          metadata: { source: meter.source ?? "meter" },
           createdAt: now,
         });
       const eventId = randomUUID();
@@ -500,6 +501,19 @@ export class ChargingStore {
             .limit(1)
         )[0];
         const lane = fromRow(row);
+        const meter = (
+          await tx
+            .select({ metadata: meterIdentities.metadata })
+            .from(meterIdentities)
+            .where(
+              and(
+                eq(meterIdentities.corridorId, lane.corridorId),
+                eq(meterIdentities.meterId, lane.meterId),
+              ),
+            )
+            .limit(1)
+        )[0];
+        const meterMetadata = meter?.metadata as { source?: string } | null;
         const paymentSnapshot = lane.channelId
           ? (
               await tx
@@ -608,6 +622,10 @@ export class ChargingStore {
           source: "stored-projection",
           chainObservedAt: lane.lastChainObservedAt,
           paymentSource: paymentSnapshot?.source ?? null,
+          meterSource:
+            meterMetadata?.source === "controlled-fixture"
+              ? "controlled-fixture"
+              : "meter",
           chainFreshness,
           evidenceFreshness,
           authorityCheckedAt: checkedAt,

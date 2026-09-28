@@ -40,10 +40,12 @@ Configure `DATABASE_URL`, `DEMO_SESSION_TOKEN`, the Tempo RPC, asset, and funded
 
 ```sh
 pnpm --filter @rove/persistence db:migrate
-pnpm --filter @rove/engine start:charging docs/charging-session.example.json
+pnpm --filter @rove/engine start:charging "$PWD/docs/charging-session.example.json"
 ```
 
 The command prints the Corridor and Lane IDs. It creates one persisted `INITIALIZING` Lane and queues initial funding; the running engine submits and reconciles the channel. The example values are illustrative test settings. Match `EVIDENCE_METER_ID` and `EVIDENCE_PUBLIC_KEY_HEX` to the signed record source. Set `EVIDENCE_SESSION_ID` to the new external session ID; the session ID in each record's transport binding must match it. Keep the funded test keys in ignored local secret storage.
+
+If the signed readings come from a local controlled fixture, set `"meterSource": "controlled-fixture"` at the top level of the session JSON. The Lane then identifies that meter input in the UI while Tempo transaction status remains sourced from the network.
 
 Open `/?lane=<lane-id>` after entering the local access key. `Check again` only refreshes the projection. The causal history shows sanitized evidence, voucher, channel, and transaction references. The confirmed deposit and settlement values change only after the engine reads their chain state.
 

@@ -73,6 +73,7 @@ test(
             meterId: "17619300",
             publicKeyHex: fixture.publicKeyHex,
             fingerprint: "published-fixture",
+            source: "controlled-fixture" as const,
           },
         ],
       };
@@ -93,6 +94,10 @@ test(
       };
       const started = await store.startLane(start, "local-simulation");
       assert.equal(started.version, 0);
+      assert.equal(
+        (await store.getLane(started.id)).meterSource,
+        "controlled-fixture",
+      );
       assert.equal((await store.getLane(started.id)).confirmedDeposit, null);
       assert.equal((await store.getCorridor(corridor.id)).name, create.name);
       const evidence = command(started.id, 0, {

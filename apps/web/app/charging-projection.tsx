@@ -199,14 +199,21 @@ export function ChargingProjection() {
         ) : null}
         {view && lane ? (
           <div className="space-y-7">
-            {lane.paymentSource === "local-simulation" ? (
+            {lane.meterSource === "controlled-fixture" ||
+            lane.paymentSource === "local-simulation" ? (
               <div className="space-y-1 border-l-2 border-info pl-3 text-sm text-ink-secondary">
-                <p>
-                  Local simulation: meter input is from a controlled fixture.
-                </p>
-                <p>
-                  Local simulation: payment status is not network confirmation.
-                </p>
+                {lane.meterSource === "controlled-fixture" ||
+                lane.paymentSource === "local-simulation" ? (
+                  <p>
+                    Local simulation: meter input is from a controlled fixture.
+                  </p>
+                ) : null}
+                {lane.paymentSource === "local-simulation" ? (
+                  <p>
+                    Local simulation: payment status is not network
+                    confirmation.
+                  </p>
+                ) : null}
               </div>
             ) : null}
             <div className="flex flex-wrap items-end justify-between gap-4">

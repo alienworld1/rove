@@ -68,6 +68,7 @@ export const createCorridorSchema = z
             meterId: idSchema,
             publicKeyHex: z.string().regex(/^[0-9a-fA-F]{128,400}$/),
             fingerprint: idSchema,
+            source: z.enum(["meter", "controlled-fixture"]).optional(),
           })
           .strict(),
       )
@@ -173,6 +174,7 @@ export const laneProjectionSchema = z
     source: z.literal("stored-projection"),
     chainObservedAt: instantSchema.nullable(),
     paymentSource: z.enum(["tempo-adapter", "local-simulation"]).nullable(),
+    meterSource: z.enum(["meter", "controlled-fixture"]),
     chainFreshness: z.enum(["current", "historical", "unknown"]),
     evidenceFreshness: z.enum(["current", "historical", "unknown"]),
     authorityCheckedAt: instantSchema,
