@@ -23,6 +23,11 @@ function lane(): Lane {
       zeroGrace: false,
       lowHeadroomThreshold: "1",
     },
+    reservePolicy: { initialDeposit: "200", topUpIncrement: "100" },
+    settlementPolicy: {
+      minimumIntervalMs: 1000,
+      minimumUnsettledProtectedValue: "50",
+    },
     settlementAssetId: "asset",
     tempoNetwork: "network",
     state: "INITIALIZING",
@@ -91,16 +96,21 @@ test("exact exposure equality requests pause once and preserves financial invari
       assetId: "asset",
       observedAt: now,
       confirmedDeposit: "200",
-      authorizedValue: "100",
-      settledValue: "50",
+      settledValue: "0",
       chainHeight: "1",
     },
     now,
     "pay",
   ).lane;
-  assert.equal(funded.state, "PROTECTED");
-  const stale = transitionLane(
+  const authorized = transitionLane(
     funded,
+    { type: "VoucherVerified", cumulativeAmount: "100", digest: "digest" },
+    now,
+    "voucher",
+  ).lane;
+  assert.equal(authorized.state, "PROTECTED");
+  const stale = transitionLane(
+    authorized,
     { type: "ClockTick" },
     "2026-01-01T00:00:01.001Z",
     "tick",
@@ -157,6 +167,162 @@ test("rejected evidence and unavailable payment cannot claim trusted or confirme
   assert.equal(second.trustedDeliveredValue, "0");
   assert.equal(second.confirmedDeposit, null);
   assert.ok(first.reasonCodes.includes("EVIDENCE_SIGNATURE_INVALID"));
+});
+
+test("funding, voucher authorization, top-up and settlement stay separate", () => {
+  const now = "2026-01-01T00:00:00.000Z";
+  const accepted = transitionLane(
+    lane(),
+    {
+      type: "EvidenceObserved",
+      evidenceHash: "reading",
+      accepted: true,
+      observedAt: now,
+      sequence: 1,
+      cumulativeWh: "100",
+    },
+    now,
+    "reading",
+  ).lane;
+  const funded = transitionLane(
+    accepted,
+    {
+      type: "PaymentObserved",
+      source: "tempo-adapter",
+      channelId: "channel",
+      network: "network",
+      assetId: "asset",
+      observedAt: now,
+      confirmedDeposit: "100",
+      settledValue: "0",
+      chainHeight: "1",
+    },
+    now,
+    "funded",
+  );
+  assert.equal(funded.lane.state, "INITIALIZING");
+  assert.equal(funded.lane.authorizedValue, "0");
+  assert.deepEqual(
+    funded.effects.map((effect) => effect.type),
+    ["payment.voucher_requested"],
+  );
+  const authorized = transitionLane(
+    funded.lane,
+    {
+      type: "VoucherVerified",
+      cumulativeAmount: "100",
+      digest: "digest",
+    },
+    now,
+    "voucher",
+  );
+  assert.equal(authorized.lane.state, "WATCH");
+  assert.equal(authorized.lane.protectedValue, "100");
+  assert.equal(authorized.lane.fundedHeadroom, "0");
+  assert.deepEqual(
+    authorized.effects.map((effect) => effect.type),
+    ["payment.top_up_requested", "payment.settlement_requested"],
+  );
+  const submitted = transitionLane(
+    authorized.lane,
+    { type: "ClockTick" },
+    now,
+    "pending",
+  );
+  assert.equal(submitted.lane.confirmedDeposit, "100");
+  assert.equal(submitted.lane.settledValue, "0");
+  const toppedUp = transitionLane(
+    submitted.lane,
+    {
+      type: "PaymentObserved",
+      source: "tempo-adapter",
+      channelId: "channel",
+      network: "network",
+      assetId: "asset",
+      observedAt: now,
+      confirmedDeposit: "200",
+      settledValue: "0",
+      chainHeight: "2",
+    },
+    now,
+    "top-up",
+  );
+  assert.equal(toppedUp.lane.confirmedDeposit, "200");
+  assert.equal(toppedUp.lane.fundedHeadroom, "100");
+  assert.equal(toppedUp.lane.settledValue, "0");
+  const settled = transitionLane(
+    toppedUp.lane,
+    {
+      type: "PaymentObserved",
+      source: "tempo-adapter",
+      channelId: "channel",
+      network: "network",
+      assetId: "asset",
+      observedAt: now,
+      confirmedDeposit: "200",
+      settledValue: "50",
+      chainHeight: "3",
+    },
+    now,
+    "settled",
+  );
+  assert.equal(settled.lane.settledValue, "50");
+  assert.equal(settled.lane.protectedValue, "100");
+  assert.equal(settled.lane.fundedHeadroom, "100");
+});
+
+test("signer failure and stale payment cannot restore protection", () => {
+  const now = "2026-01-01T00:00:00.000Z";
+  const accepted = transitionLane(
+    lane(),
+    {
+      type: "EvidenceObserved",
+      evidenceHash: "reading",
+      accepted: true,
+      observedAt: now,
+      sequence: 1,
+      cumulativeWh: "100",
+    },
+    now,
+    "reading",
+  ).lane;
+  const funded = transitionLane(
+    accepted,
+    {
+      type: "PaymentObserved",
+      source: "tempo-adapter",
+      channelId: "channel",
+      network: "network",
+      assetId: "asset",
+      observedAt: now,
+      confirmedDeposit: "200",
+      settledValue: "0",
+      chainHeight: "1",
+    },
+    now,
+    "funded",
+  ).lane;
+  const failed = transitionLane(
+    funded,
+    { type: "SignerUnavailable" },
+    now,
+    "signer",
+  );
+  assert.equal(failed.lane.state, "INITIALIZING");
+  assert.equal(failed.lane.authorizedValue, "0");
+  assert.equal(failed.lane.signerHealth, "unavailable");
+  const unavailable = transitionLane(
+    failed.lane,
+    {
+      type: "PaymentUnavailable",
+      reasonCode: "PAYMENT_CHAIN_STATE_UNAVAILABLE",
+    },
+    now,
+    "chain",
+  );
+  assert.equal(unavailable.lane.confirmedDeposit, "200");
+  assert.equal(unavailable.lane.chainHealth, "unavailable");
+  assert.equal(unavailable.lane.state, "INITIALIZING");
 });
 
 test("a small unfunded gap remains visible rather than ready", () => {

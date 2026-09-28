@@ -1,10 +1,17 @@
 import { encodeFunctionData, hashTypedData, parseAbi } from "viem";
+import { reserveAddress, voucherDomain, voucherTypes } from "./protocol.js";
 
 export type PaymentOperationState =
   "idle" | "submitted" | "pending" | "confirmed" | "failed";
 
 export { runTempoProof, TempoProofError } from "./proof.js";
 export type { TempoProofConfig, TempoProofStep } from "./proof.js";
+export { createTempoChannelAdapter } from "./channel.js";
+export type {
+  ChannelDescriptor,
+  ChannelObservation,
+  TempoChannelConfig,
+} from "./channel.js";
 
 export type PaymentProbeResult = {
   state: "ready" | "blocked";
@@ -66,7 +73,6 @@ export async function probePaymentEnvironment(
         chainId,
         assetDecimals,
       };
-    const reserveAddress = "0x4d50500000000000000000000000000000000000";
     const channelId = `0x${"00".repeat(32)}` as const;
     const digestCall = encodeFunctionData({
       abi: parseAbi([
@@ -80,18 +86,8 @@ export async function probePaymentEnvironment(
       "latest",
     ]);
     const localDigest = hashTypedData({
-      domain: {
-        name: "TIP20 Channel Reserve",
-        version: "1",
-        chainId,
-        verifyingContract: reserveAddress,
-      },
-      types: {
-        Voucher: [
-          { name: "channelId", type: "bytes32" },
-          { name: "cumulativeAmount", type: "uint96" },
-        ],
-      },
+      domain: voucherDomain(chainId),
+      types: voucherTypes,
       primaryType: "Voucher",
       message: { channelId, cumulativeAmount: 1n },
     });

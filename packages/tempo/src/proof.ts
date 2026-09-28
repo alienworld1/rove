@@ -16,18 +16,13 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { probePaymentEnvironment } from "./index.js";
+import {
+  channelAbi,
+  reserveAddress,
+  voucherDomain,
+  voucherTypes,
+} from "./protocol.js";
 
-const reserveAddress = "0x4d50500000000000000000000000000000000000" as const;
-const channelAbi = parseAbi([
-  "function open(address payee,address operator,address token,uint96 deposit,bytes32 salt,address authorizedSigner) returns (bytes32 channelId)",
-  "function topUp((address payer,address payee,address operator,address token,bytes32 salt,address authorizedSigner,bytes32 expiringNonceHash) descriptor,uint96 additionalDeposit)",
-  "function settle((address payer,address payee,address operator,address token,bytes32 salt,address authorizedSigner,bytes32 expiringNonceHash) descriptor,uint96 cumulativeAmount,bytes signature)",
-  "function close((address payer,address payee,address operator,address token,bytes32 salt,address authorizedSigner,bytes32 expiringNonceHash) descriptor,uint96 cumulativeAmount,uint96 captureAmount,bytes signature)",
-  "function getChannelState(bytes32 channelId) view returns ((uint96 settled,uint96 deposit,uint32 closeRequestedAt) state)",
-  "function getVoucherDigest(bytes32 channelId,uint96 cumulativeAmount) view returns (bytes32)",
-  "event ChannelOpened(bytes32 indexed channelId,address indexed payer,address indexed payee,address operator,address token,address authorizedSigner,bytes32 salt,bytes32 expiringNonceHash,uint96 deposit)",
-  "event ChannelClosed(bytes32 indexed channelId,address indexed payer,address indexed payee,uint96 settledToPayee,uint96 refundedToPayer)",
-]);
 const tokenAbi = parseAbi([
   "function balanceOf(address owner) view returns (uint256)",
 ]);
@@ -292,18 +287,8 @@ export async function runTempoProof(
     remaining: (state.deposit - state.settled).toString(),
   });
 
-  const domain = {
-    name: "TIP20 Channel Reserve",
-    version: "1",
-    chainId: config.chainId,
-    verifyingContract: reserveAddress,
-  } as const;
-  const types = {
-    Voucher: [
-      { name: "channelId", type: "bytes32" },
-      { name: "cumulativeAmount", type: "uint96" },
-    ],
-  } as const;
+  const domain = voucherDomain(config.chainId);
+  const types = voucherTypes;
   async function voucher(amount: bigint, operation: string) {
     const message = { channelId, cumulativeAmount: amount };
     const signature = await voucherSigner.signTypedData({

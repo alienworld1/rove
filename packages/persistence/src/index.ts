@@ -21,9 +21,11 @@ import {
   meterEvidence,
   meterIdentities,
   outboxJobs,
+  paymentOperations,
   processedCommands,
   tempoChainSnapshots,
   tempoChannels,
+  tempoVouchers,
 } from "./schema.js";
 
 export class StoreError extends Error {
@@ -43,6 +45,14 @@ export class StoreError extends Error {
 
 type Database = ReturnType<typeof drizzle>;
 type LaneRow = typeof lanes.$inferSelect;
+export type VerifiedVoucher = {
+  channelId: string;
+  cumulativeAmount: string;
+  digest: string;
+  signature: string;
+  signerRef: string;
+  domainRef: string;
+};
 const hash = (value: unknown) =>
   createHash("sha256").update(stringify(value)).digest("hex");
 const date = (value: string) => new Date(value).toISOString();
@@ -112,6 +122,8 @@ function fromRow(row: LaneRow): Lane {
     expectedProofIntervalMs: row.expectedProofIntervalMs,
     tariff: row.tariffSnapshot as Lane["tariff"],
     policy: row.policySnapshot as Lane["policy"],
+    reservePolicy: row.reservePolicySnapshot as Lane["reservePolicy"],
+    settlementPolicy: row.settlementPolicySnapshot as Lane["settlementPolicy"],
     settlementAssetId: row.settlementAssetId,
     tempoNetwork: row.tempoNetwork,
     state: row.state as Lane["state"],
@@ -158,6 +170,8 @@ function laneValues(lane: Lane) {
     expectedProofIntervalMs: lane.expectedProofIntervalMs,
     tariffSnapshot: lane.tariff,
     policySnapshot: lane.policy,
+    reservePolicySnapshot: lane.reservePolicy,
+    settlementPolicySnapshot: lane.settlementPolicy,
     settlementAssetId: lane.settlementAssetId,
     tempoNetwork: lane.tempoNetwork,
     state: lane.state,
@@ -356,6 +370,8 @@ export class ChargingStore {
         expectedProofIntervalMs: input.expectedProofIntervalMs,
         tariff: corridor.tariff,
         policy: corridor.protectionPolicy,
+        reservePolicy: corridor.reservePolicy,
+        settlementPolicy: corridor.settlementPolicy,
         settlementAssetId: corridor.settlementAssetId,
         tempoNetwork: corridor.tempoNetwork,
         state: "INITIALIZING",
@@ -413,6 +429,26 @@ export class ChargingStore {
         summary:
           "Charging protection is waiting for trusted readings and funding.",
         occurredAt: now,
+      });
+      await tx.insert(outboxJobs).values({
+        id: randomUUID(),
+        eventId,
+        laneId: id,
+        effectType: "payment.open_requested",
+        idempotencyKey: `${id}:open`,
+        payload: { laneId: id, amount: corridor.reservePolicy.initialDeposit },
+        status: "pending",
+        attemptCount: 0,
+        nextAttemptAt: now,
+      });
+      await tx.insert(paymentOperations).values({
+        id: randomUUID(),
+        laneId: id,
+        operation: "open",
+        requestedAmount: corridor.reservePolicy.initialDeposit,
+        status: "pending",
+        idempotencyKey: `${id}:open`,
+        createdAt: now,
       });
       const outcome = {
         id,
@@ -483,6 +519,35 @@ export class ChargingStore {
             )[0]
           : undefined;
         assertProjection(lane, latest, latestEvent);
+        const voucher = lane.channelId
+          ? (
+              await tx
+                .select()
+                .from(tempoVouchers)
+                .where(
+                  and(
+                    eq(tempoVouchers.channelId, lane.channelId),
+                    eq(tempoVouchers.verificationStatus, "verified"),
+                  ),
+                )
+                .orderBy(sql`${tempoVouchers.cumulativeAmount} desc`)
+                .limit(1)
+            )[0]
+          : undefined;
+        if (lane.authorizedValue !== (voucher?.cumulativeAmount ?? "0"))
+          throw new StoreError("INCONSISTENT_PROJECTION");
+        const operations = await tx
+          .select()
+          .from(paymentOperations)
+          .where(eq(paymentOperations.laneId, id))
+          .orderBy(
+            sql`${paymentOperations.createdAt} desc`,
+            sql`${paymentOperations.id} desc`,
+          )
+          .limit(20);
+        const exposureRemaining =
+          BigInt(lane.policy.maxUnprotectedExposure) -
+          BigInt(lane.unprotectedExposureBound);
         const checkedAt = new Date().toISOString();
         const chainFreshness = !lane.lastChainObservedAt
           ? "unknown"
@@ -522,6 +587,22 @@ export class ChargingStore {
           unverifiedServiceBound: lane.unverifiedServiceBound,
           worstCaseDeliveredValue: lane.worstCaseDeliveredValue,
           unprotectedExposureBound: lane.unprotectedExposureBound,
+          exposureRemaining: (exposureRemaining > 0n
+            ? exposureRemaining
+            : 0n
+          ).toString(),
+          maxUnprotectedExposure: lane.policy.maxUnprotectedExposure,
+          channelId: lane.channelId,
+          lastEvidenceHash: lane.lastEvidenceHash,
+          lastTrustedEvidenceAt: lane.lastTrustedEvidenceAt,
+          latestVoucherDigest: voucher?.digest ?? null,
+          operations: operations.map((operation) => ({
+            type: operation.operation,
+            status: operation.status,
+            requestedAmount: operation.requestedAmount,
+            transactionHash: operation.txHash,
+            reasonCode: operation.lastReason,
+          })),
           reasonCodes: lane.reasonCodes,
           updatedAt: lane.updatedAt,
           source: "stored-projection",
@@ -545,12 +626,124 @@ export class ChargingStore {
     ).map((row) => row.id);
   }
 
+  async listActiveLanes(limit = 20) {
+    return (
+      await this.db
+        .select()
+        .from(lanes)
+        .where(sql`${lanes.state} not in ('CLOSED', 'RECONCILED')`)
+        .orderBy(lanes.updatedAt)
+        .limit(limit)
+    ).map(fromRow);
+  }
+
+  async getPaymentContext(laneId: string) {
+    const row = (
+      await this.db.select().from(lanes).where(eq(lanes.id, laneId))
+    )[0];
+    if (!row) throw new StoreError("NOT_FOUND");
+    const corridor = await this.getCorridor(row.corridorId);
+    const channel =
+      (
+        await this.db
+          .select()
+          .from(tempoChannels)
+          .where(eq(tempoChannels.laneId, laneId))
+      )[0] ?? null;
+    const voucher = channel
+      ? ((
+          await this.db
+            .select()
+            .from(tempoVouchers)
+            .where(
+              and(
+                eq(tempoVouchers.channelId, channel.channelId),
+                eq(tempoVouchers.verificationStatus, "verified"),
+              ),
+            )
+            .orderBy(sql`${tempoVouchers.cumulativeAmount} desc`)
+            .limit(1)
+        )[0] ?? null)
+      : null;
+    return { lane: fromRow(row), corridor, channel, voucher };
+  }
+
+  async getHistory(laneId: string) {
+    await this.getLane(laneId);
+    const [material, checks] = await Promise.all([
+      this.db
+        .select()
+        .from(domainEvents)
+        .where(
+          and(
+            eq(domainEvents.laneId, laneId),
+            sql`${domainEvents.type} <> 'lane.protection_checked'`,
+          ),
+        )
+        .orderBy(sql`${domainEvents.ordinal} desc`)
+        .limit(90),
+      this.db
+        .select()
+        .from(domainEvents)
+        .where(
+          and(
+            eq(domainEvents.laneId, laneId),
+            eq(domainEvents.type, "lane.protection_checked"),
+          ),
+        )
+        .orderBy(sql`${domainEvents.ordinal} desc`)
+        .limit(10),
+    ]);
+    const rows = [...material, ...checks].sort((a, b) => a.ordinal - b.ordinal);
+    let previous: {
+      trusted: string;
+      protected: string;
+      exposure: string;
+    } | null = null;
+    return rows.map((row) => {
+      const projection = (
+        row.payload as { projection?: Record<string, unknown> }
+      ).projection;
+      const after =
+        projection &&
+        typeof projection.trustedDeliveredValue === "string" &&
+        typeof projection.protectedValue === "string" &&
+        typeof projection.unprotectedExposureBound === "string"
+          ? {
+              trusted: projection.trustedDeliveredValue,
+              protected: projection.protectedValue,
+              exposure: projection.unprotectedExposureBound,
+            }
+          : null;
+      const summary = after ? { before: previous, after } : null;
+      if (after) previous = after;
+      return {
+        id: row.id,
+        type: row.type,
+        version: row.laneVersion,
+        occurredAt: date(row.occurredAt),
+        traceTime: row.traceTime ? date(row.traceTime) : null,
+        reasonCode: row.reasonCode,
+        evidenceHash: row.evidenceHash,
+        channelId: row.channelId,
+        transactionHash: row.txHash,
+        summary,
+        detail:
+          row.type === "payment.voucher_verified"
+            ? { digest: (row.payload as { digest?: string }).digest ?? null }
+            : null,
+      };
+    });
+  }
+
   async advanceLane(
     input: LaneCommandInput,
     actor: string,
-    override?: Extract<VerifiedObservation, { type: "PaymentObserved" }>,
+    override?: VerifiedObservation,
     beforeEffectInsert?: () => void,
     beforePersist?: () => Promise<void>,
+    voucher?: VerifiedVoucher,
+    channelDescriptor?: Record<string, string>,
   ) {
     const requestHash = hash({ ...input, now: undefined });
     return this.db.transaction(async (tx) => {
@@ -607,7 +800,8 @@ export class ChargingStore {
       assertProjection(lane, latestAudit, latestEvent);
       const now = input.now ?? new Date().toISOString();
       if (
-        override?.source === "local-simulation" &&
+        override?.type === "PaymentObserved" &&
+        override.source === "local-simulation" &&
         process.env.NODE_ENV === "production"
       )
         throw new StoreError("ACCESS_DENIED");
@@ -690,6 +884,48 @@ export class ChargingStore {
         `${input.commandId}:pause`,
       );
       await beforePersist?.();
+      if (observation.type === "VoucherVerified") {
+        if (
+          !voucher ||
+          voucher.channelId !== lane.channelId ||
+          voucher.cumulativeAmount !== observation.cumulativeAmount ||
+          voucher.digest !== observation.digest ||
+          !/^0x[0-9a-fA-F]{130}$/.test(voucher.signature)
+        )
+          throw new StoreError("VALIDATION");
+        const previousVoucher = (
+          await tx
+            .select()
+            .from(tempoVouchers)
+            .where(
+              and(
+                eq(tempoVouchers.channelId, voucher.channelId),
+                eq(tempoVouchers.verificationStatus, "verified"),
+              ),
+            )
+            .orderBy(sql`${tempoVouchers.cumulativeAmount} desc`)
+            .limit(1)
+        )[0];
+        if (
+          previousVoucher &&
+          BigInt(voucher.cumulativeAmount) <=
+            BigInt(previousVoucher.cumulativeAmount)
+        )
+          throw new StoreError("CONFLICT");
+        await tx.insert(tempoVouchers).values({
+          id: randomUUID(),
+          channelId: voucher.channelId,
+          cumulativeAmount: voucher.cumulativeAmount,
+          signerRef: voucher.signerRef,
+          domainRef: voucher.domainRef,
+          signatureRef: voucher.digest,
+          digest: voucher.digest,
+          signature: voucher.signature,
+          createdAt: now,
+          verifiedAt: now,
+          verificationStatus: "verified",
+        });
+      }
       await tx
         .update(lanes)
         .set(laneValues(result.lane))
@@ -765,12 +1001,17 @@ export class ChargingStore {
             network: observation.network,
             assetId: observation.assetId,
             status: "confirmed",
+            descriptor: channelDescriptor ?? null,
             observedAt: observation.observedAt,
           });
         else
           await tx
             .update(tempoChannels)
-            .set({ status: "confirmed", observedAt: observation.observedAt })
+            .set({
+              status: "confirmed",
+              observedAt: observation.observedAt,
+              descriptor: channelDescriptor ?? known.descriptor,
+            })
             .where(eq(tempoChannels.laneId, lane.id));
         await tx.insert(tempoChainSnapshots).values({
           id: randomUUID(),
@@ -794,8 +1035,8 @@ export class ChargingStore {
           corridorId: lane.corridorId,
           laneId: lane.id,
           laneVersion: result.lane.version,
-          occurredAt: now,
-          traceTime: item.traceTime,
+          occurredAt: new Date().toISOString(),
+          traceTime: item.traceTime ?? now,
           causationId: input.causationId ?? input.commandId,
           correlationId: input.correlationId,
           reasonCode: item.reasonCode ?? result.lane.reasonCodes[0],
@@ -806,6 +1047,7 @@ export class ChargingStore {
           },
           evidenceHash: item.evidenceHash,
           channelId: item.channelId,
+          txHash: item.txHash,
         });
         await tx.insert(auditProjection).values({
           eventId,
@@ -819,18 +1061,85 @@ export class ChargingStore {
         });
       }
       if (result.effects.length) beforeEffectInsert?.();
-      for (const effect of result.effects)
-        await tx.insert(outboxJobs).values({
-          id: randomUUID(),
-          eventId: firstEventId,
-          laneId: lane.id,
-          effectType: effect.type,
-          idempotencyKey: effect.idempotencyKey,
-          payload: effect.payload,
-          status: "pending",
-          attemptCount: 0,
-          nextAttemptAt: now,
-        });
+      for (const effect of result.effects) {
+        if (
+          effect.type === "payment.voucher_requested" ||
+          effect.type === "payment.settlement_requested" ||
+          effect.type === "payment.top_up_requested"
+        ) {
+          const operation =
+            effect.type === "payment.voucher_requested"
+              ? "voucher"
+              : effect.type === "payment.settlement_requested"
+                ? "settle"
+                : "top_up";
+          const previousOperations = await tx
+            .select()
+            .from(paymentOperations)
+            .where(
+              and(
+                eq(paymentOperations.laneId, lane.id),
+                eq(paymentOperations.operation, operation),
+              ),
+            )
+            .orderBy(
+              sql`${paymentOperations.confirmedAt} desc nulls last`,
+              sql`${paymentOperations.submittedAt} desc nulls last`,
+            )
+            .limit(10);
+          if (
+            previousOperations.some(
+              (item) =>
+                item.status === "pending" || item.status === "submitted",
+            )
+          )
+            continue;
+          if (
+            operation === "settle" &&
+            previousOperations.some(
+              (item) =>
+                item.status === "confirmed" &&
+                item.confirmedAt &&
+                Date.parse(now) - Date.parse(item.confirmedAt) <
+                  lane.settlementPolicy.minimumIntervalMs,
+            )
+          )
+            continue;
+        }
+        await tx
+          .insert(outboxJobs)
+          .values({
+            id: randomUUID(),
+            eventId: firstEventId,
+            laneId: lane.id,
+            effectType: effect.type,
+            idempotencyKey: effect.idempotencyKey,
+            payload: effect.payload,
+            status: "pending",
+            attemptCount: 0,
+            nextAttemptAt: now,
+          })
+          .onConflictDoNothing();
+        if (effect.type !== "pause.requested")
+          await tx
+            .insert(paymentOperations)
+            .values({
+              id: randomUUID(),
+              laneId: lane.id,
+              channelId: effect.payload.channelId,
+              operation:
+                effect.type === "payment.voucher_requested"
+                  ? "voucher"
+                  : effect.type === "payment.top_up_requested"
+                    ? "top_up"
+                    : "settle",
+              requestedAmount: effect.payload.amount,
+              status: "pending",
+              idempotencyKey: effect.idempotencyKey,
+              createdAt: now,
+            })
+            .onConflictDoNothing();
+      }
       const outcome = {
         id: lane.id,
         version: result.lane.version,
@@ -849,10 +1158,10 @@ export class ChargingStore {
     });
   }
 
-  async claimOutbox(now: string, leaseMs: number) {
+  async claimOutbox(now: string, leaseMs: number, laneId?: string) {
     return this.db.transaction(async (tx) => {
       const rows = await tx.execute(
-        sql`select id, status from outbox_jobs where attempt_count < 8 and (status in ('pending', 'submitted', 'failed') or (status = 'processing' and lease_until < ${now})) and next_attempt_at <= ${now} order by next_attempt_at for update skip locked limit 1`,
+        sql`select id, status from outbox_jobs where attempt_count < 8 and (status in ('pending', 'submitted', 'failed') or (status = 'processing' and lease_until < ${now})) and next_attempt_at <= ${now} and (${laneId ?? null}::text is null or lane_id = ${laneId ?? null}) order by next_attempt_at for update skip locked limit 1`,
       );
       const id = rows[0]?.id as string | undefined;
       if (!id) return null;
@@ -881,24 +1190,85 @@ export class ChargingStore {
     externalReference?: string,
     lastError?: string,
   ) {
-    const updated = await this.db
-      .update(outboxJobs)
-      .set({
-        status,
-        nextAttemptAt,
-        leaseUntil: null,
-        leaseToken: null,
-        externalReference,
-        lastError,
-      })
-      .where(
-        and(
-          eq(outboxJobs.id, id),
-          eq(outboxJobs.status, "processing"),
-          eq(outboxJobs.leaseToken, leaseToken),
-        ),
-      )
-      .returning({ id: outboxJobs.id });
-    if (!updated[0]) throw new StoreError("CONFLICT");
+    await this.db.transaction(async (tx) => {
+      const prior = (
+        await tx.select().from(outboxJobs).where(eq(outboxJobs.id, id))
+      )[0];
+      const updated = await tx
+        .update(outboxJobs)
+        .set({
+          status,
+          nextAttemptAt,
+          leaseUntil: null,
+          leaseToken: null,
+          externalReference,
+          lastError,
+        })
+        .where(
+          and(
+            eq(outboxJobs.id, id),
+            eq(outboxJobs.status, "processing"),
+            eq(outboxJobs.leaseToken, leaseToken),
+          ),
+        )
+        .returning();
+      const job = updated[0];
+      if (!job) throw new StoreError("CONFLICT");
+      if (job.effectType.startsWith("payment.") && prior?.status !== status) {
+        const lane = (
+          await tx.select().from(lanes).where(eq(lanes.id, job.laneId))
+        )[0];
+        if (lane) {
+          const operation =
+            job.effectType === "payment.open_requested"
+              ? "open"
+              : job.effectType === "payment.top_up_requested"
+                ? "top_up"
+                : job.effectType === "payment.settlement_requested"
+                  ? "settlement"
+                  : "voucher";
+          await tx.insert(domainEvents).values({
+            id: randomUUID(),
+            type: `payment.${operation}_${status}`,
+            schemaVersion: 1,
+            corridorId: lane.corridorId,
+            laneId: job.laneId,
+            laneVersion: lane.version,
+            occurredAt: new Date().toISOString(),
+            correlationId: job.idempotencyKey,
+            causationId: job.idempotencyKey,
+            reasonCode: lastError ?? undefined,
+            payload: {
+              requestedAmount:
+                (job.payload as { amount?: string }).amount ?? null,
+              projection: protectionSnapshot(fromRow(lane)),
+            },
+            channelId: (job.payload as { channelId?: string }).channelId,
+            txHash: externalReference,
+          });
+        }
+      }
+      if (job.effectType.startsWith("payment."))
+        await tx
+          .update(paymentOperations)
+          .set({
+            status:
+              status === "completed"
+                ? "confirmed"
+                : status === "submitted"
+                  ? "submitted"
+                  : status === "failed"
+                    ? "failed"
+                    : "pending",
+            txHash: externalReference ?? null,
+            lastReason: lastError ?? null,
+            attempts: job.attemptCount,
+            submittedAt:
+              status === "submitted" ? new Date().toISOString() : undefined,
+            confirmedAt:
+              status === "completed" ? new Date().toISOString() : undefined,
+          })
+          .where(eq(paymentOperations.idempotencyKey, job.idempotencyKey));
+    });
   }
 }

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  bigserial,
   boolean,
   check,
   index,
@@ -89,6 +90,8 @@ export const lanes = pgTable(
     }).notNull(),
     tariffSnapshot: jsonb("tariff_snapshot").notNull(),
     policySnapshot: jsonb("policy_snapshot").notNull(),
+    reservePolicySnapshot: jsonb("reserve_policy_snapshot").notNull(),
+    settlementPolicySnapshot: jsonb("settlement_policy_snapshot").notNull(),
     settlementAssetId: text("settlement_asset_id").notNull(),
     tempoNetwork: text("tempo_network").notNull(),
     state: text("state").notNull(),
@@ -195,8 +198,38 @@ export const tempoChannels = pgTable("tempo_channels", {
   network: text("network").notNull(),
   assetId: text("asset_id").notNull(),
   status: text("status").notNull(),
+  descriptor: jsonb("descriptor"),
   observedAt: instant("observed_at"),
 });
+export const paymentOperations = pgTable(
+  "payment_operations",
+  {
+    id: text("id").primaryKey(),
+    laneId: text("lane_id")
+      .notNull()
+      .references(() => lanes.id),
+    channelId: text("channel_id"),
+    operation: text("operation").notNull(),
+    requestedAmount: amount("requested_amount").notNull(),
+    status: text("status").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    createdAt: instant("created_at").notNull(),
+    txHash: text("tx_hash"),
+    submittedAt: instant("submitted_at"),
+    confirmedAt: instant("confirmed_at"),
+    lastReason: text("last_reason"),
+    attempts: integer("attempts").notNull().default(0),
+  },
+  (table) => [
+    uniqueIndex("payment_operation_key_unique").on(table.idempotencyKey),
+    uniqueIndex("payment_operation_hash_unique").on(table.txHash),
+    index("payment_operation_lane_idx").on(table.laneId),
+    check(
+      "payment_operation_amount_positive",
+      sql`${table.requestedAmount} > 0`,
+    ),
+  ],
+);
 export const tempoTransactions = pgTable(
   "tempo_transactions",
   {
@@ -223,10 +256,25 @@ export const tempoVouchers = pgTable(
     signerRef: text("signer_ref").notNull(),
     domainRef: text("domain_ref").notNull(),
     signatureRef: text("signature_ref"),
+    digest: text("digest"),
+    signature: text("signature"),
+    verifiedAt: instant("verified_at"),
+    verificationStatus: text("verification_status")
+      .notNull()
+      .default("unverified"),
     createdAt: instant("created_at").notNull(),
   },
   (table) => [
     index("tempo_voucher_channel_idx").on(table.channelId),
+    uniqueIndex("tempo_voucher_channel_amount_unique").on(
+      table.channelId,
+      table.cumulativeAmount,
+    ),
+    uniqueIndex("tempo_voucher_digest_unique").on(table.digest),
+    check(
+      "verified_voucher_has_proof",
+      sql`${table.verificationStatus} <> 'verified' or (${table.digest} is not null and ${table.signature} is not null and ${table.verifiedAt} is not null)`,
+    ),
     check("voucher_amount_nonnegative", nonnegative("cumulative_amount")),
   ],
 );
@@ -337,6 +385,7 @@ export const domainEvents = pgTable(
   "domain_events",
   {
     id: text("id").primaryKey(),
+    ordinal: bigserial("ordinal", { mode: "number" }).notNull(),
     type: text("type").notNull(),
     schemaVersion: integer("schema_version").notNull(),
     corridorId: text("corridor_id")
@@ -356,6 +405,7 @@ export const domainEvents = pgTable(
     cdrId: text("cdr_id"),
   },
   (table) => [
+    uniqueIndex("event_ordinal_unique").on(table.ordinal),
     index("event_lane_order_idx").on(table.laneId, table.laneVersion),
     index("event_corridor_idx").on(table.corridorId),
   ],

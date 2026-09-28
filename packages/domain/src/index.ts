@@ -41,7 +41,10 @@ export type CorridorConfig = {
   tariff: FixedTariff;
   protectionPolicy: ProtectionPolicy;
   reservePolicy: { initialDeposit: string; topUpIncrement: string };
-  settlementPolicy: { minimumIntervalMs: number };
+  settlementPolicy: {
+    minimumIntervalMs: number;
+    minimumUnsettledProtectedValue: string;
+  };
   status: "ACTIVE" | "PAUSED" | "CLOSED";
   createdAt: string;
   updatedAt: string;
@@ -58,6 +61,8 @@ export type Lane = {
   expectedProofIntervalMs: number;
   tariff: FixedTariff;
   policy: ProtectionPolicy;
+  reservePolicy: CorridorConfig["reservePolicy"];
+  settlementPolicy: CorridorConfig["settlementPolicy"];
   settlementAssetId: string;
   tempoNetwork: string;
   state: LaneState;
@@ -97,8 +102,8 @@ export type LaneCommand =
       observedAt: string;
       confirmedDeposit: string;
       settledValue: string;
-      authorizedValue: string;
       chainHeight: string;
+      transactionHash?: string;
     }
   | {
       type: "PaymentUnavailable";
@@ -119,11 +124,32 @@ export type CommandEnvelope<T> = {
   payload: T;
 };
 
-export type TransitionEffect = {
-  type: "pause.requested";
-  idempotencyKey: string;
-  payload: { laneId: string; reasonCode: string };
-};
+export type TransitionEffect =
+  | {
+      type: "pause.requested";
+      idempotencyKey: string;
+      payload: { laneId: string; reasonCode: string };
+    }
+  | {
+      type: "payment.voucher_requested";
+      idempotencyKey: string;
+      payload: { laneId: string; channelId: string; amount: string };
+    }
+  | {
+      type: "payment.top_up_requested";
+      idempotencyKey: string;
+      payload: {
+        laneId: string;
+        channelId: string;
+        amount: string;
+        priorDeposit: string;
+      };
+    }
+  | {
+      type: "payment.settlement_requested";
+      idempotencyKey: string;
+      payload: { laneId: string; channelId: string; amount: string };
+    };
 export type TransitionResult = {
   lane: Lane;
   events: {
@@ -133,6 +159,7 @@ export type TransitionResult = {
     traceTime?: string;
     evidenceHash?: string;
     channelId?: string;
+    txHash?: string;
   }[];
   effects: TransitionEffect[];
 };
@@ -156,14 +183,20 @@ export type VerifiedObservation =
       observedAt: string;
       confirmedDeposit: string;
       settledValue: string;
-      authorizedValue: string;
       chainHeight: string;
+      transactionHash?: string;
     }
+  | { type: "VoucherVerified"; cumulativeAmount: string; digest: string }
   | {
       type: "PaymentUnavailable";
       reasonCode:
         "PAYMENT_CHAIN_STATE_UNAVAILABLE" | "PAYMENT_CHAIN_STATE_STALE";
     }
   | { type: "ClockTick" }
+  | { type: "SignerUnavailable" }
+  | {
+      type: "PaymentEffectFailed";
+      reasonCode: "PAYMENT_TOPUP_FAILED" | "PAYMENT_SETTLEMENT_FAILED";
+    }
   | { type: "PauseRequired" }
   | { type: "RecoveryBegun" };

@@ -39,6 +39,7 @@ export function transitionLane(
   const events: TransitionResult["events"] = [];
   const effects: TransitionResult["effects"] = [];
   let evidenceRejection: string | undefined;
+  let paymentFailure: string | undefined;
 
   if (observation.type === "EvidenceObserved") {
     if (observation.evidenceHash === previous.lastEvidenceHash) {
@@ -48,12 +49,13 @@ export function transitionLane(
     } else if (!observation.accepted) {
       lane.evidenceHealth = "untrusted";
       evidenceRejection = observation.reasonCode ?? "EVIDENCE_UNTRUSTED";
-      events.push(
-        event(
+      events.push({
+        ...event(
           "meter.evidence_rejected",
           observation.reasonCode ?? "EVIDENCE_UNTRUSTED",
         ),
-      );
+        evidenceHash: observation.evidenceHash,
+      });
     } else {
       if (
         !observation.cumulativeWh ||
@@ -101,19 +103,15 @@ export function transitionLane(
     )
       throw new RangeError("PAYMENT_CHAIN_STATE_STALE");
     const deposit = nonnegativeInteger(observation.confirmedDeposit);
-    const authorization = nonnegativeInteger(observation.authorizedValue);
     const settlement = nonnegativeInteger(observation.settledValue);
     if (
-      authorization > nonnegativeInteger(lane.trustedDeliveredValue) ||
-      authorization > deposit ||
-      settlement > authorization ||
-      authorization < nonnegativeInteger(lane.authorizedValue) ||
+      nonnegativeInteger(lane.authorizedValue) > deposit ||
+      settlement > nonnegativeInteger(lane.authorizedValue) ||
       settlement < nonnegativeInteger(lane.settledValue)
     )
       throw new RangeError("PAYMENT_LIMIT_INVALID");
     lane.channelId = observation.channelId;
     lane.confirmedDeposit = deposit.toString();
-    lane.authorizedValue = authorization.toString();
     lane.settledValue = settlement.toString();
     lane.lastChainObservedAt = observation.observedAt;
     lane.chainHealth = "fresh";
@@ -121,14 +119,41 @@ export function transitionLane(
       ...event("payment.chain_observed", undefined, {
         source: observation.source,
         chainHeight: observation.chainHeight,
-        authorizedValue: lane.authorizedValue,
         settledValue: lane.settledValue,
       }),
       channelId: observation.channelId,
+      txHash: observation.transactionHash,
+    });
+  } else if (observation.type === "VoucherVerified") {
+    const amount = nonnegativeInteger(observation.cumulativeAmount);
+    if (
+      !lane.channelId ||
+      lane.confirmedDeposit === null ||
+      amount <= nonnegativeInteger(lane.authorizedValue) ||
+      amount > nonnegativeInteger(lane.trustedDeliveredValue) ||
+      amount > nonnegativeInteger(lane.confirmedDeposit)
+    )
+      throw new RangeError("PAYMENT_AUTHORIZATION_INVALID");
+    lane.authorizedValue = amount.toString();
+    lane.signerHealth = "ready";
+    events.push({
+      ...event("payment.voucher_verified", undefined, {
+        cumulativeAmount: lane.authorizedValue,
+        digest: observation.digest,
+      }),
+      channelId: lane.channelId,
     });
   } else if (observation.type === "PaymentUnavailable") {
     lane.chainHealth = "unavailable";
     events.push(event("payment.chain_unavailable", observation.reasonCode));
+  } else if (observation.type === "SignerUnavailable") {
+    lane.signerHealth = "unavailable";
+    events.push(
+      event("payment.signer_unavailable", "PAYMENT_SIGNER_UNAVAILABLE"),
+    );
+  } else if (observation.type === "PaymentEffectFailed") {
+    paymentFailure = observation.reasonCode;
+    events.push(event("payment.operation_failed", observation.reasonCode));
   } else if (observation.type === "RecoveryBegun") {
     if (previous.state !== "PAUSE_REQUIRED" && previous.state !== "AT_RISK")
       throw new RangeError("RECOVERY_NOT_REQUIRED");
@@ -159,7 +184,10 @@ export function transitionLane(
     lane.evidenceHealth === "fresh" &&
     lane.chainHealth === "fresh" &&
     lane.confirmedDeposit !== null &&
-    nonnegativeInteger(lane.confirmedDeposit) > 0n
+    nonnegativeInteger(lane.confirmedDeposit) > 0n &&
+    nonnegativeInteger(lane.authorizedValue) >=
+      nonnegativeInteger(lane.trustedDeliveredValue) &&
+    nonnegativeInteger(lane.trustedDeliveredValue) > 0n
   )
     lane.serviceStarted = true;
 
@@ -217,10 +245,14 @@ export function transitionLane(
       reasons.push("EVIDENCE_ZERO_GRACE_EXHAUSTED");
     reasons.push("CONTROL_PAUSE_REQUIRED");
   } else if (
-    (previous.state === "RECOVERING" || observation.type === "RecoveryBegun") &&
-    (lane.evidenceHealth !== "fresh" ||
-      lane.chainHealth !== "fresh" ||
-      protectedValue < trusted)
+    (previous.state === "PAUSE_REQUIRED" &&
+      observation.type === "EvidenceObserved" &&
+      observation.accepted) ||
+    ((previous.state === "RECOVERING" ||
+      observation.type === "RecoveryBegun") &&
+      (lane.evidenceHealth !== "fresh" ||
+        lane.chainHealth !== "fresh" ||
+        protectedValue < trusted))
   ) {
     lane.state = "RECOVERING";
     reasons.push("RECOVERY_CHECKS_PENDING");
@@ -260,6 +292,7 @@ export function transitionLane(
     reasons.push("PROTECTION_READY");
   }
   if (evidenceRejection) reasons.unshift(evidenceRejection);
+  if (paymentFailure) reasons.unshift(paymentFailure);
   lane.reasonCodes = [...new Set(reasons)];
   if (lane.state !== previous.state)
     events.push(
@@ -267,12 +300,61 @@ export function transitionLane(
         version: previous.version + 1,
       }),
     );
-  if (lane.state === "PAUSE_REQUIRED" && previous.state !== "PAUSE_REQUIRED")
+  if (previous.state === "RECOVERING" && lane.state === "PROTECTED")
+    events.push(event("lane.protection_restored", "PROTECTION_READY"));
+  if (lane.state === "PAUSE_REQUIRED" && previous.state !== "PAUSE_REQUIRED") {
     effects.push({
       type: "pause.requested",
       idempotencyKey: effectKey,
       payload: { laneId: lane.id, reasonCode: "CONTROL_PAUSE_REQUIRED" },
     });
+    events.push(event("pause.requested", "CONTROL_PAUSE_REQUIRED"));
+  }
+  if (
+    lane.channelId &&
+    lane.confirmedDeposit !== null &&
+    lane.chainHealth === "fresh"
+  ) {
+    const target = trusted < deposit! ? trusted : deposit!;
+    if (target > authorized)
+      effects.push({
+        type: "payment.voucher_requested",
+        idempotencyKey: `${lane.id}:voucher:${target}`,
+        payload: {
+          laneId: lane.id,
+          channelId: lane.channelId,
+          amount: target.toString(),
+        },
+      });
+    if (
+      lane.fundedHeadroom !== null &&
+      nonnegativeInteger(lane.fundedHeadroom) <=
+        nonnegativeInteger(lane.policy.lowHeadroomThreshold)
+    )
+      effects.push({
+        type: "payment.top_up_requested",
+        idempotencyKey: `${lane.id}:top-up:${deposit}`,
+        payload: {
+          laneId: lane.id,
+          channelId: lane.channelId,
+          amount: lane.reservePolicy.topUpIncrement,
+          priorDeposit: deposit!.toString(),
+        },
+      });
+    if (
+      protectedValue - nonnegativeInteger(lane.settledValue) >=
+      nonnegativeInteger(lane.settlementPolicy.minimumUnsettledProtectedValue)
+    )
+      effects.push({
+        type: "payment.settlement_requested",
+        idempotencyKey: `${lane.id}:settle:${authorized}`,
+        payload: {
+          laneId: lane.id,
+          channelId: lane.channelId,
+          amount: authorized.toString(),
+        },
+      });
+  }
   if (events.length === 0)
     events.push(event("lane.protection_checked", lane.reasonCodes[0]));
   lane.version = previous.version + 1;

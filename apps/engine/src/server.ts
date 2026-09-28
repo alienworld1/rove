@@ -3,8 +3,8 @@ import {
   type IncomingMessage,
   type ServerResponse,
 } from "node:http";
-import { timingSafeEqual } from "node:crypto";
-import { readBaseConfig } from "@rove/config";
+import { randomUUID, timingSafeEqual } from "node:crypto";
+import { proofPrerequisites, readBaseConfig } from "@rove/config";
 import {
   createCorridorSchema,
   idSchema,
@@ -14,11 +14,16 @@ import {
 } from "@rove/contracts";
 import { ChargingStore, StoreError } from "@rove/persistence";
 import { processNextEffect } from "./outbox-worker.js";
+import { createChargingEffectAdapter } from "./charging-effects.js";
 
 const config = readBaseConfig();
 const store = config.DATABASE_URL
   ? new ChargingStore(config.DATABASE_URL)
   : null;
+const paymentEffects =
+  store && proofPrerequisites().paymentConfigured
+    ? createChargingEffectAdapter(store)
+    : null;
 
 function send(response: ServerResponse, status: number, body: unknown) {
   response.writeHead(status, {
@@ -137,6 +142,7 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
       return;
     }
     if (path === "/api/lanes" && request.method === "POST") {
+      if (!paymentEffects) throw new StoreError("VALIDATION");
       const input = startLaneSchema.parse(await readJson(request));
       ({ correlationId, commandId } = input);
       const outcome = await store.startLane(input, "demo-session");
@@ -156,6 +162,32 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
     const laneMatch = /^\/api\/lanes\/([^/]+)$/.exec(path);
     if (laneMatch && request.method === "GET") {
       send(response, 200, await store.getLane(idSchema.parse(laneMatch[1])));
+      return;
+    }
+    const historyMatch = /^\/api\/lanes\/([^/]+)\/inspector$/.exec(path);
+    if (historyMatch && request.method === "GET") {
+      send(
+        response,
+        200,
+        await store.getHistory(idSchema.parse(historyMatch[1])),
+      );
+      return;
+    }
+    const evidenceMatch = /^\/api\/lanes\/([^/]+)\/evidence$/.exec(path);
+    if (evidenceMatch && request.method === "POST") {
+      const input = laneCommandSchema.parse(await readJson(request));
+      ({ correlationId, commandId, laneId } = input);
+      if (
+        input.laneId !== evidenceMatch[1] ||
+        input.payload.type !== "ObserveEvidence"
+      )
+        throw new StoreError("ACCESS_DENIED");
+      const outcome = await store.advanceLane(
+        { ...input, now: undefined },
+        "demo-session",
+      );
+      logDecision(input, outcome);
+      send(response, 200, outcome);
       return;
     }
     const commandMatch = /^\/api\/lanes\/([^/]+)\/commands$/.exec(path);
@@ -230,15 +262,83 @@ const server = createServer((request, response) => {
 server.listen(config.ENGINE_PORT, config.ENGINE_HOST);
 
 if (store) {
+  let working = false;
   const timer = setInterval(() => {
-    void processNextEffect(store, {
-      reconcile: async () => ({ status: "unknown" }),
-      submit: async () => ({ status: "pending" }),
-    }).catch(() => {
-      process.stderr.write(
-        `${JSON.stringify({ level: "error", event: "charging.outbox_unavailable" })}\n`,
-      );
-    });
+    if (working) return;
+    working = true;
+    void (async () => {
+      const now = new Date().toISOString();
+      if (paymentEffects) await processNextEffect(store, paymentEffects, now);
+      const active = await store.listActiveLanes();
+      for (const lane of active) {
+        if (!lane.serviceStarted) continue;
+        const cadence = Math.max(
+          1_000,
+          Math.min(30_000, lane.expectedProofIntervalMs),
+        );
+        if (Date.parse(now) - Date.parse(lane.updatedAt) < cadence) continue;
+        const evidenceDue =
+          lane.lastTrustedEvidenceAt !== null &&
+          Date.parse(now) - Date.parse(lane.lastTrustedEvidenceAt) >
+            lane.policy.evidenceMaxAgeMs;
+        const chainDue =
+          lane.lastChainObservedAt !== null &&
+          Date.parse(now) - Date.parse(lane.lastChainObservedAt) >
+            lane.policy.chainMaxAgeMs;
+        const boundGrowing = lane.evidenceHealth !== "fresh" || evidenceDue;
+        const chainNeedsObservation = lane.chainHealth === "fresh" && chainDue;
+        if (!boundGrowing && !chainNeedsObservation) continue;
+        try {
+          if (paymentEffects && chainNeedsObservation) {
+            try {
+              await paymentEffects.refresh(lane.id);
+            } catch {
+              const before = await store.getLane(lane.id);
+              await store.advanceLane(
+                {
+                  commandId: randomUUID(),
+                  correlationId: randomUUID(),
+                  laneId: lane.id,
+                  expectedVersion: before.version,
+                  now,
+                  payload: {
+                    type: "PaymentUnavailable",
+                    reason: "PAYMENT_CHAIN_STATE_UNAVAILABLE",
+                  },
+                },
+                "engine-chain-check",
+              );
+            }
+          }
+          if (boundGrowing || !paymentEffects) {
+            const projection = await store.getLane(lane.id);
+            await store.advanceLane(
+              {
+                commandId: randomUUID(),
+                correlationId: randomUUID(),
+                laneId: lane.id,
+                expectedVersion: projection.version,
+                now,
+                payload: { type: "TickProtectionClock" },
+              },
+              "engine-clock",
+            );
+          }
+        } catch {
+          process.stderr.write(
+            `${JSON.stringify({ level: "warn", event: "charging.lane_check_unavailable", laneId: lane.id })}\n`,
+          );
+        }
+      }
+    })()
+      .catch(() => {
+        process.stderr.write(
+          `${JSON.stringify({ level: "error", event: "charging.outbox_unavailable" })}\n`,
+        );
+      })
+      .finally(() => {
+        working = false;
+      });
   }, 2_000);
   timer.unref();
 }

@@ -56,7 +56,10 @@ export const createCorridorSchema = z
       })
       .strict(),
     settlementPolicy: z
-      .object({ minimumIntervalMs: z.number().int().positive() })
+      .object({
+        minimumIntervalMs: z.number().int().positive(),
+        minimumUnsettledProtectedValue: positiveDecimalSchema,
+      })
       .strict(),
     meters: z
       .array(
@@ -110,7 +113,6 @@ export const laneCommandSchema = z
           observedAt: instantSchema,
           confirmedDeposit: decimalSchema,
           settledValue: decimalSchema,
-          authorizedValue: decimalSchema,
           chainHeight: decimalSchema,
         })
         .strict(),
@@ -149,6 +151,23 @@ export const laneProjectionSchema = z
     unverifiedServiceBound: decimalSchema,
     worstCaseDeliveredValue: decimalSchema,
     unprotectedExposureBound: decimalSchema,
+    exposureRemaining: decimalSchema,
+    maxUnprotectedExposure: positiveDecimalSchema,
+    channelId: idSchema.nullable(),
+    lastEvidenceHash: z.string().nullable(),
+    lastTrustedEvidenceAt: instantSchema.nullable(),
+    latestVoucherDigest: z.string().nullable(),
+    operations: z.array(
+      z
+        .object({
+          type: z.enum(["open", "voucher", "top_up", "settle"]),
+          status: z.enum(["pending", "submitted", "confirmed", "failed"]),
+          requestedAmount: decimalSchema,
+          transactionHash: z.string().nullable(),
+          reasonCode: z.string().nullable(),
+        })
+        .strict(),
+    ),
     reasonCodes: z.array(z.string()),
     updatedAt: instantSchema,
     source: z.literal("stored-projection"),
@@ -164,3 +183,46 @@ export type CreateCorridorInput = z.infer<typeof createCorridorSchema>;
 export type StartLaneInput = z.infer<typeof startLaneSchema>;
 export type LaneCommandInput = z.infer<typeof laneCommandSchema>;
 export type LaneProjection = z.infer<typeof laneProjectionSchema>;
+
+export const laneHistorySchema = z.array(
+  z
+    .object({
+      id: idSchema,
+      type: z.string(),
+      version: z.number().int().nonnegative().nullable(),
+      occurredAt: instantSchema,
+      traceTime: instantSchema.nullable(),
+      reasonCode: z.string().nullable(),
+      evidenceHash: z.string().nullable(),
+      channelId: z.string().nullable(),
+      transactionHash: z.string().nullable(),
+      summary: z
+        .object({
+          before: z
+            .object({
+              trusted: decimalSchema,
+              protected: decimalSchema,
+              exposure: decimalSchema,
+            })
+            .nullable(),
+          after: z.object({
+            trusted: decimalSchema,
+            protected: decimalSchema,
+            exposure: decimalSchema,
+          }),
+        })
+        .nullable(),
+      detail: z.object({ digest: z.string().nullable() }).nullable(),
+    })
+    .strict(),
+);
+
+export const paymentEffectPayloadSchema = z
+  .object({
+    laneId: idSchema,
+    channelId: idSchema.optional(),
+    amount: decimalSchema.optional(),
+    priorDeposit: decimalSchema.optional(),
+  })
+  .passthrough();
+export type LaneHistory = z.infer<typeof laneHistorySchema>;

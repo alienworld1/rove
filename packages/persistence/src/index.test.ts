@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import postgres from "postgres";
@@ -64,7 +64,10 @@ test(
           lowHeadroomThreshold: "1",
         },
         reservePolicy: { initialDeposit: "500", topUpIncrement: "200" },
-        settlementPolicy: { minimumIntervalMs: 1000 },
+        settlementPolicy: {
+          minimumIntervalMs: 1000,
+          minimumUnsettledProtectedValue: "100",
+        },
         meters: [
           {
             meterId: "17619300",
@@ -158,6 +161,7 @@ test(
           error instanceof StoreError && error.code === "VERSION_CONFLICT",
       );
       const channelId = `channel-${randomUUID()}`;
+      const digest = `0x${createHash("sha256").update(channelId).digest("hex")}`;
       const pay = command(acceptedLane.id, 1, {
         type: "ObservePayment",
         channelId,
@@ -165,7 +169,6 @@ test(
         assetId: "asset",
         observedAt: when,
         confirmedDeposit: "500",
-        authorizedValue: "259",
         settledValue: "0",
         chainHeight: "1",
       });
@@ -177,10 +180,28 @@ test(
         assetId: "asset",
         observedAt: when,
         confirmedDeposit: "500",
-        authorizedValue: "259",
         settledValue: "0",
         chainHeight: "1",
       });
+      assert.equal(
+        (await store.getLane(acceptedLane.id)).state,
+        "INITIALIZING",
+      );
+      await store.advanceLane(
+        command(acceptedLane.id, 2, { type: "TickProtectionClock" }),
+        "local-simulation",
+        { type: "VoucherVerified", cumulativeAmount: "259", digest },
+        undefined,
+        undefined,
+        {
+          channelId,
+          cumulativeAmount: "259",
+          digest,
+          signature: `0x${"11".repeat(65)}`,
+          signerRef: "local-simulation",
+          domainRef: "local-simulation",
+        },
+      );
       assert.equal((await store.getLane(acceptedLane.id)).state, "PROTECTED");
       assert.equal(
         (await store.getLane(acceptedLane.id)).paymentSource,
@@ -188,14 +209,14 @@ test(
       );
       const stale = command(
         acceptedLane.id,
-        2,
+        3,
         { type: "TickProtectionClock" },
         "2019-08-13T10:04:38.000Z",
       );
       await store.advanceLane(stale, "local-simulation");
       const fail = command(
         acceptedLane.id,
-        3,
+        4,
         { type: "TickProtectionClock" },
         "2019-08-13T10:05:16.000Z",
       );
@@ -211,7 +232,7 @@ test(
         }),
         /INJECTED_FAILURE/,
       );
-      assert.equal((await store.getLane(acceptedLane.id)).version, 3);
+      assert.equal((await store.getLane(acceptedLane.id)).version, 4);
       const afterFailure = (
         await inspect`select
         (select count(*) from domain_events where lane_id = ${acceptedLane.id}) as events,
@@ -226,9 +247,17 @@ test(
         "100",
       );
       const restartedStore = new ChargingStore(databaseUrl!);
-      const job = await restartedStore.claimOutbox(fail.now!, 30_000);
+      await inspect`update outbox_jobs set status = 'completed' where lane_id = ${acceptedLane.id} and effect_type <> 'pause.requested'`;
+      const job = await restartedStore.claimOutbox(
+        fail.now!,
+        30_000,
+        acceptedLane.id,
+      );
       assert.equal(job?.effectType, "pause.requested");
-      assert.equal(await restartedStore.claimOutbox(fail.now!, 30_000), null);
+      assert.equal(
+        await restartedStore.claimOutbox(fail.now!, 30_000, acceptedLane.id),
+        null,
+      );
       await restartedStore.finishOutbox(
         job!.id,
         job!.leaseToken!,
@@ -236,7 +265,11 @@ test(
         fail.now!,
         "external-ref",
       );
-      const reclaimed = await restartedStore.claimOutbox(fail.now!, 30_000);
+      const reclaimed = await restartedStore.claimOutbox(
+        fail.now!,
+        30_000,
+        acceptedLane.id,
+      );
       assert.equal(reclaimed?.externalReference, "external-ref");
       await assert.rejects(
         restartedStore.finishOutbox(
@@ -250,13 +283,13 @@ test(
       await restartedStore.close();
       const sameVersion = command(
         acceptedLane.id,
-        4,
+        5,
         { type: "TickProtectionClock" },
         "2019-08-13T10:05:18.000Z",
       );
       const other = command(
         acceptedLane.id,
-        4,
+        5,
         { type: "TickProtectionClock" },
         "2019-08-13T10:05:18.000Z",
       );
@@ -274,7 +307,7 @@ test(
       );
       const repeated = command(
         acceptedLane.id,
-        5,
+        6,
         { type: "TickProtectionClock" },
         "2019-08-13T10:05:19.000Z",
       );
@@ -283,7 +316,7 @@ test(
         store.advanceLane(repeated, "local-simulation"),
       ]);
       assert.deepEqual(firstRetry, secondRetry);
-      assert.equal(firstRetry.version, 6);
+      assert.equal(firstRetry.version, 7);
       let arrived = 0;
       let release!: () => void;
       const bothLocked = new Promise<void>((resolve) => {
@@ -309,7 +342,7 @@ test(
         store.advanceLane(
           command(
             acceptedLane.id,
-            6,
+            7,
             { type: "TickProtectionClock" },
             "2019-08-13T10:05:20.000Z",
           ),
@@ -321,7 +354,7 @@ test(
       ]);
       assert.deepEqual(
         independent.map((result) => result.version),
-        [2, 7],
+        [2, 8],
       );
     } finally {
       await inspect.end();
