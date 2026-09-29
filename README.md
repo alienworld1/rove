@@ -17,13 +17,13 @@ In another terminal:
 pnpm dev:web
 ```
 
-Open `http://localhost:3000`. The page checks the web route and the engine at `http://127.0.0.1:4100`. Stop the engine and select **Check again** to see the unavailable state. Restart it and retry to see recovery.
+Open `http://localhost:3000`. Enter the local access key, choose the Northstar Mobility ↔ Voltway scenario, and start a run. The Corridor keeps three charging Lanes, aggregate protection, playback, and event inspection in one view. Select a Lane or one of its recorded events to inspect it; the URL preserves that selection across refreshes. Live updates reconnect automatically, and the latest safely checked state remains visible if the stream is interrupted.
 
-Copy `.env.example` to an ignored `.env` file for local settings. The engine reads settings from its process environment; shell values may be loaded with `set -a; . ./.env; set +a` before starting it. The web process needs the same `ENGINE_ORIGIN` and `DEMO_SESSION_TOKEN` values. Generate a random hexadecimal token of at least 48 characters for the local integration status view. The token is entered in that view and kept in an HTTP-only cookie.
+Copy `.env.example` to an ignored `.env` file for local settings. The engine reads settings from its process environment; shell values may be loaded with `set -a; . ./.env; set +a` before starting it. The web process needs the same `ENGINE_ORIGIN` and `DEMO_SESSION_TOKEN` values. Generate a random hexadecimal token of at least 48 characters for the local access key. It is entered on the page and kept in an HTTP-only cookie.
 
-Basic readiness requires PostgreSQL but no payer key. Run `pnpm --filter @rove/persistence db:migrate` after setting `DATABASE_URL`. The integration status view reports only whether the proof settings are configured. A ready page confirms service response, not a verified channel or meter record. See [charging storage and local checks](docs/charging-storage.md) for the controlled live session path and the clearly labeled local simulation.
+The Corridor requires PostgreSQL but the local deterministic payment scenario needs no payer key. Run `pnpm --filter @rove/persistence db:migrate` after setting `DATABASE_URL`. The source disclosure identifies whether payment is local simulation or Tempo. See [charging storage and local checks](docs/charging-storage.md) for the controlled live session path.
 
-In the controlled local session, **Corridor Lab** runs the saved Northstar Mobility ↔ Voltway digital-twin scenario. Use `pnpm --filter @rove/engine lab:run` for the matching headless protection check. The three local payment channels are deterministic. With the funded Tempo testnet configuration, `pnpm --filter @rove/engine lab:run --live` separately runs three real channel workflows; see [charging storage and local checks](docs/charging-storage.md) before submitting testnet transactions.
+The saved Northstar Mobility ↔ Voltway digital-twin scenario includes a rejected meter reading, an exact protection pause, and recovery. The scenario builder is available below the launch controls. Use `pnpm --filter @rove/engine lab:run` for the matching headless protection check. The three local payment channels are deterministic. With the funded Tempo testnet configuration, `pnpm --filter @rove/engine lab:run --live` separately runs three real channel workflows; see [charging storage and local checks](docs/charging-storage.md) before submitting testnet transactions.
 
 ## Verification
 
