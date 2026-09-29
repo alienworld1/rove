@@ -7,22 +7,54 @@
   --color-canvas: #f1f3f2;
   --color-raised: #f8f9f7;
   --color-pure: #ffffff;
+  --color-sunken: #e7eae8;
   --color-selection: #e2e7e5;
   --color-ink: #18201e;
   --color-ink-secondary: #47514e;
   --color-ink-tertiary: #737d79;
+  --color-ink-faint: #9ba39f;
+  --color-ink-disabled: #b8beba;
+  --color-line-faint: #d8ddda;
   --color-line: #bec6c2;
   --color-line-strong: #818d88;
+  --color-line-system: #5c6864;
+  --color-line-authoritative: #26312e;
   --color-protected: #167768;
+  --color-protected-deep: #105b50;
+  --color-protected-soft: #d6e9e4;
+  --color-protected-faint: #e9f2ef;
   --color-risk: #b57918;
-  --color-critical: #a8433f;
+  --color-risk-deep: #80510b;
+  --color-risk-soft: #ebdcb9;
+  --color-risk-faint: #f3ebdd;
+  --color-critical: #b64045;
+  --color-critical-deep: #81292e;
+  --color-critical-soft: #ebcfd1;
   --color-info: #4d6672;
+  --color-info-soft: #dce5e8;
   --font-sans: "IBM Plex Sans", sans-serif;
   --font-mono: "IBM Plex Mono", monospace;
   --radius-sm: 2px;
+  --radius-md: 6px;
+  --shadow-inspector: 0 8px 30px rgb(24 32 30 / 10%);
+  --lane-collapsed: 56px;
+  --lane-attention: 88px;
+  --lane-focused: 340px;
 }
 
 body {
   background: var(--color-canvas);
   color: var(--color-ink);
+}
+
+button,
+[role="button"],
+input,
+select,
+summary {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: var(--color-selection);
 }

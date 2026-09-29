@@ -7,16 +7,23 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
+    "test": "node --import tsx --test app/corridor/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@floating-ui/react": "^0.27.20",
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@fontsource/ibm-plex-sans": "^5.3.0",
+    "@radix-ui/react-dialog": "^1.1.23",
+    "@react-spring/web": "^10.1.2",
     "@rove/config": "workspace:*",
     "@rove/contracts": "workspace:*",
+    "@tanstack/react-query": "^5.104.0",
+    "@use-gesture/react": "^10.3.1",
     "next": "16.3.6",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -25,6 +32,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
+    "tsx": "^4.20.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   },

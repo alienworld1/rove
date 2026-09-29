@@ -1,4 +1,9 @@
 import { readBaseConfig } from "@rove/config";
+import {
+  causalInspectorTraceSchema,
+  corridorOperatingViewSchema,
+  idSchema,
+} from "@rove/contracts";
 import { hasDemoSession } from "../../demo-session";
 
 export const runtime = "nodejs";
@@ -18,6 +23,7 @@ export async function GET(
       { status: 403, headers: { "cache-control": "no-store" } },
     );
   const { path } = await context.params;
+  const event = new URL(request.url).searchParams.get("event");
   if (
     path.length < 1 ||
     path.length > 3 ||
@@ -31,16 +37,31 @@ export async function GET(
     )
   )
     return new Response(null, { status: 404 });
-  try {
-    const upstream = await fetch(
-      new URL(`/api/${path.join("/")}`, config.ENGINE_ORIGIN),
-      {
-        headers: { authorization: `Bearer ${config.DEMO_SESSION_TOKEN}` },
-        cache: "no-store",
-        signal: AbortSignal.timeout(5_000),
-      },
+  if (
+    event &&
+    (path.at(-1) !== "inspector" || !idSchema.safeParse(event).success)
+  )
+    return Response.json(
+      { message: "That selection is no longer available." },
+      { status: 400, headers: { "cache-control": "no-store" } },
     );
-    return new Response(await upstream.text(), {
+  try {
+    const upstreamUrl = new URL(`/api/${path.join("/")}`, config.ENGINE_ORIGIN);
+    if (event) upstreamUrl.searchParams.set("event", event);
+    const upstream = await fetch(upstreamUrl, {
+      headers: { authorization: `Bearer ${config.DEMO_SESSION_TOKEN}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(5_000),
+    });
+    const text = await upstream.text();
+    if (upstream.ok) {
+      const value = JSON.parse(text) as unknown;
+      if (path[0] === "corridors" && path.length === 2)
+        corridorOperatingViewSchema.parse(value);
+      if (path.at(-1) === "inspector" && event)
+        causalInspectorTraceSchema.parse(value);
+    }
+    return new Response(text, {
       status: upstream.status,
       headers: {
         "content-type": "application/json",
@@ -49,7 +70,7 @@ export async function GET(
     });
   } catch {
     return Response.json(
-      { message: "Charging protection is unavailable right now. Try again." },
+      { message: "Corridor state couldn't be displayed safely." },
       { status: 503, headers: { "cache-control": "no-store" } },
     );
   }
