@@ -85,3 +85,33 @@ test(
     }
   },
 );
+
+test(
+  "a Lane waiting on payment leaves the next independent Lane eligible",
+  {
+    skip:
+      !databaseUrl && "Set DATABASE_URL to run PostgreSQL integration checks",
+  },
+  async () => {
+    const charging = new ChargingStore(databaseUrl!);
+    const labStore = new LabStore(databaseUrl!);
+    try {
+      const lab = new CorridorLab(charging, labStore);
+      const scenario = await lab.seed();
+      const started = await lab.start(scenario.id, scenario.digest);
+      const claimed = await labStore.claimNext(
+        started.run.id,
+        started.run.version,
+        new Set(["lane-a"]),
+      );
+      assert.equal(claimed?.event.scenarioEventId, "start-b");
+      assert.equal(
+        (await labStore.getRun(started.run.id)).events[0].status,
+        "pending",
+      );
+    } finally {
+      await labStore.close();
+      await charging.close();
+    }
+  },
+);

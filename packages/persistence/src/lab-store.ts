@@ -151,6 +151,42 @@ export class LabStore {
     return run;
   }
 
+  async updateAwaiting(
+    id: string,
+    wait: { laneKey: string; operation: string } | null,
+  ) {
+    return this.db.transaction(async (tx) => {
+      const run = (
+        await tx.select().from(labRuns).where(eq(labRuns.id, id)).for("update")
+      )[0];
+      if (!run) throw new StoreError("NOT_FOUND");
+      if (["completed", "failed"].includes(run.status)) return run;
+      if (run.status === "awaiting_chain" && !wait) return run;
+      const previous = run.awaiting as {
+        laneKey?: string;
+        operation?: string;
+        startedAt?: string;
+      } | null;
+      if (
+        previous?.laneKey === wait?.laneKey &&
+        previous?.operation === wait?.operation
+      )
+        return run;
+      const [updated] = await tx
+        .update(labRuns)
+        .set({
+          awaiting: wait
+            ? { ...wait, startedAt: new Date().toISOString() }
+            : null,
+          version: sql`${labRuns.version} + 1`,
+          updatedAt: new Date().toISOString(),
+        })
+        .where(eq(labRuns.id, id))
+        .returning();
+      return updated;
+    });
+  }
+
   async changeTransport(
     id: string,
     expectedVersion: number,
@@ -178,7 +214,11 @@ export class LabStore {
     return run;
   }
 
-  async claimNext(id: string, expectedVersion: number) {
+  async claimNext(
+    id: string,
+    expectedVersion: number,
+    unavailableLanes: ReadonlySet<string> = new Set(),
+  ) {
     return this.db.transaction(async (tx) => {
       const run = (
         await tx.select().from(labRuns).where(eq(labRuns.id, id)).for("update")
@@ -207,8 +247,8 @@ export class LabStore {
           item.laneKey
         )
           blocked.delete(item.laneKey);
-        if (!["pending", "dispatching", "awaiting_chain"].includes(item.status))
-          continue;
+        if (!["pending", "dispatching"].includes(item.status)) continue;
+        if (item.laneKey && unavailableLanes.has(item.laneKey)) continue;
         if (
           item.laneKey &&
           blocked.has(item.laneKey) &&

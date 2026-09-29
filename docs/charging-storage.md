@@ -32,7 +32,16 @@ For the repeatable headless run:
 pnpm --filter @rove/engine lab:run
 ```
 
-This command uses the saved scenario contract, creates three new Corridor Lanes and channels, verifies signed OCMF readings through the normal intake, rejects the corrupted Lane C signature, checks 699 and 700 units at the exposure boundary, and verifies recovery. It prints the run and channel references. Repeating it creates a fresh run and retains prior history. Its payment source is local deterministic simulation, not a Tempo receipt. For live Tempo, configure approved meter identities and a funded test environment first; `pnpm --filter @rove/engine lab:run --live` reports that prerequisite until a live Lab profile is provisioned. The existing one-Lane Tempo proof is documented in [integration notes](integrations.md).
+This command uses the saved scenario contract, creates three new Corridor Lanes and channels, verifies signed OCMF readings through the normal intake, rejects the corrupted Lane C signature, checks 699 and 700 units at the exposure boundary, and verifies recovery. It prints the run and channel references. Repeating it creates a fresh run and retains prior history. Its payment source is local deterministic simulation, not a Tempo receipt.
+
+For a live Tempo testnet run, configure the verified `TEMPO_*` settings and funded test wallet in the ignored `.env` file, then run:
+
+```sh
+pnpm --filter @rove/engine probe:payment
+pnpm --filter @rove/engine lab:run --live
+```
+
+The live command creates three real testnet channels and may submit top-up and partial-settlement transactions. It waits for chain confirmation before reporting a pass. The live scenario uses a testnet freshness window so RPC waiting does not advance the short digital-twin trace; its deposit, top-up, tariff, and protection values are illustrative base-unit test settings, not production policy. The command prints a run ID when it starts. If it stops before any scenario event dispatches, `pnpm --filter @rove/engine lab:run --live --resume <run-id>` reconciles that same run without creating new channels. `pnpm --filter @rove/engine lab:run --live --verify <run-id>` checks a completed run and its current on-chain channel state without sending transactions. Inspect a partially dispatched run before continuing it. Channels remain open for later reconciliation and close; Corridor Lab does not release their remaining test funds. The existing one-Lane Tempo proof is documented in [integration notes](integrations.md).
 
 ## Run one controlled live charging session
 

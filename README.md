@@ -23,7 +23,7 @@ Copy `.env.example` to an ignored `.env` file for local settings. The engine rea
 
 Basic readiness requires PostgreSQL but no payer key. Run `pnpm --filter @rove/persistence db:migrate` after setting `DATABASE_URL`. The integration status view reports only whether the proof settings are configured. A ready page confirms service response, not a verified channel or meter record. See [charging storage and local checks](docs/charging-storage.md) for the controlled live session path and the clearly labeled local simulation.
 
-In the controlled local session, **Corridor Lab** runs the saved Northstar Mobility ↔ Voltway digital-twin scenario. Use `pnpm --filter @rove/engine lab:run` for the matching headless protection check. The three local payment channels are deterministic; they do not stand in for a live Tempo acceptance run.
+In the controlled local session, **Corridor Lab** runs the saved Northstar Mobility ↔ Voltway digital-twin scenario. Use `pnpm --filter @rove/engine lab:run` for the matching headless protection check. The three local payment channels are deterministic. With the funded Tempo testnet configuration, `pnpm --filter @rove/engine lab:run --live` separately runs three real channel workflows; see [charging storage and local checks](docs/charging-storage.md) before submitting testnet transactions.
 
 ## Verification
 

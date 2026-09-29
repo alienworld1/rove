@@ -9,20 +9,41 @@ import {
   northstarVoltwayScenario,
 } from "@rove/lab/scenarios/northstar-voltway";
 import { CorridorLab } from "./corridor-lab.js";
+import { createConfiguredTempoChannelAdapter } from "./charging-effects.js";
+import { createLiveLabScenario } from "./lab-live-scenario.js";
 
-async function execute(lab: CorridorLab, initial: LabRunView) {
+async function waitForChain(lab: CorridorLab, initial: LabRunView) {
   let view = initial;
+  const deadline = Date.now() + 300_000;
+  while (
+    view.run.status === "awaiting_chain" ||
+    view.lanes.some((lane) =>
+      lane.projection?.operations.some((operation) =>
+        ["pending", "submitted", "failed"].includes(operation.status),
+      ),
+    )
+  ) {
+    if (Date.now() >= deadline)
+      throw new Error(`PAYMENT_CHAIN_WAIT_TIMEOUT: run ${view.run.id}`);
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    view = await lab.check(view.run.id, view.run.version);
+  }
+  return view;
+}
+
+async function execute(lab: CorridorLab, initial: LabRunView, live = false) {
+  let view = initial;
+  if (live) view = await waitForChain(lab, view);
   const laneIds = view.lanes.map((lane) => lane.projection?.id);
   assert.equal(new Set(laneIds).size, 3);
   const channelIds = view.lanes.map((lane) => lane.projection?.channelId);
   assert.equal(new Set(channelIds).size, 3);
-  const compiled = compileLabScenario(
-    northstarVoltwayScenario,
-    controlledMeterProfiles,
-  );
+  const compiled = compileLabScenario(view.scenario, controlledMeterProfiles);
   const outcomes = await runHeadlessScenario(compiled, async (event) => {
     assert.notEqual(view.run.status, "completed");
+    if (live) view = await waitForChain(lab, view);
     view = await lab.transport(view.run.id, "step", view.run.version);
+    if (live) view = await waitForChain(lab, view);
     const lane = view.lanes.find(
       (item) => item.definition.key === event.laneKey,
     );
@@ -80,32 +101,142 @@ async function execute(lab: CorridorLab, initial: LabRunView) {
   };
 }
 
+async function verifyLiveRun(
+  lab: CorridorLab,
+  charging: ChargingStore,
+  runId: string,
+) {
+  const view = await lab.view(runId);
+  assert.equal(view.run.status, "completed");
+  assert.equal(view.events.length, 18);
+  assert.ok(
+    view.events.every((event) =>
+      ["completed", "rejected"].includes(event.status),
+    ),
+  );
+  assert.equal(
+    view.events.find((event) => event.id === "reading-c-corrupt")?.status,
+    "rejected",
+  );
+  assert.equal(
+    view.events.find((event) => event.id === "reading-c-recovery")?.status,
+    "completed",
+  );
+  assert.equal(new Set(view.lanes.map((lane) => lane.projection?.id)).size, 3);
+  assert.equal(
+    new Set(view.lanes.map((lane) => lane.projection?.channelId)).size,
+    3,
+  );
+  const tempo = createConfiguredTempoChannelAdapter();
+  const channels = [];
+  for (const lane of view.lanes) {
+    const projection = lane.projection;
+    if (!projection?.channelId?.startsWith("0x"))
+      throw new Error(`CHANNEL_MISSING: ${lane.definition.key}`);
+    assert.equal(projection.state, "PROTECTED");
+    assert.equal(projection.paymentSource, "tempo-adapter");
+    assert.ok(
+      projection.operations.every(
+        (operation) => operation.status === "confirmed",
+      ),
+    );
+    const chain = await tempo.readChannel(
+      projection.channelId as `0x${string}`,
+    );
+    assert.equal(chain.confirmedDeposit, projection.confirmedDeposit);
+    assert.equal(chain.settledValue, projection.settledValue);
+    channels.push({
+      lane: lane.definition.key,
+      channelId: chain.channelId,
+      confirmedDeposit: chain.confirmedDeposit,
+      settledValue: chain.settledValue,
+      chainHeight: chain.chainHeight,
+    });
+  }
+  const laneC = view.lanes.find((lane) => lane.definition.key === "lane-c")!;
+  assert.equal(laneC.projection?.trustedDeliveredValue, "342");
+  assert.equal(laneC.projection?.protectedValue, "342");
+  assert.equal(laneC.projection?.unprotectedExposureBound, "0");
+  assert.ok(
+    laneC.projection?.operations.some((item) => item.type === "top_up"),
+  );
+  assert.ok(
+    view.lanes.some((lane) =>
+      lane.projection?.operations.some((item) => item.type === "settle"),
+    ),
+  );
+  const history = await charging.getHistory(laneC.projection!.id);
+  assert.ok(
+    history.some(
+      (event) =>
+        event.type === "meter.evidence_rejected" &&
+        event.reasonCode === "EVIDENCE_SIGNATURE_INVALID",
+    ),
+  );
+  assert.equal(
+    history.filter((event) => event.type === "pause.requested").length,
+    1,
+  );
+  assert.ok(history.some((event) => event.type === "lane.protection_restored"));
+  return {
+    result: "verified",
+    payment: "Tempo testnet confirmed",
+    runId,
+    channels,
+  };
+}
+
 async function main() {
   const config = readBaseConfig();
   if (!config.DATABASE_URL || config.NODE_ENV !== "development")
     throw new Error("A local development database is required.");
-  if (process.argv.includes("--live")) {
-    process.stdout.write(
-      "Live Tempo acceptance requires three approved evidence identities and a funded test configuration. This run is local and deterministic.\n",
+  const live = process.argv.includes("--live");
+  const verifyIndex = process.argv.indexOf("--verify");
+  const verifyRunId =
+    verifyIndex < 0 ? undefined : process.argv[verifyIndex + 1];
+  if (verifyIndex >= 0 && (!live || !verifyRunId))
+    throw new Error(
+      "Use --live --verify <run ID> to check a completed Tempo run.",
     );
-    process.exitCode = 2;
-    return;
-  }
+  const resumeIndex = process.argv.indexOf("--resume");
+  const resumeRunId =
+    resumeIndex < 0 ? undefined : process.argv[resumeIndex + 1];
+  if (resumeIndex >= 0 && (!live || !resumeRunId))
+    throw new Error("Use --live --resume <run ID> to continue a Tempo run.");
+  if (verifyRunId && resumeRunId)
+    throw new Error("Choose either --verify or --resume.");
   const charging = new ChargingStore(config.DATABASE_URL);
   const labStore = new LabStore(config.DATABASE_URL);
   try {
     const lab = new CorridorLab(charging, labStore);
-    const scenario = await lab.seed();
+    if (verifyRunId) {
+      process.stdout.write(
+        `${JSON.stringify(await verifyLiveRun(lab, charging, verifyRunId))}\n`,
+      );
+      return;
+    }
+    const existing = resumeRunId ? await lab.view(resumeRunId) : null;
+    if (existing && existing.events.some((event) => event.status !== "pending"))
+      throw new Error(
+        "This run already has dispatched events; inspect it before continuing.",
+      );
+    const scenario = existing
+      ? { id: existing.scenario.id, digest: existing.run.scenarioDigest }
+      : live
+        ? await lab.saveScenario(createLiveLabScenario())
+        : await lab.seed();
     if (process.argv.includes("seed")) {
       process.stdout.write(
         `${JSON.stringify({ result: "saved", scenario: scenario.id, digest: scenario.digest })}\n`,
       );
       return;
     }
-    const first = await execute(
-      lab,
-      await lab.start(scenario.id, scenario.digest),
-    );
+    const initial = existing ?? (await lab.start(scenario.id, scenario.digest));
+    if (live)
+      process.stdout.write(
+        `${JSON.stringify({ result: existing ? "resumed" : "started", runId: initial.run.id, scenario: scenario.id, payment: "Tempo testnet" })}\n`,
+      );
+    const first = await execute(lab, initial, live);
     assert.equal(
       (await charging.getHistory(first.view.run.laneBindings["lane-c"])).filter(
         (event) => event.type === "pause.requested",
@@ -113,7 +244,7 @@ async function main() {
       1,
     );
     let replay: { runId: string; outcomeDigest: string } | undefined;
-    if (process.argv.includes("--compare")) {
+    if (process.argv.includes("--compare") && !live) {
       const second = await execute(
         lab,
         await lab.transport(first.view.run.id, "reset", first.view.run.version),
@@ -128,7 +259,7 @@ async function main() {
       };
     }
     process.stdout.write(
-      `${JSON.stringify({ result: "passed", payment: "local deterministic", scenario: scenario.id, runId: first.view.run.id, laneIds: first.laneIds, channelIds: first.channelIds, eventCount: first.eventCount, pauseExposure: first.pauseExposure, outcomeDigest: first.outcomeDigest, replay })}\n`,
+      `${JSON.stringify({ result: "passed", payment: live ? "Tempo testnet confirmed" : "local deterministic", scenario: scenario.id, runId: first.view.run.id, laneIds: first.laneIds, channelIds: first.channelIds, eventCount: first.eventCount, pauseExposure: first.pauseExposure, outcomeDigest: first.outcomeDigest, replay })}\n`,
     );
   } finally {
     await labStore.close();

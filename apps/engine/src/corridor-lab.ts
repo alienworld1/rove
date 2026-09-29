@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { labRunViewSchema, type LabScenarioEvent } from "@rove/contracts";
+import { readPaymentConfig } from "@rove/config";
 import {
   compileLabScenario,
   LabValidationError,
@@ -9,6 +10,7 @@ import {
 import { ChargingStore, LabStore, StoreError } from "@rove/persistence";
 import { controlledMeterIdentity, controlledReading } from "./lab-evidence.js";
 import { createLocalLabPaymentAdapter } from "./lab-payment.js";
+import { createChargingEffectAdapter } from "./charging-effects.js";
 import { processNextEffect } from "./outbox-worker.js";
 import {
   controlledMeterProfiles,
@@ -52,12 +54,32 @@ export class CorridorLab {
   }
 
   private checkEnvironment(compiled: CompiledLabScenario) {
-    if (compiled.definition.corridor.tempoNetwork !== "local-simulation")
+    if (compiled.definition.corridor.tempoNetwork === "local-simulation")
+      return;
+    let settings: ReturnType<typeof readPaymentConfig>;
+    try {
+      settings = readPaymentConfig();
+    } catch {
       throw new LabValidationError([
         {
           path: "corridor.tempoNetwork",
-          message:
-            "Approved live meter profiles and funding are not configured for this Corridor Lab.",
+          message: "Tempo test settings are incomplete for this Corridor Lab.",
+        },
+      ]);
+    }
+    if (
+      settings.TEMPO_SESSION_BACKEND !== "precompile" ||
+      compiled.definition.corridor.tempoNetwork !==
+        `eip155:${settings.TEMPO_CHAIN_ID}` ||
+      compiled.definition.corridor.settlementAssetId.toLowerCase() !==
+        settings.TEMPO_ASSET_ADDRESS.toLowerCase() ||
+      compiled.definition.corridor.tariff.assetDecimals !==
+        settings.TEMPO_ASSET_DECIMALS
+    )
+      throw new LabValidationError([
+        {
+          path: "corridor.tempoNetwork",
+          message: "Choose the configured Tempo network and settlement asset.",
         },
       ]);
   }
@@ -118,6 +140,43 @@ export class CorridorLab {
     if (definition.corridor.tempoNetwork === "local-simulation")
       for (const laneId of Object.values(bindings))
         await this.drainLocal(laneId, definition.traceEpoch);
+    else
+      for (const laneId of Object.values(bindings))
+        await this.drainLive(laneId);
+    if (definition.corridor.tempoNetwork !== "local-simulation")
+      await this.syncAwaiting(runId);
+  }
+
+  private async drainLive(laneId: string) {
+    const adapter = createChargingEffectAdapter(this.charging);
+    return processNextEffect(
+      this.charging,
+      adapter,
+      new Date().toISOString(),
+      laneId,
+    );
+  }
+
+  private async syncAwaiting(runId: string) {
+    const { run } = await this.lab.getRun(runId);
+    const compiled = run.compiledSnapshot as CompiledLabScenario;
+    if (compiled.definition.corridor.tempoNetwork === "local-simulation")
+      return;
+    const bindings = run.laneBindings as Record<string, string>;
+    for (const [laneKey, laneId] of Object.entries(bindings)) {
+      const projection = await this.charging.getLane(laneId);
+      const operation = projection.operations.find((item) =>
+        ["pending", "submitted", "failed"].includes(item.status),
+      );
+      if (operation) {
+        await this.lab.updateAwaiting(runId, {
+          laneKey,
+          operation: operation.type,
+        });
+        return;
+      }
+    }
+    await this.lab.updateAwaiting(runId, null);
   }
 
   private async drainLocal(laneId: string, traceEpoch: string) {
@@ -252,12 +311,63 @@ export class CorridorLab {
         if (this.localEffectsAvailable(compiled, last?.sequence ?? -1, laneKey))
           await this.drainLocal(laneId, compiled.definition.traceEpoch);
       }
+    } else {
+      for (const laneId of Object.values(
+        run.laneBindings as Record<string, string>,
+      ))
+        await this.drainLive(laneId);
     }
+    await this.reconcileAwaiting(runId);
+    await this.syncAwaiting(runId);
     return this.view(runId);
   }
 
+  private async reconcileAwaiting(runId: string) {
+    const { run, events } = await this.lab.getRun(runId);
+    if (run.status !== "awaiting_chain") return;
+    const pending = events.find((event) => event.status === "awaiting_chain");
+    if (!pending?.laneKey) return;
+    const laneId = (run.laneBindings as Record<string, string>)[
+      pending.laneKey
+    ];
+    if (!laneId) return;
+    const projection = await this.charging.getLane(laneId);
+    if (
+      projection.state === "PROTECTED" &&
+      projection.operations.every(
+        (operation) => operation.status === "confirmed",
+      )
+    )
+      await this.lab.completeEvent(
+        runId,
+        pending.id,
+        "completed",
+        pending.reasonCode ?? undefined,
+        pending.commandId ?? undefined,
+      );
+  }
+
   async dispatchOne(runId: string, expectedVersion: number) {
-    const claim = await this.lab.claimNext(runId, expectedVersion);
+    const snapshot = await this.lab.getRun(runId);
+    const unavailableLanes = new Set<string>();
+    const definition = snapshot.run.compiledSnapshot as CompiledLabScenario;
+    if (definition.definition.corridor.tempoNetwork !== "local-simulation") {
+      const bindings = snapshot.run.laneBindings as Record<string, string>;
+      for (const [laneKey, laneId] of Object.entries(bindings)) {
+        const projection = await this.charging.getLane(laneId);
+        if (
+          projection.operations.some((operation) =>
+            ["pending", "submitted", "failed"].includes(operation.status),
+          )
+        )
+          unavailableLanes.add(laneKey);
+      }
+    }
+    const claim = await this.lab.claimNext(
+      runId,
+      expectedVersion,
+      unavailableLanes,
+    );
     if (!claim) return;
     const { run, event } = claim;
     const compiled = run.compiledSnapshot as CompiledLabScenario;
@@ -329,6 +439,8 @@ export class CorridorLab {
         outcome.reasonCodes[0],
         commandId,
       );
+      if (compiled.definition.corridor.tempoNetwork !== "local-simulation")
+        await this.syncAwaiting(runId).catch(() => undefined);
     } catch (error) {
       if (error instanceof StoreError && error.code === "VERSION_CONFLICT")
         throw error;
@@ -477,10 +589,15 @@ export class CorridorLab {
   async schedule() {
     for (const active of await this.lab.listActiveRuns()) {
       const compiled = active.compiledSnapshot as CompiledLabScenario;
-      if (compiled.definition.corridor.tempoNetwork !== "local-simulation")
-        continue;
       const bindings = active.laneBindings as Record<string, string>;
       const { events } = await this.lab.getRun(active.id);
+      if (compiled.definition.corridor.tempoNetwork !== "local-simulation") {
+        for (const laneId of Object.values(bindings))
+          await this.drainLive(laneId);
+        await this.reconcileAwaiting(active.id);
+        await this.syncAwaiting(active.id);
+        continue;
+      }
       for (const [laneKey, laneId] of Object.entries(bindings)) {
         const last = events
           .filter(
