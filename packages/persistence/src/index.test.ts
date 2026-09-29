@@ -111,6 +111,26 @@ test(
         "0",
       );
       assert.equal(rejected.version, 1);
+      const rejectedEvent = (await store.getHistory(started.id)).find(
+        (event) => event.evidenceHash !== null,
+      );
+      assert.ok(rejectedEvent);
+      const rejectedTrace = await store.getInspector(
+        started.id,
+        rejectedEvent.id,
+      );
+      assert.equal(rejectedTrace.evidence?.accepted, false);
+      assert.equal(rejectedTrace.evidence?.raw, null);
+      assert.equal(
+        rejectedTrace.causalSteps.find((step) => step.type === "verification")
+          ?.status,
+        "rejected",
+      );
+      for (const type of ["calculation", "voucher", "payment"] as const)
+        assert.equal(
+          rejectedTrace.causalSteps.find((step) => step.type === type)?.status,
+          "not_applicable",
+        );
       const acceptedSession = `accepted-${randomUUID()}`;
       const acceptedLane = await store.startLane(
         {
@@ -132,6 +152,28 @@ test(
       assert.equal(
         (await store.getLane(acceptedLane.id)).trustedDeliveredValue,
         "259",
+      );
+      await assert.rejects(
+        store.getInspector(acceptedLane.id, rejectedEvent.id),
+        (error) => error instanceof StoreError && error.code === "NOT_FOUND",
+      );
+      const presentation = await store.getPresentationEvents(corridor.id, 0);
+      assert.equal(await store.getPresentationReplayFloor(corridor.id), 0);
+      assert.ok(presentation.length >= 4);
+      assert.ok(
+        presentation.every(
+          (event, index) =>
+            index === 0 ||
+            Number(event.id) > Number(presentation[index - 1].id),
+        ),
+      );
+      assert.ok(
+        (
+          await store.getPresentationEvents(
+            corridor.id,
+            Number(presentation.at(-1)!.id),
+          )
+        ).length === 0,
       );
       const eventCount = Number(
         (

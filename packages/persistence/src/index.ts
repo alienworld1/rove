@@ -5,11 +5,18 @@ import postgres from "postgres";
 import stringify from "fast-json-stable-stringify";
 import type { CorridorConfig, Lane, VerifiedObservation } from "@rove/domain";
 import type {
+  CausalInspectorTrace,
   CreateCorridorInput,
   LaneCommandInput,
+  RealtimePresentationEvent,
   StartLaneInput,
 } from "@rove/contracts";
-import { laneProjectionSchema } from "@rove/contracts";
+import {
+  causalInspectorTraceSchema,
+  laneProjectionSchema,
+  reasonTextFor,
+  realtimePresentationEventSchema,
+} from "@rove/contracts";
 import { verifyOcmf } from "@rove/evidence";
 import { transitionLane } from "@rove/protection";
 import {
@@ -225,6 +232,81 @@ function corridorFromRow(row: typeof corridors.$inferSelect): CorridorConfig {
     createdAt: date(row.createdAt),
     updatedAt: date(row.updatedAt),
   };
+}
+
+function projectionValues(projection?: Record<string, unknown>) {
+  if (
+    !projection ||
+    typeof projection.trustedDeliveredValue !== "string" ||
+    typeof projection.protectedValue !== "string" ||
+    typeof projection.unprotectedExposureBound !== "string" ||
+    typeof projection.authorizedValue !== "string" ||
+    typeof projection.settledValue !== "string" ||
+    !(
+      projection.confirmedDeposit === null ||
+      typeof projection.confirmedDeposit === "string"
+    ) ||
+    !(
+      projection.fundedHeadroom === null ||
+      typeof projection.fundedHeadroom === "string"
+    )
+  )
+    return null;
+  return {
+    trusted: projection.trustedDeliveredValue,
+    protected: projection.protectedValue,
+    exposure: projection.unprotectedExposureBound,
+    authorized: projection.authorizedValue,
+    settled: projection.settledValue,
+    deposit: projection.confirmedDeposit,
+    headroom: projection.fundedHeadroom,
+  };
+}
+
+function operationStatusAtEvent(eventType: string, current: string | null) {
+  const stage =
+    /^payment\.(?:open|top_up|settlement|voucher)_(pending|submitted|completed|failed)$/.exec(
+      eventType,
+    )?.[1];
+  if (stage === "completed") return "confirmed";
+  if (stage === "submitted" || stage === "pending" || stage === "failed")
+    return stage;
+  if (eventType === "payment.voucher_verified") return "confirmed";
+  return current &&
+    ["pending", "submitted", "confirmed", "failed"].includes(current)
+    ? current
+    : null;
+}
+
+function summarizeSignature(signature: string | null) {
+  if (!signature) return "Verified signature";
+  return signature.length <= 18
+    ? signature
+    : `${signature.slice(0, 10)}…${signature.slice(-8)}`;
+}
+
+function verificationChecks(reasonCode: string | null) {
+  const rejected = (code: string) =>
+    reasonCode === code ? "rejected" : "unavailable";
+  if (!reasonCode)
+    return {
+      signature: "verified",
+      identity: "verified",
+      continuity: "verified",
+      replay: "verified",
+      freshness: "verified",
+    } as const;
+  return {
+    signature: rejected("EVIDENCE_SIGNATURE_INVALID"),
+    identity:
+      reasonCode === "EVIDENCE_SOURCE_MISMATCH" ||
+      reasonCode === "EVIDENCE_SESSION_MISMATCH"
+        ? "rejected"
+        : "unavailable",
+    continuity: rejected("EVIDENCE_SEQUENCE_INVALID"),
+    replay: rejected("EVIDENCE_REPLAY"),
+    freshness: rejected("EVIDENCE_STALE"),
+  } as const;
 }
 
 export class ChargingStore {
@@ -753,6 +835,397 @@ export class ChargingStore {
             : null,
       };
     });
+  }
+
+  async getLatestEventOrdinal(corridorId: string) {
+    await this.getCorridor(corridorId);
+    const row = (
+      await this.db
+        .select({ ordinal: domainEvents.ordinal })
+        .from(domainEvents)
+        .where(eq(domainEvents.corridorId, corridorId))
+        .orderBy(sql`${domainEvents.ordinal} desc`)
+        .limit(1)
+    )[0];
+    return row?.ordinal ?? 0;
+  }
+
+  async getPresentationReplayFloor(corridorId: string) {
+    await this.getCorridor(corridorId);
+    const rows = await this.db
+      .select({ ordinal: domainEvents.ordinal })
+      .from(domainEvents)
+      .where(eq(domainEvents.corridorId, corridorId))
+      .orderBy(sql`${domainEvents.ordinal} desc`)
+      .limit(101);
+    return rows.length > 100 ? rows[100].ordinal : 0;
+  }
+
+  async getPresentationEvents(
+    corridorId: string,
+    afterOrdinal: number,
+    limit = 100,
+  ): Promise<RealtimePresentationEvent[]> {
+    await this.getCorridor(corridorId);
+    const rows = await this.db
+      .select()
+      .from(domainEvents)
+      .where(
+        and(
+          eq(domainEvents.corridorId, corridorId),
+          sql`${domainEvents.ordinal} > ${afterOrdinal}`,
+        ),
+      )
+      .orderBy(domainEvents.ordinal)
+      .limit(Math.min(Math.max(limit, 1), 100));
+    return rows.map((row) =>
+      realtimePresentationEventSchema.parse({
+        id: String(row.ordinal),
+        type: row.laneId
+          ? "lane_projection_changed"
+          : "corridor_projection_changed",
+        corridorId: row.corridorId,
+        laneId: row.laneId,
+        runId: null,
+        projectionVersion: row.ordinal,
+        reasonCode: row.reasonCode,
+        occurredAt: date(row.occurredAt),
+        payload: {
+          eventType: row.type,
+          laneVersion: row.laneVersion,
+        },
+      }),
+    );
+  }
+
+  async getInspector(
+    laneId: string,
+    eventId: string,
+  ): Promise<CausalInspectorTrace> {
+    return this.db.transaction(
+      async (tx) => {
+        const laneRow = (
+          await tx.select().from(lanes).where(eq(lanes.id, laneId))
+        )[0];
+        if (!laneRow) throw new StoreError("NOT_FOUND");
+        const event = (
+          await tx
+            .select()
+            .from(domainEvents)
+            .where(
+              and(
+                eq(domainEvents.id, eventId),
+                eq(domainEvents.laneId, laneId),
+              ),
+            )
+        )[0];
+        if (!event) throw new StoreError("NOT_FOUND");
+        const corridor = (
+          await tx
+            .select()
+            .from(corridors)
+            .where(eq(corridors.id, laneRow.corridorId))
+        )[0];
+        if (!corridor) throw new StoreError("NOT_FOUND");
+        const previousEvent = (
+          await tx
+            .select()
+            .from(domainEvents)
+            .where(
+              and(
+                eq(domainEvents.laneId, laneId),
+                sql`${domainEvents.ordinal} < ${event.ordinal}`,
+                sql`${domainEvents.payload} ? 'projection'`,
+              ),
+            )
+            .orderBy(sql`${domainEvents.ordinal} desc`)
+            .limit(1)
+        )[0];
+        const payload = event.payload as {
+          projection?: Record<string, unknown>;
+          digest?: string;
+        };
+        const beforePayload = previousEvent?.payload as
+          { projection?: Record<string, unknown> } | undefined;
+        const after = projectionValues(payload.projection);
+        const before = projectionValues(beforePayload?.projection);
+        if (!after) throw new StoreError("INCONSISTENT_PROJECTION");
+
+        const evidence = event.evidenceHash
+          ? (
+              await tx
+                .select()
+                .from(meterEvidence)
+                .where(
+                  and(
+                    eq(meterEvidence.laneId, laneId),
+                    eq(meterEvidence.evidenceHash, event.evidenceHash),
+                  ),
+                )
+            )[0]
+          : undefined;
+        const verification = evidence
+          ? (
+              await tx
+                .select()
+                .from(evidenceVerifications)
+                .where(eq(evidenceVerifications.evidenceId, evidence.id))
+            )[0]
+          : undefined;
+        const linkedVoucherJob = (
+          await tx
+            .select()
+            .from(outboxJobs)
+            .where(
+              and(
+                eq(outboxJobs.eventId, event.id),
+                eq(outboxJobs.effectType, "payment.voucher_requested"),
+              ),
+            )
+            .limit(1)
+        )[0];
+        const downstreamVoucherEvent = linkedVoucherJob
+          ? (
+              await tx
+                .select()
+                .from(domainEvents)
+                .where(
+                  and(
+                    eq(domainEvents.laneId, laneId),
+                    eq(
+                      domainEvents.causationId,
+                      linkedVoucherJob.idempotencyKey,
+                    ),
+                    eq(domainEvents.type, "payment.voucher_verified"),
+                  ),
+                )
+                .limit(1)
+            )[0]
+          : undefined;
+        const voucherDigest =
+          payload.digest ??
+          (downstreamVoucherEvent?.payload as { digest?: string } | undefined)
+            ?.digest;
+        const voucher = voucherDigest
+          ? (
+              await tx
+                .select()
+                .from(tempoVouchers)
+                .where(eq(tempoVouchers.digest, voucherDigest))
+                .limit(1)
+            )[0]
+          : undefined;
+        const channelId = event.channelId ?? laneRow.channelId;
+        const channel = channelId
+          ? (
+              await tx
+                .select()
+                .from(tempoChannels)
+                .where(eq(tempoChannels.channelId, channelId))
+                .limit(1)
+            )[0]
+          : undefined;
+        const linkedJob = (
+          await tx
+            .select()
+            .from(outboxJobs)
+            .where(eq(outboxJobs.eventId, event.id))
+            .limit(1)
+        )[0];
+        const operationKey = linkedJob?.idempotencyKey ?? event.causationId;
+        const operation = event.txHash
+          ? (
+              await tx
+                .select()
+                .from(paymentOperations)
+                .where(
+                  and(
+                    eq(paymentOperations.laneId, laneId),
+                    eq(paymentOperations.txHash, event.txHash),
+                  ),
+                )
+                .limit(1)
+            )[0]
+          : (
+              await tx
+                .select()
+                .from(paymentOperations)
+                .where(
+                  and(
+                    eq(paymentOperations.laneId, laneId),
+                    eq(paymentOperations.idempotencyKey, operationKey),
+                  ),
+                )
+                .limit(1)
+            )[0];
+        const checks = verificationChecks(verification?.reasonCode ?? null);
+        const operationStatus = operationStatusAtEvent(
+          event.type,
+          operation?.status ?? null,
+        );
+        const rejectedEvidence = verification?.accepted === false;
+        const hasPayment = Boolean(channel);
+        const resultState =
+          typeof payload.projection?.state === "string"
+            ? payload.projection.state
+            : laneRow.state;
+        const reasonCode = event.reasonCode ?? verification?.reasonCode ?? null;
+        return causalInspectorTraceSchema.parse({
+          corridorId: event.corridorId,
+          laneId,
+          eventId: event.id,
+          eventType: event.type,
+          occurredAt: date(event.occurredAt),
+          traceTime: event.traceTime ? date(event.traceTime) : null,
+          reasonCode,
+          reasonText: reasonTextFor(reasonCode),
+          evidence:
+            evidence && verification
+              ? {
+                  evidenceHash: evidence.evidenceHash,
+                  source: "Signed meter reading",
+                  meterId: evidence.meterId,
+                  sessionId: evidence.sessionId,
+                  timestamp: evidence.traceTime
+                    ? date(evidence.traceTime)
+                    : null,
+                  sequence: evidence.sequence,
+                  cumulativeWh: evidence.cumulativeWh,
+                  verifierVersion: verification.verifierVersion,
+                  accepted: verification.accepted,
+                  checks,
+                  raw: null,
+                }
+              : null,
+          calculation: {
+            tariffPerKwh: corridor.tariffPerKwh,
+            tariffDecimals: corridor.tariffDecimals,
+            assetDecimals: corridor.assetDecimals,
+            priorTrustedValue: before?.trusted ?? after.trusted,
+            nextTrustedValue: after.trusted,
+            priorProtectedValue: before?.protected ?? after.protected,
+            nextProtectedValue: after.protected,
+            priorExposureBound: before?.exposure ?? after.exposure,
+            nextExposureBound: after.exposure,
+          },
+          voucher: voucher
+            ? {
+                cumulativeAmount: voucher.cumulativeAmount,
+                digest: voucher.digest,
+                signatureSummary: summarizeSignature(voucher.signature),
+                verificationStatus: voucher.verificationStatus,
+                verifiedAt: voucher.verifiedAt
+                  ? date(voucher.verifiedAt)
+                  : null,
+                signerRef: voucher.signerRef,
+                domainRef: voucher.domainRef,
+              }
+            : null,
+          payment: channel
+            ? {
+                channelId: channel.channelId,
+                payer: corridor.payerEmsp,
+                payee: corridor.payeeCpo,
+                assetId: channel.assetId,
+                network: channel.network,
+                confirmedDeposit: after.deposit,
+                authorizedValue: after.authorized,
+                settledValue: after.settled,
+                fundedHeadroom: after.headroom,
+                operationType: operation?.operation ?? null,
+                operationStatus,
+                transactionHash: operation?.txHash ?? event.txHash,
+                confirmedAt:
+                  operationStatus === "confirmed" && operation?.confirmedAt
+                    ? date(operation.confirmedAt)
+                    : null,
+              }
+            : null,
+          result: {
+            laneVersion: event.laneVersion,
+            state: resultState,
+            reasonCodes: Array.isArray(payload.projection?.reasonCodes)
+              ? payload.projection.reasonCodes
+              : [],
+            before: before
+              ? {
+                  trusted: before.trusted,
+                  protected: before.protected,
+                  exposure: before.exposure,
+                }
+              : null,
+            after: {
+              trusted: after.trusted,
+              protected: after.protected,
+              exposure: after.exposure,
+            },
+          },
+          causalSteps: [
+            {
+              type: "evidence",
+              label: "Meter evidence",
+              status: evidence ? "complete" : "not_applicable",
+              reference: evidence?.evidenceHash ?? null,
+            },
+            {
+              type: "verification",
+              label: "Verification",
+              status: verification
+                ? verification.accepted
+                  ? "complete"
+                  : "rejected"
+                : "not_applicable",
+              reference: verification?.verifierVersion ?? null,
+            },
+            {
+              type: "calculation",
+              label: "Protection calculation",
+              status: rejectedEvidence ? "not_applicable" : "complete",
+              reference: null,
+            },
+            {
+              type: "voucher",
+              label: "Cumulative authorization",
+              status: rejectedEvidence
+                ? "not_applicable"
+                : voucher
+                  ? "complete"
+                  : linkedVoucherJob
+                    ? linkedVoucherJob.status === "failed"
+                      ? "rejected"
+                      : linkedVoucherJob.status === "completed"
+                        ? "unavailable"
+                        : "pending"
+                    : "not_applicable",
+              reference: voucher?.digest ?? null,
+            },
+            {
+              type: "payment",
+              label: "Payment channel",
+              status: rejectedEvidence
+                ? "not_applicable"
+                : operationStatus
+                  ? operationStatus === "failed"
+                    ? "rejected"
+                    : operationStatus === "confirmed"
+                      ? "complete"
+                      : "pending"
+                  : hasPayment
+                    ? "complete"
+                    : "not_applicable",
+              reference: operation?.txHash ?? channel?.channelId ?? null,
+            },
+            {
+              type: "result",
+              label: "Lane state",
+              status: "complete",
+              reference: String(event.laneVersion ?? ""),
+            },
+          ],
+        });
+      },
+      { isolationLevel: "repeatable read" },
+    );
   }
 
   async advanceLane(

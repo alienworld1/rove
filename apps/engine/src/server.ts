@@ -12,6 +12,7 @@ import {
   labStartRunSchema,
   labTransportSchema,
   laneCommandSchema,
+  realtimePresentationEventSchema,
   readinessSchema,
   startLaneSchema,
 } from "@rove/contracts";
@@ -20,6 +21,11 @@ import { LabValidationError } from "@rove/lab";
 import { CorridorLab } from "./corridor-lab.js";
 import { processNextEffect } from "./outbox-worker.js";
 import { createChargingEffectAdapter } from "./charging-effects.js";
+import { composeCorridorOperatingView } from "./corridor-read-model.js";
+import {
+  encodePresentationEvent,
+  parsePresentationCursor,
+} from "./presentation-stream.js";
 
 const config = readBaseConfig();
 const store = config.DATABASE_URL
@@ -35,6 +41,7 @@ const paymentEffects =
   store && proofPrerequisites().paymentConfigured
     ? createChargingEffectAdapter(store)
     : null;
+let activeStreams = 0;
 
 function send(response: ServerResponse, status: number, body: unknown) {
   response.writeHead(status, {
@@ -96,7 +103,8 @@ async function readJson(request: IncomingMessage) {
 }
 
 async function handle(request: IncomingMessage, response: ServerResponse) {
-  const path = new URL(request.url ?? "/", "http://localhost").pathname;
+  const requestUrl = new URL(request.url ?? "/", "http://localhost");
+  const path = requestUrl.pathname;
   if (request.method === "GET" && path === "/health") {
     let database = "unconfigured";
     if (store) {
@@ -140,6 +148,128 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
   let laneId: string | undefined;
   let commandId: string | undefined;
   try {
+    if (path === "/api/events/stream" && request.method === "GET") {
+      if (activeStreams >= 4) {
+        send(response, 429, { message: "Too many live connections." });
+        return;
+      }
+      const corridorId = idSchema.parse(
+        requestUrl.searchParams.get("corridor"),
+      );
+      const runId = requestUrl.searchParams.get("run");
+      if (runId) idSchema.parse(runId);
+      const lastEventId = request.headers["last-event-id"];
+      const requestedCursor = parsePresentationCursor(
+        (Array.isArray(lastEventId) ? lastEventId[0] : lastEventId) ??
+          requestUrl.searchParams.get("cursor") ??
+          undefined,
+      );
+      if (requestedCursor === null) throw new StoreError("VALIDATION");
+      const view = await composeCorridorOperatingView(
+        store,
+        corridorLab,
+        corridorId,
+      );
+      const replayFloor = await store.getPresentationReplayFloor(corridorId);
+      if (runId && view.activeRun?.id !== runId)
+        throw new StoreError("NOT_FOUND");
+      let runVersion = runId ? await corridorLab?.runVersion(runId) : null;
+      response.writeHead(200, {
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-cache, no-transform",
+        connection: "keep-alive",
+        "x-accel-buffering": "no",
+      });
+      response.flushHeaders();
+      activeStreams += 1;
+      let cursor = requestedCursor;
+      let closed = false;
+      let checking = false;
+      let heartbeat = 0;
+      if (cursor > view.projectionVersion || cursor < replayFloor) {
+        const resync = realtimePresentationEventSchema.parse({
+          id: String(view.projectionVersion),
+          type: "resync_required",
+          corridorId,
+          laneId: null,
+          runId: view.activeRun?.id ?? null,
+          projectionVersion: view.projectionVersion,
+          reasonCode: null,
+          occurredAt: new Date().toISOString(),
+          payload: { eventType: null, laneVersion: null },
+        });
+        response.write(encodePresentationEvent(resync));
+        cursor = view.projectionVersion;
+      }
+      const timer = setInterval(() => {
+        if (closed || checking) return;
+        checking = true;
+        void Promise.all([
+          store.getPresentationEvents(corridorId, cursor),
+          runId ? corridorLab?.runVersion(runId) : Promise.resolve(null),
+        ])
+          .then(([events, nextRunVersion]) => {
+            for (const event of events) {
+              if (Number(event.id) <= cursor) continue;
+              if (!response.write(encodePresentationEvent(event))) {
+                cleanup();
+                return;
+              }
+              cursor = Number(event.id);
+            }
+            if (
+              runId &&
+              nextRunVersion !== null &&
+              nextRunVersion !== undefined &&
+              nextRunVersion !== runVersion
+            ) {
+              runVersion = nextRunVersion;
+              if (
+                !response.write(
+                  encodePresentationEvent(
+                    realtimePresentationEventSchema.parse({
+                      id: String(cursor),
+                      type: "lab_run_changed",
+                      corridorId,
+                      laneId: null,
+                      runId,
+                      projectionVersion: cursor,
+                      reasonCode: null,
+                      occurredAt: new Date().toISOString(),
+                      payload: {
+                        eventType: `run.version.${nextRunVersion}`,
+                        laneVersion: null,
+                      },
+                    }),
+                  ),
+                )
+              )
+                cleanup();
+            }
+            heartbeat += 1;
+            if (heartbeat >= 15) {
+              response.write(`: keep-alive ${Date.now()}\n\n`);
+              heartbeat = 0;
+            }
+          })
+          .catch(() => {
+            if (!closed) response.write(": source unavailable\n\n");
+          })
+          .finally(() => {
+            checking = false;
+          });
+      }, 1_000);
+      timer.unref();
+      const cleanup = () => {
+        if (closed) return;
+        closed = true;
+        clearInterval(timer);
+        activeStreams = Math.max(0, activeStreams - 1);
+        if (!response.writableEnded) response.end();
+      };
+      response.once("close", cleanup);
+      return;
+    }
     if (path.startsWith("/api/lab/")) {
       if (!corridorLab) throw new StoreError("VALIDATION");
       if (seedLab && !(await seedLab)) throw new Error("LAB_SEED_UNAVAILABLE");
@@ -235,10 +365,11 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
     const corridorMatch = /^\/api\/corridors\/([^/]+)$/.exec(path);
     if (corridorMatch && request.method === "GET") {
       const id = idSchema.parse(corridorMatch[1]);
-      send(response, 200, {
-        corridor: await store.getCorridor(id),
-        laneIds: await store.listLanes(id),
-      });
+      send(
+        response,
+        200,
+        await composeCorridorOperatingView(store, corridorLab, id),
+      );
       return;
     }
     const laneMatch = /^\/api\/lanes\/([^/]+)$/.exec(path);
@@ -248,10 +379,16 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
     }
     const historyMatch = /^\/api\/lanes\/([^/]+)\/inspector$/.exec(path);
     if (historyMatch && request.method === "GET") {
+      const eventId = requestUrl.searchParams.get("event");
       send(
         response,
         200,
-        await store.getHistory(idSchema.parse(historyMatch[1])),
+        eventId
+          ? await store.getInspector(
+              idSchema.parse(historyMatch[1]),
+              idSchema.parse(eventId),
+            )
+          : await store.getHistory(idSchema.parse(historyMatch[1])),
       );
       return;
     }

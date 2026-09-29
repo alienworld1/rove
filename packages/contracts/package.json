@@ -7,6 +7,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test src/*.test.ts",
     "build": "tsc --noEmit"
   },
   "dependencies": {
@@ -14,6 +15,8 @@
     "zod": "^4.1.0"
   },
   "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4.20.0",
     "typescript": "^5.9.2"
   }
 }

@@ -131,6 +131,18 @@ export class LabStore {
     return { run, events };
   }
 
+  async getLatestRunIdForCorridor(corridorId: string) {
+    const run = (
+      await this.db
+        .select({ id: labRuns.id })
+        .from(labRuns)
+        .where(eq(labRuns.corridorId, corridorId))
+        .orderBy(sql`${labRuns.startedAt} desc`)
+        .limit(1)
+    )[0];
+    return run?.id ?? null;
+  }
+
   async bindRun(
     id: string,
     corridorId: string,

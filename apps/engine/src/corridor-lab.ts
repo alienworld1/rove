@@ -27,6 +27,11 @@ export class CorridorLab {
     private lab: LabStore,
   ) {}
 
+  async runVersion(runId: string) {
+    const { run } = await this.lab.getRun(runId);
+    return run.version;
+  }
+
   async seed() {
     const compiled = compileLabScenario(
       northstarVoltwayScenario,
@@ -245,6 +250,11 @@ export class CorridorLab {
         commandId: event.commandId,
       })),
     });
+  }
+
+  async viewForCorridor(corridorId: string) {
+    const runId = await this.lab.getLatestRunIdForCorridor(corridorId);
+    return runId ? this.view(runId) : null;
   }
 
   async transport(
