@@ -176,6 +176,32 @@ export const labStartRunSchema = z
   })
   .strict();
 
+export const labScenarioSummarySchema = z
+  .object({
+    id: idSchema,
+    name: z.string().trim().min(1).max(160),
+    digest: z.string().regex(/^[0-9a-f]{64}$/),
+    schemaVersion: z.number().int().positive(),
+    validationStatus: z.string().min(1).max(80),
+  })
+  .strict();
+
+export const savedLabScenarioSchema = z
+  .object({
+    id: idSchema,
+    name: z.string().trim().min(1).max(160),
+    digest: z.string().regex(/^[0-9a-f]{64}$/),
+  })
+  .strict();
+
+export const labScenarioDetailSchema = z
+  .object({
+    definition: labScenarioSchema,
+    digest: z.string().regex(/^[0-9a-f]{64}$/),
+    validationStatus: z.string().min(1).max(80),
+  })
+  .strict();
+
 export const labRunViewSchema = z
   .object({
     run: z

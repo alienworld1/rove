@@ -19,6 +19,11 @@ export const traceOutcomeSchema = z.enum([
   "informational",
 ]);
 
+export const presentationCursorSchema = z
+  .string()
+  .regex(/^[0-9]{1,18}$/)
+  .refine((value) => Number.isSafeInteger(Number(value)));
+
 export const laneTraceEventSchema = z
   .object({
     eventId: idSchema,

@@ -2,7 +2,9 @@ import {
   causalInspectorTraceSchema,
   corridorOperatingViewSchema,
   labRunViewSchema,
-  labScenarioSchema,
+  labScenarioDetailSchema,
+  labScenarioSummarySchema,
+  savedLabScenarioSchema,
   type CausalInspectorTrace,
   type CorridorOperatingView,
   type LabRunView,
@@ -41,33 +43,24 @@ async function readJson(path: string, body?: unknown) {
   return value;
 }
 
-export type ScenarioSummary = {
-  id: string;
-  name: string;
-  digest: string;
-  schemaVersion: number;
-  validationStatus: string;
-};
+export type ScenarioSummary = ReturnType<typeof labScenarioSummarySchema.parse>;
 
 export async function readScenarios() {
-  return (await readJson("/api/lab/scenarios")) as ScenarioSummary[];
+  return labScenarioSummarySchema
+    .array()
+    .parse(await readJson("/api/lab/scenarios"));
 }
 
 export async function readScenario(id: string) {
-  const value = (await readJson(
-    `/api/lab/scenarios/${encodeURIComponent(id)}`,
-  )) as { definition: unknown; digest: string };
-  return {
-    definition: labScenarioSchema.parse(value.definition),
-    digest: value.digest,
-  };
+  return labScenarioDetailSchema.parse(
+    await readJson(`/api/lab/scenarios/${encodeURIComponent(id)}`),
+  );
 }
 
 export async function saveScenario(definition: unknown) {
-  return (await readJson("/api/lab/scenarios", definition)) as {
-    digest: string;
-    id: string;
-  };
+  return savedLabScenarioSchema.parse(
+    await readJson("/api/lab/scenarios", definition),
+  );
 }
 
 export async function readRun(id: string): Promise<LabRunView> {

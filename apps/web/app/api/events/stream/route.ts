@@ -1,5 +1,5 @@
 import { readBaseConfig } from "@rove/config";
-import { idSchema } from "@rove/contracts";
+import { idSchema, presentationCursorSchema } from "@rove/contracts";
 import { hasDemoSession } from "../../demo-session";
 
 export const runtime = "nodejs";
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
   if (
     !idSchema.safeParse(corridor).success ||
     (run !== null && !idSchema.safeParse(run).success) ||
-    (cursor !== null && !/^[0-9]{1,18}$/.test(cursor))
+    (cursor !== null && !presentationCursorSchema.safeParse(cursor).success)
   )
     return Response.json(
       { message: "That selection is no longer available." },
