@@ -8,7 +8,8 @@
     "proof:evidence": "node --import tsx src/prove-evidence.ts",
     "probe:payment": "node --import tsx src/probe-payment.ts",
     "proof:payment": "node --import tsx src/prove-payment.ts",
-    "simulate:charging": "node --import tsx src/simulate-charging.ts",
+    "simulate:charging": "node --import tsx src/run-lab.ts",
+    "lab:run": "node --import tsx src/run-lab.ts",
     "start:charging": "node --import tsx src/start-charging.ts",
     "control:charging": "node --import tsx src/control-charging.ts",
     "typecheck": "tsc --noEmit",
@@ -16,16 +17,19 @@
     "build": "tsc --noEmit"
   },
   "dependencies": {
+    "@noble/curves": "^1.9.1",
     "@rove/config": "workspace:*",
     "@rove/contracts": "workspace:*",
     "@rove/domain": "workspace:*",
     "@rove/evidence": "workspace:*",
+    "@rove/lab": "workspace:*",
     "@rove/persistence": "workspace:*",
     "@rove/protection": "workspace:*",
     "@rove/tempo": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20",
+    "postgres": "^3.4.9",
     "tsx": "^4.20.0",
     "typescript": "^5.9.2"
   }

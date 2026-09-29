@@ -8,11 +8,16 @@ import { proofPrerequisites, readBaseConfig } from "@rove/config";
 import {
   createCorridorSchema,
   idSchema,
+  labSpeedSchema,
+  labStartRunSchema,
+  labTransportSchema,
   laneCommandSchema,
   readinessSchema,
   startLaneSchema,
 } from "@rove/contracts";
-import { ChargingStore, StoreError } from "@rove/persistence";
+import { ChargingStore, LabStore, StoreError } from "@rove/persistence";
+import { LabValidationError } from "@rove/lab";
+import { CorridorLab } from "./corridor-lab.js";
 import { processNextEffect } from "./outbox-worker.js";
 import { createChargingEffectAdapter } from "./charging-effects.js";
 
@@ -20,6 +25,12 @@ const config = readBaseConfig();
 const store = config.DATABASE_URL
   ? new ChargingStore(config.DATABASE_URL)
   : null;
+const labStore = config.DATABASE_URL ? new LabStore(config.DATABASE_URL) : null;
+const corridorLab = store && labStore ? new CorridorLab(store, labStore) : null;
+const seedLab = corridorLab?.seed().then(
+  () => true,
+  () => false,
+);
 const paymentEffects =
   store && proofPrerequisites().paymentConfigured
     ? createChargingEffectAdapter(store)
@@ -129,6 +140,77 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
   let laneId: string | undefined;
   let commandId: string | undefined;
   try {
+    if (path.startsWith("/api/lab/")) {
+      if (!corridorLab) throw new StoreError("VALIDATION");
+      if (seedLab && !(await seedLab)) throw new Error("LAB_SEED_UNAVAILABLE");
+      if (path === "/api/lab/scenarios" && request.method === "GET") {
+        send(response, 200, await corridorLab.listScenarios());
+        return;
+      }
+      if (path === "/api/lab/scenarios" && request.method === "POST") {
+        send(
+          response,
+          201,
+          await corridorLab.saveScenario(await readJson(request)),
+        );
+        return;
+      }
+      const scenarioMatch = /^\/api\/lab\/scenarios\/([^/]+)$/.exec(path);
+      if (scenarioMatch && request.method === "GET") {
+        const scenario = await corridorLab.getScenario(
+          idSchema.parse(scenarioMatch[1]),
+        );
+        send(response, 200, {
+          definition: scenario.definition,
+          digest: scenario.digest,
+          validationStatus: scenario.validationStatus,
+        });
+        return;
+      }
+      if (path === "/api/lab/runs" && request.method === "POST") {
+        const input = labStartRunSchema.parse(await readJson(request));
+        send(
+          response,
+          201,
+          await corridorLab.start(input.scenarioId, input.scenarioDigest),
+        );
+        return;
+      }
+      const runMatch = /^\/api\/lab\/runs\/([^/]+)$/.exec(path);
+      if (runMatch && request.method === "GET") {
+        send(
+          response,
+          200,
+          await corridorLab.view(idSchema.parse(runMatch[1])),
+        );
+        return;
+      }
+      const transportMatch =
+        /^\/api\/lab\/runs\/([^/]+)\/(play|pause|step|reset|speed|check)$/.exec(
+          path,
+        );
+      if (transportMatch && request.method === "POST") {
+        const input =
+          transportMatch[2] === "speed"
+            ? labSpeedSchema.parse(await readJson(request))
+            : labTransportSchema.parse(await readJson(request));
+        const runId = idSchema.parse(transportMatch[1]);
+        send(
+          response,
+          200,
+          transportMatch[2] === "check"
+            ? await corridorLab.check(runId, input.expectedVersion)
+            : await corridorLab.transport(
+                runId,
+                transportMatch[2] as
+                  "play" | "pause" | "step" | "reset" | "speed",
+                input.expectedVersion,
+                "speed" in input ? Number(input.speed) : undefined,
+              ),
+        );
+        return;
+      }
+    }
     if (path === "/api/corridors" && request.method === "POST") {
       const input = createCorridorSchema.parse(await readJson(request));
       ({ correlationId, commandId } = input);
@@ -209,6 +291,13 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
     }
     send(response, 404, { message: "We couldn't find that charging session." });
   } catch (error) {
+    if (error instanceof LabValidationError) {
+      send(response, 400, {
+        message: "Review the highlighted settings.",
+        issues: error.issues,
+      });
+      return;
+    }
     const code =
       error instanceof StoreError
         ? error.code
@@ -268,9 +357,11 @@ if (store) {
     working = true;
     void (async () => {
       const now = new Date().toISOString();
-      if (paymentEffects) await processNextEffect(store, paymentEffects, now);
+      if (paymentEffects)
+        await processNextEffect(store, paymentEffects, now, undefined, true);
       const active = await store.listActiveLanes();
       for (const lane of active) {
+        if (labStore && (await labStore.ownsLane(lane.id))) continue;
         if (!lane.serviceStarted) continue;
         const cadence = Math.max(
           1_000,
@@ -333,6 +424,7 @@ if (store) {
           );
         }
       }
+      if (corridorLab) await corridorLab.schedule();
     })()
       .catch(() => {
         process.stderr.write(

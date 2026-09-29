@@ -27,6 +27,7 @@ import {
   tempoChannels,
   tempoVouchers,
 } from "./schema.js";
+export { LabStore } from "./lab-store.js";
 
 export class StoreError extends Error {
   constructor(
@@ -1176,10 +1177,15 @@ export class ChargingStore {
     });
   }
 
-  async claimOutbox(now: string, leaseMs: number, laneId?: string) {
+  async claimOutbox(
+    now: string,
+    leaseMs: number,
+    laneId?: string,
+    excludeLab = false,
+  ) {
     return this.db.transaction(async (tx) => {
       const rows = await tx.execute(
-        sql`select id, status from outbox_jobs where attempt_count < 8 and (status in ('pending', 'submitted', 'failed') or (status = 'processing' and lease_until < ${now})) and next_attempt_at <= ${now} and (${laneId ?? null}::text is null or lane_id = ${laneId ?? null}) order by next_attempt_at for update skip locked limit 1`,
+        sql`select id, status from outbox_jobs where attempt_count < 8 and (status in ('pending', 'submitted', 'failed') or (status = 'processing' and lease_until < ${now})) and next_attempt_at <= ${now} and (${laneId ?? null}::text is null or lane_id = ${laneId ?? null}) and (${excludeLab} = false or not exists (select 1 from lab_runs, jsonb_each_text(lab_runs.lane_bindings) as binding where binding.value = outbox_jobs.lane_id)) order by next_attempt_at for update skip locked limit 1`,
       );
       const id = rows[0]?.id as string | undefined;
       if (!id) return null;

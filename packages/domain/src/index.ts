@@ -194,6 +194,7 @@ export type VerifiedObservation =
     }
   | { type: "ClockTick" }
   | { type: "SignerUnavailable" }
+  | { type: "SignerRestored" }
   | {
       type: "PaymentEffectFailed";
       reasonCode: "PAYMENT_TOPUP_FAILED" | "PAYMENT_SETTLEMENT_FAILED";

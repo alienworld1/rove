@@ -151,6 +151,9 @@ export function transitionLane(
     events.push(
       event("payment.signer_unavailable", "PAYMENT_SIGNER_UNAVAILABLE"),
     );
+  } else if (observation.type === "SignerRestored") {
+    lane.signerHealth = "ready";
+    events.push(event("payment.signer_restored"));
   } else if (observation.type === "PaymentEffectFailed") {
     paymentFailure = observation.reasonCode;
     events.push(event("payment.operation_failed", observation.reasonCode));

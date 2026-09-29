@@ -346,7 +346,12 @@ export const labScenarios = pgTable("lab_scenarios", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   definition: jsonb("definition").notNull(),
+  schemaVersion: integer("schema_version").notNull().default(1),
+  compilerVersion: integer("compiler_version").notNull().default(1),
+  digest: text("digest").notNull().default(""),
+  validationStatus: text("validation_status").notNull().default("valid"),
   createdAt: instant("created_at").notNull(),
+  updatedAt: instant("updated_at").notNull().defaultNow(),
 });
 export const labRuns = pgTable(
   "lab_runs",
@@ -357,12 +362,31 @@ export const labRuns = pgTable(
       .references(() => labScenarios.id),
     status: text("status").notNull(),
     cursor: integer("cursor").notNull(),
+    version: integer("version").notNull().default(0),
+    traceOffsetMs: bigint("trace_offset_ms", { mode: "number" })
+      .notNull()
+      .default(0),
+    speed: numeric("speed", { precision: 4, scale: 2 }).notNull().default("1"),
+    scenarioDigest: text("scenario_digest").notNull().default(""),
+    compiledSnapshot: jsonb("compiled_snapshot").notNull().default({}),
+    corridorId: text("corridor_id"),
+    laneBindings: jsonb("lane_bindings").notNull().default({}),
+    replayOfRunId: text("replay_of_run_id"),
+    awaiting: jsonb("awaiting"),
+    failureCode: text("failure_code"),
     startedAt: instant("started_at").notNull(),
     updatedAt: instant("updated_at").notNull(),
   },
   (table) => [
     index("lab_run_scenario_idx").on(table.scenarioId),
     check("lab_run_cursor_nonnegative", sql`${table.cursor} >= 0`),
+    check("lab_run_version_nonnegative", sql`${table.version} >= 0`),
+    check("lab_run_trace_nonnegative", sql`${table.traceOffsetMs} >= 0`),
+    check("lab_run_speed_valid", sql`${table.speed} in (0.25, 0.5, 1, 2, 4)`),
+    check(
+      "lab_run_status_valid",
+      sql`${table.status} in ('initializing', 'ready', 'running', 'paused', 'awaiting_chain', 'completed', 'failed')`,
+    ),
   ],
 );
 export const labRunEvents = pgTable(
@@ -375,9 +399,32 @@ export const labRunEvents = pgTable(
     sequence: integer("sequence").notNull(),
     traceTime: instant("trace_time").notNull(),
     payload: jsonb("payload").notNull(),
+    scenarioEventId: text("scenario_event_id").notNull().default(""),
+    eventType: text("event_type").notNull().default(""),
+    laneKey: text("lane_key"),
+    laneId: text("lane_id"),
+    traceOffsetMs: bigint("trace_offset_ms", { mode: "number" })
+      .notNull()
+      .default(0),
+    status: text("status").notNull().default("pending"),
+    commandId: text("command_id"),
+    expectedLaneVersion: integer("expected_lane_version"),
+    reasonCode: text("reason_code"),
+    leaseUntil: instant("lease_until"),
+    createdAt: instant("created_at").notNull().defaultNow(),
+    completedAt: instant("completed_at"),
   },
   (table) => [
     uniqueIndex("lab_run_sequence_unique").on(table.runId, table.sequence),
+    uniqueIndex("lab_run_event_identity_unique").on(
+      table.runId,
+      table.scenarioEventId,
+    ),
+    check("lab_event_trace_nonnegative", sql`${table.traceOffsetMs} >= 0`),
+    check(
+      "lab_event_status_valid",
+      sql`${table.status} in ('pending', 'dispatching', 'completed', 'rejected', 'blocked', 'awaiting_chain', 'failed')`,
+    ),
   ],
 );
 

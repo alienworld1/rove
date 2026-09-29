@@ -41,8 +41,10 @@ export async function processNextEffect(
   store: ChargingStore,
   adapter: EffectAdapter,
   now = new Date().toISOString(),
+  laneId?: string,
+  excludeLab = false,
 ) {
-  const job = await store.claimOutbox(now, 30_000);
+  const job = await store.claimOutbox(now, 30_000, laneId, excludeLab);
   if (!job) return false;
   const backoff = Math.min(300_000, 1_000 * 2 ** Math.min(job.attemptCount, 8));
   const nextAttemptAt = new Date(Date.parse(now) + backoff).toISOString();
