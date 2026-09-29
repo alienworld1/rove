@@ -1,6 +1,7 @@
 import { ReadinessPanel } from "./readiness-panel";
 import { IntegrationStatus } from "./integration-status";
 import { ChargingProjection } from "./charging-projection";
+import { CorridorLab } from "./corridor-lab";
 
 export default function Home() {
   return (
@@ -28,6 +29,7 @@ export default function Home() {
         <>
           <IntegrationStatus />
           <ChargingProjection />
+          <CorridorLab />
         </>
       ) : null}
     </main>

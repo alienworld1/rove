@@ -14,25 +14,25 @@ pnpm dev:engine
 
 Start `pnpm dev:web` in another terminal. Open `http://localhost:3000`, enter the local access key in **Integration status**, and select **Open status**. The charging area uses the same restricted session. Without it, reads return an access denial.
 
-## Create and inspect a local session
+## Run Corridor Lab locally
 
-For a controlled, labeled local example:
+Save the built-in Northstar Mobility ↔ Voltway scenario:
 
 ```sh
 pnpm --filter @rove/engine simulate:charging seed
 ```
 
-The command prints a Corridor ID, Lane ID, and stored `INITIALIZING` projection. Open `http://localhost:3000/?lane=<lane-id>` using the printed Lane ID. No funding or meter total is invented: confirmed funding is unknown and trusted value is the known initial cumulative zero. Refresh or restart the services to check persistence.
+The command prints the saved scenario ID and digest. Open `http://localhost:3000`, enter the local access key, and use **Corridor Lab** to validate, start, step, play, pause, and replay it. The three digital-twin Lanes have independent signed meter inputs and local deterministic payment channels. The payment label distinguishes these checks from Tempo confirmation.
 
 The engine also accepts controlled `POST /api/corridors`, `POST /api/lanes`, `GET /api/corridors/:id`, and `GET /api/lanes/:id` requests on port 4100. Send `Authorization: Bearer $DEMO_SESSION_TOKEN`; the engine must be in local development mode. Creation bodies use the schemas in `packages/contracts/src/charging.ts`. A Corridor needs explicit parties, asset, network, integer tariff/precision, ordered protection thresholds, reserve/settlement policy, and an allowed meter public key. A Lane needs that Corridor ID, unique external session ID, charger/meter IDs, positive max power in watts, and proof interval in milliseconds. Both creations require a unique `commandId` and a `correlationId`. An identical command retry returns the original outcome; a reused key with changed content is rejected.
 
-For a local signed-evidence and payment **simulation**:
+For the repeatable headless run:
 
 ```sh
-pnpm --filter @rove/engine simulate:charging
+pnpm --filter @rove/engine lab:run
 ```
 
-This command generates an ephemeral meter key, verifies cumulative signed OCMF readings, injects labeled local payment observations, rejects a corrupted signature, checks one unit before and at the exposure limit, then accepts a continuity-valid recovery reading. It prints the paused and recovered states. Its payment source is local simulation, not a Tempo receipt. Open `/?lane=<lane-id>` with its new ID. The real Tempo proof remains the separate payment command documented in [integration notes](integrations.md).
+This command uses the saved scenario contract, creates three new Corridor Lanes and channels, verifies signed OCMF readings through the normal intake, rejects the corrupted Lane C signature, checks 699 and 700 units at the exposure boundary, and verifies recovery. It prints the run and channel references. Repeating it creates a fresh run and retains prior history. Its payment source is local deterministic simulation, not a Tempo receipt. For live Tempo, configure approved meter identities and a funded test environment first; `pnpm --filter @rove/engine lab:run --live` reports that prerequisite until a live Lab profile is provisioned. The existing one-Lane Tempo proof is documented in [integration notes](integrations.md).
 
 ## Run one controlled live charging session
 
