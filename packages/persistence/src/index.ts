@@ -1185,7 +1185,7 @@ export class ChargingStore {
   ) {
     return this.db.transaction(async (tx) => {
       const rows = await tx.execute(
-        sql`select id, status from outbox_jobs where attempt_count < 8 and (status in ('pending', 'submitted', 'failed') or (status = 'processing' and lease_until < ${now})) and next_attempt_at <= ${now} and (${laneId ?? null}::text is null or lane_id = ${laneId ?? null}) and (${excludeLab} = false or not exists (select 1 from lab_runs, jsonb_each_text(lab_runs.lane_bindings) as binding where binding.value = outbox_jobs.lane_id)) order by next_attempt_at for update skip locked limit 1`,
+        sql`select outbox_jobs.id, outbox_jobs.status, domain_events.occurred_at as effect_created_at from outbox_jobs join domain_events on domain_events.id = outbox_jobs.event_id where (outbox_jobs.attempt_count < 8 or outbox_jobs.status in ('pending', 'submitted')) and (outbox_jobs.status in ('pending', 'submitted', 'failed') or (outbox_jobs.status = 'processing' and outbox_jobs.lease_until < ${now})) and outbox_jobs.next_attempt_at <= ${now} and (${laneId ?? null}::text is null or outbox_jobs.lane_id = ${laneId ?? null}) and (${excludeLab} = false or not exists (select 1 from lab_runs, jsonb_each_text(lab_runs.lane_bindings) as binding where binding.value = outbox_jobs.lane_id)) order by outbox_jobs.next_attempt_at for update of outbox_jobs skip locked limit 1`,
       );
       const id = rows[0]?.id as string | undefined;
       if (!id) return null;
@@ -1201,7 +1201,11 @@ export class ChargingStore {
         .where(eq(outboxJobs.id, id))
         .returning();
       return updated[0]
-        ? { ...updated[0], previousStatus: rows[0].status as string }
+        ? {
+            ...updated[0],
+            previousStatus: rows[0].status as string,
+            effectCreatedAt: rows[0].effect_created_at as string,
+          }
         : null;
     });
   }

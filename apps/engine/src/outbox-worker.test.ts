@@ -63,7 +63,7 @@ test("definitive absence permits the first stable-key submission", async () => {
   assert.equal(finalStatus, "submitted");
 });
 
-test("absence after an interrupted submission does not repeat a financial effect", async () => {
+test("uncertainty after an interrupted submission does not repeat a financial effect", async () => {
   let submitted = 0;
   let finalStatus = "";
   const store = {
@@ -81,7 +81,7 @@ test("absence after an interrupted submission does not repeat a financial effect
     },
   } as unknown as ChargingStore;
   const adapter: EffectAdapter = {
-    reconcile: async () => ({ status: "not_found" }),
+    reconcile: async () => ({ status: "unknown" }),
     submit: async () => {
       submitted++;
       return { status: "submitted" };
@@ -90,6 +90,31 @@ test("absence after an interrupted submission does not repeat a financial effect
   await processNextEffect(store, adapter, now);
   assert.equal(submitted, 0);
   assert.equal(finalStatus, "pending");
+});
+
+test("a missing channel with no pending payer transaction can reuse its stable open key", async () => {
+  let submitted = 0;
+  const store = {
+    claimOutbox: async () => ({
+      id: "job",
+      effectType: "payment.open_requested",
+      idempotencyKey: "stable-key",
+      externalReference: null,
+      attemptCount: 8,
+      leaseToken: "lease-5",
+      payload: {},
+    }),
+    finishOutbox: async () => undefined,
+  } as unknown as ChargingStore;
+  const adapter: EffectAdapter = {
+    reconcile: async () => ({ status: "not_found" }),
+    submit: async () => {
+      submitted++;
+      return { status: "submitted", externalReference: "reference" };
+    },
+  };
+  await processNextEffect(store, adapter, now);
+  assert.equal(submitted, 1);
 });
 
 test("an uncertain submitted effect remains submitted for reconciliation", async () => {

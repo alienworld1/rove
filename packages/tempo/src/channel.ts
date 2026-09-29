@@ -190,28 +190,67 @@ export function createTempoChannelAdapter(config: TempoChannelConfig) {
     }
   }
 
-  async function findOpen(key: string) {
+  async function firstBlockAt(instant?: string) {
+    if (!instant) return 0n;
+    const target = BigInt(Math.floor(Date.parse(instant) / 1000) - 60);
+    let lower = 0n;
+    let upper = await client.getBlockNumber();
+    while (lower < upper) {
+      const middle = (lower + upper) / 2n;
+      const block = await client.getBlock({ blockNumber: middle });
+      if (block.timestamp < target) lower = middle + 1n;
+      else upper = middle;
+    }
+    return lower > 0n ? lower - 1n : 0n;
+  }
+
+  async function findOpen(key: string, createdAt?: string) {
     const salt = keccak256(toHex(key));
-    const logs = await client.getLogs({
-      address: reserveAddress,
-      event: openedEvent,
-      args: { payer: payer.address, payee: payee.address },
-      fromBlock: 0n,
-    });
-    return (
-      logs.find((log) => log.args.salt?.toLowerCase() === salt.toLowerCase()) ??
-      null
-    );
+    const latest = await client.getBlockNumber();
+    for (
+      let from = await firstBlockAt(createdAt);
+      from <= latest;
+      from += 500n
+    ) {
+      const to = from + 499n < latest ? from + 499n : latest;
+      const logs = await client.getLogs({
+        address: reserveAddress,
+        event: openedEvent,
+        args: { payer: payer.address, payee: payee.address },
+        fromBlock: from,
+        toBlock: to,
+      });
+      const found = logs.find(
+        (log) => log.args.salt?.toLowerCase() === salt.toLowerCase(),
+      );
+      if (found) return found;
+    }
+    return null;
   }
 
   async function reconcileOpen(
     key: string,
     reference?: Hash,
+    createdAt?: string,
   ): Promise<ChannelLookup> {
     try {
       if (!reference) {
-        const found = await findOpen(key);
-        if (!found?.transactionHash) return { status: "not_found" };
+        const found = await findOpen(key, createdAt);
+        if (!found?.transactionHash) {
+          const [latestNonce, pendingNonce] = await Promise.all([
+            client.getTransactionCount({
+              address: payer.address,
+              blockTag: "latest",
+            }),
+            client.getTransactionCount({
+              address: payer.address,
+              blockTag: "pending",
+            }),
+          ]);
+          return pendingNonce === latestNonce
+            ? { status: "not_found" }
+            : { status: "unknown" };
+        }
         reference = found.transactionHash;
       }
       const result = await receipt(reference);

@@ -18,6 +18,7 @@ export type EffectAdapter = {
     externalReference?: string,
     payload?: unknown,
     attemptCount?: number,
+    effectCreatedAt?: string,
   ) => Promise<EffectLookup>;
   submit: (
     effectType: string,
@@ -55,10 +56,13 @@ export async function processNextEffect(
       job.externalReference ?? undefined,
       job.payload,
       job.attemptCount,
+      job.effectCreatedAt,
     );
     const receipt =
       reconciled.status === "not_found" &&
-      (job.attemptCount === 1 || job.effectType === "payment.voucher_requested")
+      (job.attemptCount === 1 ||
+        job.effectType === "payment.voucher_requested" ||
+        job.effectType === "payment.open_requested")
         ? await adapter.submit(job.effectType, job.idempotencyKey, job.payload)
         : reconciled.status === "unknown" || reconciled.status === "not_found"
           ? {

@@ -16,13 +16,12 @@ import type {
 const stableCommandId = (key: string) =>
   createHash("sha256").update(key).digest("hex");
 
-export function createChargingEffectAdapter(
-  store: ChargingStore,
-): EffectAdapter & { refresh: (laneId: string) => Promise<void> } {
-  const settings = readPaymentConfig();
+export function createConfiguredTempoChannelAdapter(
+  settings = readPaymentConfig(),
+) {
   if (settings.TEMPO_SESSION_BACKEND !== "precompile")
     throw new Error("PAYMENT_ENVIRONMENT_UNSUPPORTED");
-  const tempo = createTempoChannelAdapter({
+  return createTempoChannelAdapter({
     rpcUrl: settings.TEMPO_RPC_URL,
     chainId: settings.TEMPO_CHAIN_ID,
     assetAddress: settings.TEMPO_ASSET_ADDRESS.toLowerCase() as `0x${string}`,
@@ -36,6 +35,13 @@ export function createChargingEffectAdapter(
     voucherSignerPrivateKey:
       settings.TEMPO_VOUCHER_SIGNER_PRIVATE_KEY as `0x${string}`,
   });
+}
+
+export function createChargingEffectAdapter(
+  store: ChargingStore,
+): EffectAdapter & { refresh: (laneId: string) => Promise<void> } {
+  const settings = readPaymentConfig();
+  const tempo = createConfiguredTempoChannelAdapter(settings);
 
   async function context(payload: unknown) {
     const request = paymentEffectPayloadSchema.parse(payload);
@@ -55,6 +61,7 @@ export function createChargingEffectAdapter(
     reference?: string,
     payload?: unknown,
     attemptCount?: number,
+    effectCreatedAt?: string,
   ): Promise<EffectLookup> {
     if (type === "pause.requested") return { status: "completed" };
     const { request, current } = await context(payload);
@@ -71,6 +78,7 @@ export function createChargingEffectAdapter(
       const result = await tempo.reconcileOpen(
         key,
         reference as `0x${string}` | undefined,
+        effectCreatedAt,
       );
       if (
         result.status === "completed" &&
