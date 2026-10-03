@@ -40,7 +40,7 @@ export function LaneFocusDetails({
     ],
   ];
   return (
-    <dl className="absolute left-3 right-3 top-20 z-10 grid grid-cols-2 gap-x-4 gap-y-2 border border-line bg-pure/95 p-3 text-[11px] text-ink-secondary sm:grid-cols-4">
+    <dl className="absolute left-3 right-3 top-14 z-10 grid grid-cols-4 gap-x-4 gap-y-2 border border-line bg-pure p-3 text-[11px] text-ink-secondary">
       {details.map(([label, value]) => (
         <div key={label} className="min-w-0">
           <dt>{label}</dt>

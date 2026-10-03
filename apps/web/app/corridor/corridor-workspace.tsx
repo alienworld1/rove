@@ -21,6 +21,7 @@ import { CorridorViewport } from "./corridor-viewport";
 import { ScenarioLaunchPanel } from "./scenario-launch-panel";
 import { SourceDisclosure } from "./source-disclosure";
 import { useCorridorStream } from "./use-corridor-stream";
+import { reconcileCorridorView } from "./reconcile-view";
 import { useCorridorSelection } from "./corridor-selection";
 import { LabPlaybackControls } from "../lab-playback-controls";
 import { LabScenarioBuilder } from "../lab-scenario-builder";
@@ -78,10 +79,11 @@ export function CorridorWorkspace({
   const corridor = useQuery({
     queryKey: ["corridor", corridorId],
     queryFn: ({ signal }) => readCorridor(corridorId!, signal),
+    structuralSharing: reconcileCorridorView,
     enabled: corridorId !== null,
   });
   const realtime = useCorridorStream(
-    corridorId,
+    corridor.data ? corridorId : null,
     runId,
     corridor.data?.projectionVersion ?? 0,
   );
@@ -298,7 +300,7 @@ export function CorridorWorkspace({
       ) : corridor.data ? (
         <>
           <SourceDisclosure environment={corridor.data.environment} />
-          {stale || corridor.error ? (
+          {stale || corridor.error || run.error ? (
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-l-4 border-risk bg-risk-faint px-4 py-3 text-sm text-risk-deep">
               <p>
                 Live updates are unavailable. Values last checked{" "}

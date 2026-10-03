@@ -1,5 +1,8 @@
-import type { CausalInspectorTrace } from "@rove/contracts";
-import { formatOperationalValue } from "./format-operational-value";
+import { eventLabelFor, type CausalInspectorTrace } from "@rove/contracts";
+import {
+  formatEnergy,
+  formatOperationalValue,
+} from "./format-operational-value";
 
 export function EvidenceInspector({
   trace,
@@ -15,9 +18,11 @@ export function EvidenceInspector({
         Evidence Inspector
       </p>
       <h3 className="mt-2 text-lg font-semibold text-ink">
-        {evidence?.accepted
-          ? "Meter reading accepted"
-          : "Meter reading rejected"}
+        {!evidence
+          ? eventLabelFor(trace.eventType)
+          : evidence.accepted
+            ? "Meter reading accepted"
+            : "Meter reading rejected"}
       </h3>
       {trace.reasonText ? (
         <p className="mt-1 text-sm text-ink-secondary">{trace.reasonText}</p>
@@ -54,6 +59,24 @@ export function EvidenceInspector({
               {evidence.sequence ?? "Unavailable"}
             </dd>
           </div>
+          <div>
+            <dt className="text-ink-tertiary">Charging session</dt>
+            <dd className="mt-0.5 break-all font-mono text-ink">
+              {evidence.sessionId ?? "Unavailable"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-ink-tertiary">Cumulative energy</dt>
+            <dd className="mt-0.5 font-mono text-ink">
+              {evidence.cumulativeWh === null
+                ? "Unavailable"
+                : formatEnergy(evidence.cumulativeWh)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-ink-tertiary">Verifier</dt>
+            <dd className="mt-0.5 text-ink">{evidence.verifierVersion}</dd>
+          </div>
           {Object.entries(evidence.checks).map(([check, status]) => (
             <div key={check}>
               <dt className="capitalize text-ink-tertiary">{check}</dt>
@@ -74,6 +97,17 @@ export function EvidenceInspector({
         <p className="text-xs font-semibold text-ink-secondary">
           Value consequence
         </p>
+        {trace.calculation ? (
+          <p className="mt-2 text-xs text-ink-tertiary">
+            Tariff{" "}
+            {formatOperationalValue(
+              trace.calculation.tariffPerKwh,
+              trace.calculation.tariffDecimals,
+            )}{" "}
+            / kWh · exact values recorded in {trace.calculation.assetDecimals}
+            -decimal units
+          </p>
+        ) : null}
         <div className="mt-2 grid grid-cols-3 gap-3 text-xs tabular-nums">
           <p className="text-ink-tertiary">
             Trusted

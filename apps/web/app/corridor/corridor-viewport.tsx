@@ -10,7 +10,7 @@ import {
   useFloating,
 } from "@floating-ui/react";
 import type { CorridorOperatingView } from "@rove/contracts";
-import { readInspector } from "./api";
+import { readCorridor, readInspector } from "./api";
 import { AttachedInspector } from "./attached-inspector";
 import { CorridorAggregateBand } from "./corridor-aggregate-band";
 import { CorridorLane } from "./corridor-lane";
@@ -37,16 +37,60 @@ function replaceSelectionUrl(
   window.history.replaceState(null, "", url);
 }
 
-export function CorridorViewport({ view }: { view: CorridorOperatingView }) {
+export function CorridorViewport({
+  view: liveView,
+}: {
+  view: CorridorOperatingView;
+}) {
   const selection = useCorridorSelection();
+  const historical = useQuery({
+    queryKey: [
+      "corridor-trace",
+      liveView.corridor.id,
+      selection.traceOffsetMs,
+      liveView.projectionVersion,
+    ],
+    queryFn: ({ signal }) =>
+      readCorridor(liveView.corridor.id, signal, selection.traceOffsetMs),
+    enabled: selection.traceOffsetMs !== null,
+    retry: 1,
+  });
+  const view =
+    selection.traceOffsetMs === null ? liveView : (historical.data ?? liveView);
   const [selectionMessage, setSelectionMessage] = useState("");
   const previousStates = useRef(new Map<string, string>());
+  const eventTrigger = useRef<Element | null>(null);
   const [assertiveAnnouncement, setAssertiveAnnouncement] = useState("");
-  const { refs, floatingStyles } = useFloating({
+  const operatingSurface = useRef<HTMLDivElement>(null);
+  const { refs, floatingStyles, middlewareData } = useFloating({
     open: selection.focusedEventId !== null,
     placement: "right-start",
     strategy: "fixed",
-    middleware: [offset(12), flip(), shift({ padding: 16 })],
+    middleware: [
+      offset(12),
+      flip(),
+      shift({ padding: 16 }),
+      {
+        name: "avoidOperatingSurface",
+        fn: ({ x, y, rects }) => {
+          const core = operatingSurface.current?.getBoundingClientRect();
+          if (!core) return { data: { dock: true } };
+          const top =
+            operatingSurface.current
+              ?.closest("section")
+              ?.getBoundingClientRect().top ?? core.top;
+          return {
+            data: {
+              dock:
+                x < core.right &&
+                x + rects.floating.width > core.left &&
+                y < core.bottom &&
+                y + rects.floating.height > top,
+            },
+          };
+        },
+      },
+    ],
     whileElementsMounted: autoUpdate,
   });
   const inspector = useQuery({
@@ -63,7 +107,7 @@ export function CorridorViewport({ view }: { view: CorridorOperatingView }) {
   });
   useEffect(() => {
     const valid = validateSelection(
-      view,
+      liveView,
       selection.focusedLaneId,
       selection.focusedEventId,
       selection.traceOffsetMs,
@@ -79,9 +123,9 @@ export function CorridorViewport({ view }: { view: CorridorOperatingView }) {
     queueMicrotask(() =>
       setSelectionMessage("That selection is no longer available."),
     );
-  }, [selection, view]);
+  }, [selection, liveView, view.corridor.id]);
   useEffect(() => {
-    for (const lane of view.lanes) {
+    for (const lane of liveView.lanes) {
       const previous = previousStates.current.get(lane.projection.id);
       if (
         previous !== "PAUSE_REQUIRED" &&
@@ -103,10 +147,15 @@ export function CorridorViewport({ view }: { view: CorridorOperatingView }) {
         setSelectionMessage("Protection restored");
       previousStates.current.set(lane.projection.id, lane.projection.state);
     }
-  }, [view.lanes]);
+  }, [liveView.lanes]);
   useEffect(() => {
     const close = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (
+        event.key !== "Escape" ||
+        event.defaultPrevented ||
+        document.querySelector('[role="dialog"]')
+      )
+        return;
       if (selection.focusedEventId) closeInspector();
       else if (selection.focusedLaneId) selectLane(null);
     };
@@ -120,6 +169,7 @@ export function CorridorViewport({ view }: { view: CorridorOperatingView }) {
     replaceSelectionUrl(view.corridor.id, next, null, null);
   }
   function selectEvent(laneId: string, eventId: string) {
+    eventTrigger.current = document.activeElement;
     selection.setEvent(laneId, eventId);
     replaceSelectionUrl(
       view.corridor.id,
@@ -138,6 +188,14 @@ export function CorridorViewport({ view }: { view: CorridorOperatingView }) {
       selection.traceOffsetMs,
     );
     window.requestAnimationFrame(() => {
+      const trigger = eventTrigger.current;
+      if (
+        trigger?.isConnected &&
+        (trigger instanceof HTMLElement || trigger instanceof SVGElement)
+      ) {
+        trigger.focus();
+        return;
+      }
       if (eventId)
         document
           .querySelector<HTMLElement>(
@@ -185,6 +243,26 @@ export function CorridorViewport({ view }: { view: CorridorOperatingView }) {
           )
           .map((lane) => lane.label)}
       />
+      {selection.traceOffsetMs !== null ? (
+        <p
+          role="status"
+          className="border-b border-line py-3 text-sm text-ink-secondary"
+        >
+          {historical.isPending
+            ? "Loading the recorded snapshot. Current values remain visible."
+            : historical.isError
+              ? "That recorded snapshot couldn't be loaded. Current values remain visible."
+              : "Recorded snapshot · Lane values and totals reflect committed history. Playback stays at its current position."}
+          {historical.isError ? (
+            <button
+              className="ml-2 underline"
+              onClick={() => void historical.refetch()}
+            >
+              Try again
+            </button>
+          ) : null}
+        </p>
+      ) : null}
       {view.activeRun ? (
         <TraceScrubber
           run={view.activeRun}
@@ -192,7 +270,9 @@ export function CorridorViewport({ view }: { view: CorridorOperatingView }) {
             ...new Set(
               view.lanes.flatMap((lane) =>
                 lane.trace.flatMap((event) =>
-                  event.traceOffsetMs === null ? [] : [event.traceOffsetMs],
+                  event.traceOffsetMs === null || !event.snapshot
+                    ? []
+                    : [event.traceOffsetMs],
                 ),
               ),
             ),
@@ -202,62 +282,73 @@ export function CorridorViewport({ view }: { view: CorridorOperatingView }) {
         />
       ) : null}
       <div
-        className="mt-5 overflow-x-auto border-y border-line-strong bg-raised"
-        role="region"
-        aria-label="Charging Corridor. Scroll horizontally for full detail on smaller screens."
-        tabIndex={0}
+        className={
+          selection.focusedEventId
+            ? "mt-5 min-[1800px]:grid min-[1800px]:grid-cols-[minmax(1040px,1fr)_440px] min-[1800px]:items-start min-[1800px]:gap-5"
+            : "mt-5"
+        }
       >
-        <div className="flex min-w-[1040px] items-stretch">
-          <CounterpartyAnchor
-            name={view.corridor.payerEmsp}
-            role="eMSP"
-            align="origin"
-          />
-          <div className="min-w-0 flex-1 px-4 py-2">
-            {view.lanes.length === 0 ? (
-              <p className="py-16 text-center text-sm text-ink-secondary">
-                No active charging Lanes.
-              </p>
-            ) : (
-              view.lanes.map((lane) => (
-                <CorridorLane
-                  key={lane.projection.id}
-                  lane={lane}
-                  assetDecimals={view.corridor.tariff.assetDecimals}
-                  tariff={view.corridor.tariff}
-                  focused={selection.focusedLaneId === lane.projection.id}
-                  selectedEventId={selection.focusedEventId}
-                  selectedTraceOffsetMs={selection.traceOffsetMs}
-                  onSelectLane={() => selectLane(lane.projection.id)}
-                  onSelectEvent={(eventId) =>
-                    selectEvent(lane.projection.id, eventId)
-                  }
-                  setSelectedEventAnchor={refs.setReference}
-                />
-              ))
-            )}
+        <div
+          ref={operatingSurface}
+          className="overflow-x-auto border-y border-line-strong bg-raised"
+          role="region"
+          aria-label="Charging Corridor. Scroll horizontally for full detail on smaller screens."
+          tabIndex={0}
+        >
+          <div className="flex min-w-[1040px] items-stretch">
+            <CounterpartyAnchor
+              name={view.corridor.payerEmsp}
+              role="eMSP"
+              align="origin"
+            />
+            <div className="min-w-0 flex-1 px-4 py-2">
+              {view.lanes.length === 0 ? (
+                <p className="py-16 text-center text-sm text-ink-secondary">
+                  No active charging Lanes.
+                </p>
+              ) : (
+                view.lanes.map((lane) => (
+                  <CorridorLane
+                    key={lane.projection.id}
+                    lane={lane}
+                    assetDecimals={view.corridor.tariff.assetDecimals}
+                    tariff={view.corridor.tariff}
+                    focused={selection.focusedLaneId === lane.projection.id}
+                    selectedEventId={selection.focusedEventId}
+                    selectedTraceOffsetMs={selection.traceOffsetMs}
+                    onSelectLane={() => selectLane(lane.projection.id)}
+                    onSelectEvent={(eventId) =>
+                      selectEvent(lane.projection.id, eventId)
+                    }
+                    setSelectedEventAnchor={refs.setReference}
+                    causalTrace={inspector.data ?? null}
+                  />
+                ))
+              )}
+            </div>
+            <CounterpartyAnchor
+              name={view.corridor.payeeCpo}
+              role="CPO"
+              align="destination"
+            />
           </div>
-          <CounterpartyAnchor
-            name={view.corridor.payeeCpo}
-            role="CPO"
-            align="destination"
-          />
         </div>
+        {selection.focusedEventId ? (
+          <AttachedInspector
+            trace={inspector.data ?? null}
+            loading={inspector.isLoading}
+            error={
+              inspector.error instanceof Error ? inspector.error.message : null
+            }
+            assetDecimals={view.corridor.tariff.assetDecimals}
+            floatingRef={refs.setFloating}
+            floatingStyle={floatingStyles}
+            docked={middlewareData.avoidOperatingSurface?.dock !== false}
+            onClose={closeInspector}
+            onRetry={() => void inspector.refetch()}
+          />
+        ) : null}
       </div>
-      {selection.focusedEventId ? (
-        <AttachedInspector
-          trace={inspector.data ?? null}
-          loading={inspector.isLoading}
-          error={
-            inspector.error instanceof Error ? inspector.error.message : null
-          }
-          assetDecimals={view.corridor.tariff.assetDecimals}
-          floatingRef={refs.setFloating}
-          floatingStyle={floatingStyles}
-          onClose={closeInspector}
-          onRetry={() => void inspector.refetch()}
-        />
-      ) : null}
       <div className="sr-only" role="status" aria-live="polite">
         {selectionMessage}
       </div>

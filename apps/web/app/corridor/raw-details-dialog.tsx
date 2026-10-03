@@ -8,10 +8,12 @@ export function RawDetailsDialog({
   trace,
   open,
   onOpenChange,
+  onRestoreFocus,
 }: {
   trace: CausalInspectorTrace;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onRestoreFocus: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const reference =
@@ -28,7 +30,13 @@ export function RawDetailsDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-ink/20" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[80vh] w-[min(760px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-md border border-line-strong bg-pure p-6 shadow-[var(--shadow-inspector)] focus:outline-none">
+        <Dialog.Content
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            onRestoreFocus();
+          }}
+          className="fixed left-1/2 top-1/2 z-50 max-h-[80vh] w-[min(760px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-md border border-line-strong bg-pure p-6 shadow-[var(--shadow-inspector)] focus:outline-none"
+        >
           <Dialog.Title className="text-xl font-semibold text-ink">
             Raw event details
           </Dialog.Title>
@@ -46,6 +54,24 @@ export function RawDetailsDialog({
             <div>
               <dt className="text-ink-tertiary">Reference</dt>
               <dd className="mt-1 break-all font-mono text-ink">{reference}</dd>
+            </div>
+            <div>
+              <dt className="text-ink-tertiary">
+                Recorded calculation and references
+              </dt>
+              <dd className="mt-1 max-h-72 overflow-auto whitespace-pre-wrap break-all bg-sunken p-3 font-mono text-ink">
+                {JSON.stringify(
+                  {
+                    calculation: trace.calculation,
+                    voucher: trace.voucher,
+                    payment: trace.payment,
+                    result: trace.result,
+                    causalSteps: trace.causalSteps,
+                  },
+                  null,
+                  2,
+                )}
+              </dd>
             </div>
             {trace.evidence?.raw ? (
               <div>

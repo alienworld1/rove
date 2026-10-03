@@ -18,8 +18,10 @@ export function TraceScrubber({
   const track = useRef<HTMLDivElement>(null);
   const selected = selectedOffsetMs ?? run.traceOffsetMs;
   const points = [
-    0,
-    ...committedOffsets.filter((offset) => offset <= run.traceOffsetMs),
+    ...new Set([
+      0,
+      ...committedOffsets.filter((offset) => offset <= run.traceOffsetMs),
+    ]),
   ];
   const nearest = (offset: number) =>
     points.reduce(
@@ -49,7 +51,7 @@ export function TraceScrubber({
         <p className="mr-auto text-xs text-ink-secondary">
           Inspect recorded trace ·{" "}
           <span className="font-mono tabular-nums text-ink">
-            {new Date(selected).toISOString().slice(14, 19)}
+            {new Date(selected).toISOString().slice(14, 23)}
           </span>
         </p>
         <button
@@ -58,7 +60,10 @@ export function TraceScrubber({
             run.faultTraceOffsetMs !== null &&
             onChange(nearest(run.faultTraceOffsetMs))
           }
-          disabled={run.faultTraceOffsetMs === null}
+          disabled={
+            run.faultTraceOffsetMs === null ||
+            !points.includes(run.faultTraceOffsetMs)
+          }
           className="rounded-sm border border-line-strong px-3 py-1.5 text-xs text-ink focus-visible:outline-2 focus-visible:outline-info disabled:text-ink-disabled"
         >
           Jump to fault
@@ -69,7 +74,10 @@ export function TraceScrubber({
             run.recoveryTraceOffsetMs !== null &&
             onChange(nearest(run.recoveryTraceOffsetMs))
           }
-          disabled={run.recoveryTraceOffsetMs === null}
+          disabled={
+            run.recoveryTraceOffsetMs === null ||
+            !points.includes(run.recoveryTraceOffsetMs)
+          }
           className="rounded-sm border border-line-strong px-3 py-1.5 text-xs text-ink focus-visible:outline-2 focus-visible:outline-info disabled:text-ink-disabled"
         >
           Jump to recovery
@@ -102,15 +110,17 @@ export function TraceScrubber({
         aria-label="Inspect recorded trace point"
         type="range"
         min={0}
-        max={Math.max(1, run.traceEndMs)}
+        max={Math.max(1, points.length - 1)}
         step={1}
-        value={selected}
-        onChange={(event) => onChange(nearest(Number(event.target.value)))}
-        className="sr-only"
+        value={points.indexOf(nearest(selected))}
+        aria-valuetext={`${selected / 1000} seconds into the recorded trace`}
+        onChange={(event) => onChange(points[Number(event.target.value)] ?? 0)}
+        className="sr-only focus:not-sr-only focus:mt-2 focus:w-full focus:accent-info"
       />
       <p className="text-[11px] text-ink-tertiary">
         Inspection changes only the recorded view. It does not move the run or
-        payment confirmation.
+        payment confirmation. Fault and recovery become available after they are
+        recorded.
       </p>
     </section>
   );

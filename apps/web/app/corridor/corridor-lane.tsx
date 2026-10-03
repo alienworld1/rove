@@ -1,13 +1,13 @@
 "use client";
 
 import { animated, useSpring } from "@react-spring/web";
+import { useState } from "react";
 import {
-  eventLabelFor,
   normalizeLaneGeometry,
   normalizeTracePosition,
-  reasonTextFor,
   type CorridorOperatingView,
   type LaneTraceEvent,
+  type CausalInspectorTrace,
 } from "@rove/contracts";
 import { motionPresets } from "./motion-presets";
 import { useReducedMotion } from "./use-reduced-motion";
@@ -16,6 +16,10 @@ import {
   formatOperationalValue,
 } from "./format-operational-value";
 import { LaneFocusDetails } from "./lane-focus-details";
+import { CommittedEventMark } from "./committed-event-mark";
+import { LaneEventPicker } from "./lane-event-picker";
+import { CausalTraceHighlight } from "./causal-trace-highlight";
+import { useLaneGeometryMotion } from "./use-lane-geometry-motion";
 
 const stateCopy = {
   INITIALIZING: "Preparing protection",
@@ -35,7 +39,7 @@ function markerX(event: LaneTraceEvent, traceEndMs: number) {
     0,
     Math.max(traceEndMs, 1),
   );
-  if (event.outcome === "rejected") return Math.min(45, 18 + trace * 25);
+  if (event.outcome === "rejected") return 45;
   if (event.eventType.startsWith("payment.")) return 76 + trace * 12;
   return 50 + trace * 22;
 }
@@ -50,6 +54,7 @@ export function CorridorLane({
   onSelectLane,
   onSelectEvent,
   setSelectedEventAnchor,
+  causalTrace,
 }: {
   lane: CorridorOperatingView["lanes"][number];
   assetDecimals: number;
@@ -60,20 +65,39 @@ export function CorridorLane({
   onSelectLane: () => void;
   onSelectEvent: (eventId: string) => void;
   setSelectedEventAnchor: (element: SVGElement | null) => void;
+  causalTrace: CausalInspectorTrace | null;
 }) {
   const reducedMotion = useReducedMotion();
+  const [initialEventIds] = useState(
+    () => new Set(lane.trace.map((event) => event.eventId)),
+  );
   const projection = lane.projection;
   const anomalous = !["PROTECTED", "RECONCILED", "CLOSED"].includes(
     projection.state,
   );
-  const geometry = normalizeLaneGeometry({
+  const normalizedGeometry = normalizeLaneGeometry({
     scale: lane.scale,
     protectedValue: projection.protectedValue,
     worstCaseDeliveredValue: projection.worstCaseDeliveredValue,
     maxUnprotectedExposure: projection.maxUnprotectedExposure,
     unprotectedExposureBound: projection.unprotectedExposureBound,
     pauseRequired: projection.state === "PAUSE_REQUIRED",
+    settledValue: projection.settledValue,
+    fundedCapacityValue: lane.fundedCapacityValue,
   });
+  const geometry = {
+    ...normalizedGeometry,
+    frontier: 0.04 + normalizedGeometry.frontier * 0.92,
+    physical: 0.04 + normalizedGeometry.physical * 0.92,
+    riskStart: 0.04 + normalizedGeometry.riskStart * 0.92,
+    riskWidth: normalizedGeometry.riskWidth * 0.92,
+    protectionLimit: 0.04 + normalizedGeometry.protectionLimit * 0.92,
+    settled: 0.04 + normalizedGeometry.settled * 0.92,
+    fundedCapacity:
+      normalizedGeometry.fundedCapacity === null
+        ? null
+        : 0.04 + normalizedGeometry.fundedCapacity * 0.92,
+  };
   const height = focused ? 340 : anomalous ? 88 : 56;
   const preset =
     projection.state === "PAUSE_REQUIRED"
@@ -81,20 +105,22 @@ export function CorridorLane({
       : projection.state === "RECOVERING"
         ? motionPresets.recover
         : motionPresets.structural;
-  const spring = useSpring({
+  const structure = useSpring({
     height,
-    frontier: geometry.frontier * 100,
-    physical: geometry.physical * 100,
-    riskStart: geometry.riskStart * 100,
-    riskWidth: geometry.riskWidth * 100,
     config: preset,
     immediate: reducedMotion,
     delay: 0,
   });
+  const spring = useLaneGeometryMotion(
+    lane,
+    geometry,
+    reducedMotion,
+    selectedTraceOffsetMs !== null,
+  );
   const summaryId = `lane-summary-${projection.id}`;
   return (
     <animated.section
-      style={{ height: spring.height }}
+      style={{ height: structure.height }}
       data-state={projection.state.toLowerCase()}
       data-focus={focused}
       className={`relative overflow-hidden border-y bg-raised transition-colors focus-within:bg-pure ${focused ? "my-6 border-line-authoritative" : anomalous ? "my-3 border-risk" : "my-2 border-line"}`}
@@ -117,7 +143,7 @@ export function CorridorLane({
           {lane.powerClass}
         </span>
         <span
-          className={`mt-1 block text-xs font-semibold ${projection.state === "PROTECTED" ? "text-protected" : projection.state === "PAUSE_REQUIRED" ? "text-critical" : "text-risk"}`}
+          className={`block text-[10px] leading-3 font-semibold ${projection.state === "PROTECTED" ? "text-protected" : projection.state === "PAUSE_REQUIRED" ? "text-critical" : "text-risk"}`}
         >
           {stateCopy[projection.state]}
         </span>
@@ -126,8 +152,8 @@ export function CorridorLane({
         <svg
           viewBox="0 0 100 100"
           preserveAspectRatio="none"
-          className="h-full w-full"
-          role="img"
+          className={`absolute w-full overflow-visible ${focused ? "top-44 h-24" : anomalous ? "top-3 h-10" : "top-0 h-7"}`}
+          role="group"
           aria-label={`${lane.label} protection geometry`}
         >
           <g data-layer="structural">
@@ -170,6 +196,24 @@ export function CorridorLane({
           <g data-layer="path">
             <animated.line
               x1="4"
+              y1="70"
+              x2={spring.frontier}
+              y2="70"
+              stroke="var(--color-protected)"
+              strokeWidth="2"
+              vectorEffect="non-scaling-stroke"
+            />
+            <line
+              x1="4"
+              y1="70"
+              x2={geometry.settled * 100}
+              y2="70"
+              stroke="var(--color-info)"
+              strokeWidth="3"
+              vectorEffect="non-scaling-stroke"
+            />
+            <animated.line
+              x1="4"
               y1="50"
               x2={spring.physical}
               y2="50"
@@ -188,6 +232,18 @@ export function CorridorLane({
             />
           </g>
           <g data-layer="boundary">
+            {geometry.fundedCapacity !== null ? (
+              <line
+                x1={geometry.fundedCapacity * 100}
+                y1="60"
+                x2={geometry.fundedCapacity * 100}
+                y2="82"
+                stroke="var(--color-info)"
+                strokeWidth="2"
+                strokeDasharray="4 2"
+                vectorEffect="non-scaling-stroke"
+              />
+            ) : null}
             <animated.line
               x1={spring.frontier}
               y1="24"
@@ -197,10 +253,10 @@ export function CorridorLane({
               strokeWidth="3"
               vectorEffect="non-scaling-stroke"
             />
-            <line
-              x1={geometry.protectionLimit * 100}
+            <animated.line
+              x1={spring.protectionLimit}
               y1="18"
-              x2={geometry.protectionLimit * 100}
+              x2={spring.protectionLimit}
               y2="82"
               stroke={
                 projection.state === "PAUSE_REQUIRED"
@@ -211,99 +267,81 @@ export function CorridorLane({
               vectorEffect="non-scaling-stroke"
             />
           </g>
+          {causalTrace && causalTrace.laneId === lane.projection.id ? (
+            <CausalTraceHighlight trace={causalTrace} lane={lane} />
+          ) : null}
           <g data-layer="event">
-            {lane.trace.map((event) => {
-              const x = markerX(event, lane.scale.traceEndMs);
-              const selected = event.eventId === selectedEventId;
-              const beyondTrace =
-                selectedTraceOffsetMs !== null &&
-                event.traceOffsetMs !== null &&
-                event.traceOffsetMs > selectedTraceOffsetMs;
-              return (
-                <g
-                  key={event.eventId}
-                  ref={selected ? setSelectedEventAnchor : undefined}
-                  role="button"
-                  tabIndex={0}
-                  data-event-id={event.eventId}
-                  aria-label={`${eventLabelFor(event.eventType)}. ${event.reasonCode ? reasonTextFor(event.reasonCode) : "Open event details."}`}
-                  onClick={(click) => {
-                    click.stopPropagation();
-                    onSelectEvent(event.eventId);
-                  }}
-                  onKeyDown={(key) => {
-                    if (key.key === "Enter" || key.key === " ") {
-                      key.preventDefault();
-                      onSelectEvent(event.eventId);
+            {lane.trace
+              .filter(
+                (event) =>
+                  [
+                    "meter.evidence_accepted",
+                    "meter.evidence_rejected",
+                    "payment.top_up_completed",
+                    "payment.settlement_completed",
+                    "lane.pause_required",
+                    "lane.protection_restored",
+                  ].includes(event.eventType) ||
+                  event.eventId === selectedEventId,
+              )
+              .map((event) => {
+                const x = markerX(event, lane.scale.traceEndMs);
+                const selected = event.eventId === selectedEventId;
+                const beyondTrace =
+                  selectedTraceOffsetMs !== null &&
+                  event.traceOffsetMs !== null &&
+                  event.traceOffsetMs > selectedTraceOffsetMs;
+                return (
+                  <CommittedEventMark
+                    key={event.eventId}
+                    event={event}
+                    x={x}
+                    selected={selected}
+                    focused={focused}
+                    anomalous={anomalous}
+                    muted={beyondTrace}
+                    animate={
+                      selectedTraceOffsetMs === null &&
+                      !initialEventIds.has(event.eventId)
                     }
-                  }}
-                  opacity={beyondTrace ? 0.28 : 1}
-                  className="cursor-pointer focus-visible:outline-2 focus-visible:outline-info"
-                >
-                  <rect
-                    x={x - 3}
-                    y={focused ? 23 : anomalous ? 5 : -10}
-                    width="6"
-                    height={focused ? 14 : anomalous ? 50 : 80}
-                    fill="transparent"
+                    reducedMotion={reducedMotion}
+                    onSelect={() => onSelectEvent(event.eventId)}
+                    setAnchor={setSelectedEventAnchor}
                   />
-                  <circle
-                    cx={x}
-                    cy="30"
-                    r={selected ? "2.8" : "2"}
-                    fill={
-                      event.outcome === "rejected" || event.outcome === "failed"
-                        ? "var(--color-critical)"
-                        : event.eventType.startsWith("payment.")
-                          ? "var(--color-info)"
-                          : "var(--color-protected)"
-                    }
-                    stroke={
-                      selected
-                        ? "var(--color-line-authoritative)"
-                        : "var(--color-pure)"
-                    }
-                    strokeWidth={selected ? "1.5" : "1"}
-                    vectorEffect="non-scaling-stroke"
-                  />
-                  {event.outcome === "rejected" ? (
-                    <line
-                      x1={x - 2}
-                      y1="28"
-                      x2={x + 2}
-                      y2="32"
-                      stroke="var(--color-pure)"
-                      strokeWidth="1"
-                      vectorEffect="non-scaling-stroke"
-                    />
-                  ) : null}
-                </g>
-              );
-            })}
+                );
+              })}
           </g>
         </svg>
         {focused ? (
           <div className="pointer-events-none absolute inset-0 text-[10px] font-medium text-ink-secondary">
-            <span className="absolute left-[43%] top-40 bg-pure/90 px-1">
+            <span className="absolute left-[43%] top-40 bg-pure px-1">
               Verification
             </span>
+            <span className="absolute bottom-10 left-3 bg-pure px-1">
+              Physical service · Meter evidence · Settled / protected value
+            </span>
+            {geometry.fundedCapacity !== null ? (
+              <span
+                className="absolute top-68 bg-pure px-1"
+                style={{
+                  left: `${Math.min(geometry.fundedCapacity * 100, 77)}%`,
+                }}
+              >
+                Funded capacity
+              </span>
+            ) : null}
             <span
-              className="absolute bottom-12 whitespace-nowrap bg-pure/90 px-1"
+              className="absolute top-68 whitespace-nowrap bg-pure px-1"
               style={{ left: `${Math.min(geometry.frontier * 100 + 1, 77)}%` }}
             >
               Protection Frontier
             </span>
-            <span
-              className="absolute top-40 whitespace-nowrap bg-pure/90 px-1"
-              style={{
-                left: `${Math.min(geometry.protectionLimit * 100 + 1, 79)}%`,
-              }}
-            >
+            <span className="absolute top-40 right-3 whitespace-nowrap bg-pure px-1">
               Protection limit
             </span>
             {geometry.riskWidth > 0 ? (
               <span
-                className="absolute bottom-28 -translate-x-1/2 whitespace-nowrap bg-risk-faint px-1 text-risk-deep"
+                className="absolute top-52 -translate-x-1/2 whitespace-nowrap bg-risk-faint px-1 text-risk-deep"
                 style={{
                   left: `${(geometry.riskStart + geometry.riskWidth / 2) * 100}%`,
                 }}
@@ -355,7 +393,7 @@ export function CorridorLane({
           </div>
         </dl>
         {focused ? (
-          <dl className="absolute left-3 right-3 top-3 grid grid-cols-3 gap-x-4 gap-y-1 border-b border-line-faint pb-3 text-[11px] text-ink-secondary lg:grid-cols-6">
+          <dl className="absolute left-3 right-3 top-3 grid grid-cols-6 gap-x-4 gap-y-1 border-b border-line-faint pb-2 text-[11px] text-ink-secondary">
             <div>
               <dt>Session</dt>
               <dd className="truncate font-mono text-ink">
@@ -399,6 +437,14 @@ export function CorridorLane({
           </dl>
         ) : null}
         {focused ? <LaneFocusDetails lane={lane} tariff={tariff} /> : null}
+        {focused ? (
+          <LaneEventPicker
+            label={lane.label}
+            events={lane.trace}
+            selectedEventId={selectedEventId}
+            onSelect={onSelectEvent}
+          />
+        ) : null}
       </div>
     </animated.section>
   );

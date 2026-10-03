@@ -118,6 +118,10 @@ export function PaymentInspector({
           <p className="mt-1 break-all font-mono text-ink-tertiary">
             {trace.voucher.digest}
           </p>
+          <p className="mt-2 text-ink-secondary">
+            {trace.voucher.verificationStatus} ·{" "}
+            {trace.voucher.signatureSummary}
+          </p>
         </div>
       ) : null}
     </div>

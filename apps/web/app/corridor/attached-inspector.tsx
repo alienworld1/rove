@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties, type Ref } from "react";
+import { useRef, useState, type CSSProperties, type Ref } from "react";
 import dynamic from "next/dynamic";
 import type { CausalInspectorTrace } from "@rove/contracts";
 import { EvidenceInspector } from "./evidence-inspector";
@@ -19,6 +19,7 @@ export function AttachedInspector({
   assetDecimals,
   floatingRef,
   floatingStyle,
+  docked,
   onClose,
   onRetry,
 }: {
@@ -28,19 +29,24 @@ export function AttachedInspector({
   assetDecimals: number;
   floatingRef: Ref<HTMLDivElement>;
   floatingStyle: CSSProperties;
+  docked: boolean;
   onClose: () => void;
   onRetry: () => void;
 }) {
   const [rawOpen, setRawOpen] = useState(false);
+  const rawTrigger = useRef<HTMLButtonElement>(null);
   return (
     <div
       ref={floatingRef}
-      style={floatingStyle}
+      style={docked ? undefined : floatingStyle}
       role="region"
       aria-label="Selected event details"
-      className="z-30 w-[min(440px,calc(100vw-32px))] rounded-md border border-line-strong bg-pure p-5 shadow-[var(--shadow-inspector)] max-[1279px]:!static max-[1279px]:mt-4 max-[1279px]:!w-full max-[1279px]:shadow-none"
+      className={`z-30 rounded-md border border-line-strong bg-pure p-5 ${docked ? "relative mt-4 w-full max-w-3xl min-[1800px]:mt-0" : "w-[min(440px,calc(100vw-32px))] shadow-[var(--shadow-inspector)]"}`}
       onKeyDown={(event) => {
-        if (event.key === "Escape") onClose();
+        if (event.key === "Escape" && !rawOpen) {
+          event.stopPropagation();
+          onClose();
+        }
       }}
     >
       <button
@@ -90,6 +96,7 @@ export function AttachedInspector({
             ))}
           </ol>
           <button
+            ref={rawTrigger}
             type="button"
             onClick={() => setRawOpen(true)}
             className="mt-4 rounded-sm border border-line-strong px-3 py-2 text-sm text-ink focus-visible:outline-2 focus-visible:outline-info"
@@ -101,6 +108,7 @@ export function AttachedInspector({
               trace={trace}
               open={rawOpen}
               onOpenChange={setRawOpen}
+              onRestoreFocus={() => rawTrigger.current?.focus()}
             />
           ) : null}
         </>
