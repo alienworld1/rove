@@ -8,7 +8,9 @@ const view = {
   lanes: [
     {
       projection: { id: "lane-a" },
-      trace: [{ eventId: "event-a" }],
+      trace: [
+        { eventId: "event-a", traceOffsetMs: 50, snapshot: { version: 1 } },
+      ],
     },
   ],
 } as CorridorOperatingView;
@@ -26,4 +28,9 @@ test("keeps valid semantic focus and removes cross-Lane events", () => {
     traceOffsetMs: null,
     changed: true,
   });
+});
+
+test("rejects fractional and uncommitted trace positions", () => {
+  assert.equal(validateSelection(view, null, null, 50.5).traceOffsetMs, null);
+  assert.equal(validateSelection(view, null, null, 75).traceOffsetMs, null);
 });

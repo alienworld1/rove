@@ -7,7 +7,7 @@ import {
   type LaneTraceEvent,
 } from "@rove/contracts";
 import { conservativeTariffBound } from "@rove/protection";
-import { ChargingStore } from "@rove/persistence";
+import { ChargingStore, StoreError } from "@rove/persistence";
 import { CorridorLab } from "./corridor-lab.js";
 
 const severity: Record<LaneProjection["state"], number> = {
@@ -48,11 +48,12 @@ function eventOutcome(event: LaneHistory[number]): LaneTraceEvent["outcome"] {
 function traceEvent(
   event: LaneHistory[number],
   traceEpoch: string | null,
+  precedingOffsetMs: number,
 ): LaneTraceEvent {
   const traceOffsetMs =
     traceEpoch && event.traceTime
       ? Math.max(0, Date.parse(event.traceTime) - Date.parse(traceEpoch))
-      : null;
+      : precedingOffsetMs;
   return {
     eventId: event.id,
     eventType: event.type,
@@ -60,6 +61,7 @@ function traceEvent(
     traceTime: event.traceTime,
     traceOffsetMs,
     laneVersion: event.version,
+    snapshot: event.snapshot,
     reasonCode: event.reasonCode,
     outcome: eventOutcome(event),
     references: {
@@ -131,13 +133,12 @@ function runSummary(view: LabRunView | null) {
 
 async function composeCorridorOperatingViewOnce(
   store: ChargingStore,
-  lab: CorridorLab | null,
+  labView: LabRunView | null,
   corridorId: string,
 ): Promise<CorridorOperatingView> {
-  const [corridor, laneIds, labView, projectionVersion] = await Promise.all([
+  const [corridor, laneIds, projectionVersion] = await Promise.all([
     store.getCorridor(corridorId),
     store.listLanes(corridorId),
-    lab?.viewForCorridor(corridorId) ?? null,
     store.getLatestEventOrdinal(corridorId),
   ]);
   const laneData = await Promise.all(
@@ -209,7 +210,25 @@ async function composeCorridorOperatingViewOnce(
           ? `${definition.powerClass} ${Number(definition.maxPowerWatts) / 1000} kW`
           : "Charging Lane",
         projection,
-        trace: history.map((event) => traceEvent(event, traceStart)),
+        fundedCapacityValue:
+          projection.fundedHeadroom === null
+            ? null
+            : (
+                BigInt(projection.authorizedValue) +
+                BigInt(projection.fundedHeadroom)
+              ).toString(),
+        trace: history.reduce<LaneTraceEvent[]>((trace, event) => {
+          const previousOffset = trace.at(-1)?.traceOffsetMs ?? 0;
+          const next = traceEvent(event, traceStart, previousOffset);
+          trace.push({
+            ...next,
+            traceOffsetMs: Math.max(
+              previousOffset,
+              Math.min(next.traceOffsetMs ?? 0, traceEndMs),
+            ),
+          });
+          return trace;
+        }, []),
         scale: { valueDomainMax, traceStartMs: 0, traceEndMs },
       };
     }),
@@ -231,14 +250,86 @@ export async function composeCorridorOperatingView(
   store: ChargingStore,
   lab: CorridorLab | null,
   corridorId: string,
+  inspectionTraceOffsetMs: number | null = null,
 ): Promise<CorridorOperatingView> {
-  let lastView: CorridorOperatingView | null = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const before = await store.getLatestEventOrdinal(corridorId);
-    const view = await composeCorridorOperatingViewOnce(store, lab, corridorId);
-    const after = await store.getLatestEventOrdinal(corridorId);
-    if (before === after) return { ...view, projectionVersion: after };
-    lastView = view;
+    const labView = (await lab?.viewForCorridor(corridorId)) ?? null;
+    const view = await store.consistentRead((snapshot) =>
+      composeCorridorOperatingViewOnce(snapshot, labView, corridorId),
+    );
+    if (
+      labView &&
+      (await lab?.runVersion(labView.run.id)) !== labView.run.version
+    )
+      continue;
+    return inspectionTraceOffsetMs === null
+      ? view
+      : inspectCommittedTrace(view, inspectionTraceOffsetMs);
   }
-  return lastView!;
+  throw new StoreError("INCONSISTENT_PROJECTION");
+}
+
+export function inspectCommittedTrace(
+  view: CorridorOperatingView,
+  offsetMs: number,
+): CorridorOperatingView {
+  if (
+    !Number.isSafeInteger(offsetMs) ||
+    offsetMs < 0 ||
+    !view.activeRun ||
+    offsetMs > view.activeRun.traceOffsetMs ||
+    !view.lanes.some((lane) =>
+      lane.trace.some(
+        (event) => event.traceOffsetMs === offsetMs && event.snapshot,
+      ),
+    )
+  )
+    throw new StoreError("VALIDATION");
+  const lanes = view.lanes.map((lane) => {
+    const event = [...lane.trace]
+      .reverse()
+      .find(
+        (event) =>
+          event.traceOffsetMs !== null &&
+          event.traceOffsetMs <= offsetMs &&
+          event.snapshot,
+      );
+    if (!event?.snapshot) throw new StoreError("NOT_FOUND");
+    const reading = [...lane.trace]
+      .reverse()
+      .find(
+        (candidate) =>
+          candidate.traceOffsetMs !== null &&
+          candidate.traceOffsetMs <= offsetMs &&
+          candidate.eventType === "meter.evidence_accepted",
+      );
+    return {
+      ...lane,
+      fundedCapacityValue:
+        event.snapshot.fundedHeadroom === null
+          ? null
+          : (
+              BigInt(event.snapshot.authorizedValue) +
+              BigInt(event.snapshot.fundedHeadroom)
+            ).toString(),
+      projection: {
+        ...lane.projection,
+        ...event.snapshot,
+        operations: [],
+        latestVoucherDigest: null,
+        lastEvidenceHash: reading?.references.evidenceHash ?? null,
+        lastTrustedEvidenceAt: reading?.traceTime ?? null,
+        channelId: event.references.channelId,
+        updatedAt: event.occurredAt,
+        evidenceFreshness: "historical" as const,
+        chainFreshness: "historical" as const,
+      },
+    };
+  });
+  return corridorOperatingViewSchema.parse({
+    ...view,
+    inspectionTraceOffsetMs: offsetMs,
+    lanes,
+    aggregate: summarizeCorridor(lanes.map((lane) => lane.projection)),
+  });
 }

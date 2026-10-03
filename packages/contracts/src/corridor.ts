@@ -5,6 +5,7 @@ import {
   idSchema,
   instantSchema,
   laneProjectionSchema,
+  lanePresentationSnapshotSchema,
   positiveDecimalSchema,
   protectionPolicySchema,
   tariffSchema,
@@ -32,6 +33,7 @@ export const laneTraceEventSchema = z
     traceTime: instantSchema.nullable(),
     traceOffsetMs: z.number().int().nonnegative().nullable(),
     laneVersion: z.number().int().nonnegative().nullable(),
+    snapshot: lanePresentationSnapshotSchema.nullable(),
     reasonCode: z.string().min(1).max(120).nullable(),
     outcome: traceOutcomeSchema,
     references: z
@@ -69,6 +71,7 @@ export const laneOperatingViewSchema = z
     label: z.string().trim().min(1).max(80),
     powerClass: z.string().trim().min(1).max(80),
     projection: laneProjectionSchema,
+    fundedCapacityValue: decimalSchema.nullable().default(null),
     trace: z.array(laneTraceEventSchema).max(100),
     scale: z
       .object({
@@ -99,6 +102,12 @@ export const corridorOperatingViewSchema = z
       .strict(),
     projectionVersion: z.number().int().nonnegative(),
     checkedAt: instantSchema,
+    inspectionTraceOffsetMs: z
+      .number()
+      .int()
+      .nonnegative()
+      .nullable()
+      .default(null),
     laneOrder: z.array(idSchema).max(3),
     lanes: z.array(laneOperatingViewSchema).max(3),
     aggregate: z

@@ -4,6 +4,7 @@ import { test } from "node:test";
 import postgres from "postgres";
 import { ChargingStore, LabStore } from "@rove/persistence";
 import { CorridorLab } from "./corridor-lab.js";
+import { composeCorridorOperatingView } from "./corridor-read-model.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const stableId = (value: string) =>
@@ -78,6 +79,71 @@ test(
       while (completed.run.status !== "completed")
         completed = await lab.transport(runId, "step", completed.run.version);
       await assert.rejects(lab.transport(runId, "play", completed.run.version));
+      const corridorId = completed.lanes[0].projection!.corridorId;
+      const live = await composeCorridorOperatingView(
+        charging,
+        lab,
+        corridorId,
+      );
+      const recorded = await composeCorridorOperatingView(
+        charging,
+        lab,
+        corridorId,
+        1000,
+      );
+      assert.equal(recorded.inspectionTraceOffsetMs, 1000);
+      assert.equal(recorded.activeRun?.version, live.activeRun?.version);
+      for (const lane of recorded.lanes) {
+        const snapshot = [...lane.trace]
+          .reverse()
+          .find(
+            (event) => event.traceOffsetMs! <= 1000 && event.snapshot,
+          )?.snapshot;
+        assert.ok(snapshot);
+        assert.equal(
+          lane.projection.trustedDeliveredValue,
+          snapshot.trustedDeliveredValue,
+        );
+        assert.equal(lane.projection.state, snapshot.state);
+        assert.ok(
+          lane.trace.every(
+            (event, index) =>
+              index === 0 ||
+              event.traceOffsetMs! >= lane.trace[index - 1].traceOffsetMs!,
+          ),
+        );
+      }
+      assert.equal(
+        recorded.aggregate.trustedDeliveredValue,
+        recorded.lanes
+          .reduce(
+            (sum, lane) => sum + BigInt(lane.projection.trustedDeliveredValue),
+            0n,
+          )
+          .toString(),
+      );
+      for (const lane of live.lanes) {
+        const accepted = lane.trace.find(
+          (event) => event.eventType === "meter.evidence_accepted",
+        );
+        assert.ok(accepted);
+        const inspector = await charging.getInspector(
+          lane.projection.id,
+          accepted.eventId,
+        );
+        assert.equal(inspector.voucher?.verificationStatus, "verified");
+        assert.equal(
+          inspector.causalSteps.find((step) => step.type === "voucher")?.status,
+          "complete",
+        );
+      }
+      assert.equal((await lab.view(runId)).run.version, completed.run.version);
+      await assert.rejects(
+        composeCorridorOperatingView(charging, lab, corridorId, 50.5),
+      );
+      await assert.rejects(
+        composeCorridorOperatingView(charging, lab, corridorId, 999),
+      );
     } finally {
       await sql.end();
       await labStore.close();

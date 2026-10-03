@@ -6,6 +6,8 @@ export type LaneGeometryInput = Pick<LaneOperatingView, "scale"> & {
   maxUnprotectedExposure: string;
   unprotectedExposureBound: string;
   pauseRequired: boolean;
+  settledValue?: string;
+  fundedCapacityValue?: string | null;
 };
 
 export type LaneGeometry = {
@@ -15,6 +17,8 @@ export type LaneGeometry = {
   riskEnd: number;
   riskWidth: number;
   protectionLimit: number;
+  settled: number;
+  fundedCapacity: number | null;
 };
 
 function normalized(value: bigint, domainMax: bigint) {
@@ -60,6 +64,12 @@ export function normalizeLaneGeometry(input: LaneGeometryInput): LaneGeometry {
     riskEnd,
     riskWidth: rounded(Math.max(0, riskEnd - riskStart)),
     protectionLimit,
+    settled: normalized(BigInt(input.settledValue ?? "0"), domainMax),
+    fundedCapacity:
+      input.fundedCapacityValue === null ||
+      input.fundedCapacityValue === undefined
+        ? null
+        : normalized(BigInt(input.fundedCapacityValue), domainMax),
   };
 }
 

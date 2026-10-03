@@ -115,6 +115,16 @@ test(
         (event) => event.evidenceHash !== null,
       );
       assert.ok(rejectedEvent);
+      assert.equal(rejectedEvent.snapshot?.trustedDeliveredValue, "0");
+      assert.equal(rejectedEvent.snapshot?.version, rejected.version);
+      const consistent = await store.consistentRead(async (snapshot) => ({
+        lane: await snapshot.getLane(started.id),
+        history: await snapshot.getHistory(started.id),
+      }));
+      assert.equal(
+        consistent.history.at(-1)?.snapshot?.version,
+        consistent.lane.version,
+      );
       const rejectedTrace = await store.getInspector(
         started.id,
         rejectedEvent.id,

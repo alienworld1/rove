@@ -97,9 +97,10 @@ export async function controlRun(
 export async function readCorridor(
   corridorId: string,
   signal?: AbortSignal,
+  traceOffsetMs: number | null = null,
 ): Promise<CorridorOperatingView> {
   const response = await fetch(
-    `/api/charging/corridors/${encodeURIComponent(corridorId)}`,
+    `/api/charging/corridors/${encodeURIComponent(corridorId)}${traceOffsetMs === null ? "" : `?trace=${traceOffsetMs}`}`,
     { cache: "no-store", signal: signal ?? AbortSignal.timeout(10_000) },
   );
   const value = (await response.json()) as { message?: string };

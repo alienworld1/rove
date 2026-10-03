@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import stringify from "fast-json-stable-stringify";
@@ -14,6 +14,7 @@ import type {
 import {
   causalInspectorTraceSchema,
   laneProjectionSchema,
+  lanePresentationSnapshotSchema,
   reasonTextFor,
   realtimePresentationEventSchema,
 } from "@rove/contracts";
@@ -327,6 +328,17 @@ export class ChargingStore {
   }
   async health() {
     await this.db.execute(sql`select 1`);
+  }
+
+  async consistentRead<T>(read: (store: ChargingStore) => Promise<T>) {
+    return this.db.transaction(
+      async (tx) => {
+        const snapshot = Object.create(this) as ChargingStore;
+        snapshot.db = tx as unknown as Database;
+        return read(snapshot);
+      },
+      { isolationLevel: "repeatable read", accessMode: "read only" },
+    );
   }
 
   async createCorridor(input: CreateCorridorInput, actor: string) {
@@ -770,7 +782,7 @@ export class ChargingStore {
   }
 
   async getHistory(laneId: string) {
-    await this.getLane(laneId);
+    const current = await this.getLane(laneId);
     const [material, checks] = await Promise.all([
       this.db
         .select()
@@ -817,6 +829,13 @@ export class ChargingStore {
             }
           : null;
       const summary = after ? { before: previous, after } : null;
+      const remaining = after
+        ? BigInt(current.maxUnprotectedExposure) - BigInt(after.exposure)
+        : 0n;
+      const parsedSnapshot = lanePresentationSnapshotSchema.safeParse({
+        ...projection,
+        exposureRemaining: (remaining > 0n ? remaining : 0n).toString(),
+      });
       if (after) previous = after;
       return {
         id: row.id,
@@ -829,6 +848,7 @@ export class ChargingStore {
         channelId: row.channelId,
         transactionHash: row.txHash,
         summary,
+        snapshot: parsedSnapshot.success ? parsedSnapshot.data : null,
         detail:
           row.type === "payment.voucher_verified"
             ? { digest: (row.payload as { digest?: string }).digest ?? null }
@@ -992,9 +1012,19 @@ export class ChargingStore {
                 .where(
                   and(
                     eq(domainEvents.laneId, laneId),
-                    eq(
-                      domainEvents.causationId,
-                      linkedVoucherJob.idempotencyKey,
+                    or(
+                      eq(
+                        domainEvents.causationId,
+                        linkedVoucherJob.idempotencyKey,
+                      ),
+                      eq(
+                        domainEvents.causationId,
+                        createHash("sha256")
+                          .update(
+                            `${linkedVoucherJob.idempotencyKey}:confirmed`,
+                          )
+                          .digest("hex"),
+                      ),
                     ),
                     eq(domainEvents.type, "payment.voucher_verified"),
                   ),

@@ -365,10 +365,15 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
     const corridorMatch = /^\/api\/corridors\/([^/]+)$/.exec(path);
     if (corridorMatch && request.method === "GET") {
       const id = idSchema.parse(corridorMatch[1]);
+      const trace = requestUrl.searchParams.get("trace");
+      const traceOffset =
+        trace === null ? null : parsePresentationCursor(trace);
+      if (trace !== null && traceOffset === null)
+        throw new StoreError("VALIDATION");
       send(
         response,
         200,
-        await composeCorridorOperatingView(store, corridorLab, id),
+        await composeCorridorOperatingView(store, corridorLab, id, traceOffset),
       );
       return;
     }

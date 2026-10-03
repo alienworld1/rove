@@ -186,6 +186,23 @@ export type StartLaneInput = z.infer<typeof startLaneSchema>;
 export type LaneCommandInput = z.infer<typeof laneCommandSchema>;
 export type LaneProjection = z.infer<typeof laneProjectionSchema>;
 
+export const lanePresentationSnapshotSchema = laneProjectionSchema.pick({
+  version: true,
+  state: true,
+  trustedEnergyWh: true,
+  trustedDeliveredValue: true,
+  authorizedValue: true,
+  settledValue: true,
+  confirmedDeposit: true,
+  fundedHeadroom: true,
+  protectedValue: true,
+  unverifiedServiceBound: true,
+  worstCaseDeliveredValue: true,
+  unprotectedExposureBound: true,
+  exposureRemaining: true,
+  reasonCodes: true,
+});
+
 export const laneHistorySchema = z.array(
   z
     .object({
@@ -215,6 +232,7 @@ export const laneHistorySchema = z.array(
         })
         .nullable(),
       detail: z.object({ digest: z.string().nullable() }).nullable(),
+      snapshot: lanePresentationSnapshotSchema.nullable().default(null),
     })
     .strict(),
 );

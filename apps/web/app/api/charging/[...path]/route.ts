@@ -3,6 +3,7 @@ import {
   causalInspectorTraceSchema,
   corridorOperatingViewSchema,
   idSchema,
+  presentationCursorSchema,
 } from "@rove/contracts";
 import { hasDemoSession } from "../../demo-session";
 
@@ -24,6 +25,17 @@ export async function GET(
     );
   const { path } = await context.params;
   const event = new URL(request.url).searchParams.get("event");
+  const trace = new URL(request.url).searchParams.get("trace");
+  if (
+    trace !== null &&
+    (path[0] !== "corridors" ||
+      path.length !== 2 ||
+      !presentationCursorSchema.safeParse(trace).success)
+  )
+    return Response.json(
+      { message: "That trace point is unavailable." },
+      { status: 400 },
+    );
   if (
     path.length < 1 ||
     path.length > 3 ||
@@ -48,6 +60,7 @@ export async function GET(
   try {
     const upstreamUrl = new URL(`/api/${path.join("/")}`, config.ENGINE_ORIGIN);
     if (event) upstreamUrl.searchParams.set("event", event);
+    if (trace !== null) upstreamUrl.searchParams.set("trace", trace);
     const upstream = await fetch(upstreamUrl, {
       headers: { authorization: `Bearer ${config.DEMO_SESSION_TOKEN}` },
       cache: "no-store",

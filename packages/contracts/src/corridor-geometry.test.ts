@@ -24,8 +24,26 @@ test("normalizes authoritative Lane values without changing their scale", () => 
       riskEnd: 0.55,
       riskWidth: 0.15,
       protectionLimit: 0.6,
+      settled: 0,
+      fundedCapacity: null,
     },
   );
+});
+
+test("distinguishes confirmed capacity and settlement from protection", () => {
+  const geometry = normalizeLaneGeometry({
+    scale,
+    protectedValue: "80",
+    worstCaseDeliveredValue: "110",
+    maxUnprotectedExposure: "40",
+    unprotectedExposureBound: "30",
+    pauseRequired: false,
+    settledValue: "30",
+    fundedCapacityValue: "180",
+  });
+  assert.equal(geometry.settled, 0.15);
+  assert.equal(geometry.fundedCapacity, 0.9);
+  assert.equal(geometry.frontier, 0.4);
 });
 
 test("clamps pause geometry exactly at the protection limit", () => {
