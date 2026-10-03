@@ -1,3 +1,4 @@
+import { DocsLink } from "../docs-link";
 import { reasonTextFor, type CorridorOperatingView } from "@rove/contracts";
 import { formatOperationalValue } from "./format-operational-value";
 
@@ -41,6 +42,9 @@ export function LaneFocusDetails({
   ];
   return (
     <dl className="absolute left-3 right-3 top-14 z-10 grid grid-cols-4 gap-x-4 gap-y-2 border border-line bg-pure p-3 text-[11px] text-ink-secondary">
+      <div className="col-span-4">
+        <DocsLink topic="protection">How protection works</DocsLink>
+      </div>
       {details.map(([label, value]) => (
         <div key={label} className="min-w-0">
           <dt>{label}</dt>

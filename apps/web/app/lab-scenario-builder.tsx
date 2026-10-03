@@ -1,5 +1,7 @@
 "use client";
 
+import { DocsLink } from "./docs-link";
+
 import type { LabScenario } from "@rove/contracts";
 import { LabFaultEditor } from "./lab-fault-editor";
 import { LabScenarioFields } from "./lab-scenario-fields";
@@ -41,6 +43,10 @@ export function LabScenarioBuilder({
         Review the scenario before starting a run. Settings and source faults
         are checked before they can change a saved scenario.
       </p>
+      <div className="mt-3 flex gap-4">
+        <DocsLink topic="scenario">Scenario guide</DocsLink>
+        <DocsLink topic="scenarioSchema">Scenario schema</DocsLink>
+      </div>
       {scenario?.id === "northstar-voltway" ? (
         <p className="mt-2 text-xs text-ink-secondary">
           Changing a field creates an editable copy of this built-in scenario.

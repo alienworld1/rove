@@ -1,3 +1,4 @@
+import { DocsLink } from "../docs-link";
 import type { CausalInspectorTrace } from "@rove/contracts";
 import { formatOperationalValue } from "./format-operational-value";
 
@@ -25,6 +26,11 @@ export function PaymentInspector({
       <h3 className="mt-2 text-lg font-semibold text-ink">
         Payment protection
       </h3>
+      <div className="mt-3 flex flex-wrap gap-3">
+        <DocsLink event={trace.eventType}>How this payment works</DocsLink>
+        <DocsLink topic="topUps">How top-ups work</DocsLink>
+        <DocsLink topic="close">How settlement and refunds work</DocsLink>
+      </div>
       {payment ? (
         <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
           <div>

@@ -1,3 +1,4 @@
+import { DocsLink } from "../docs-link";
 import { eventLabelFor, type CausalInspectorTrace } from "@rove/contracts";
 import {
   formatEnergy,
@@ -27,6 +28,13 @@ export function EvidenceInspector({
       {trace.reasonText ? (
         <p className="mt-1 text-sm text-ink-secondary">{trace.reasonText}</p>
       ) : null}
+      <div className="mt-3">
+        <DocsLink reason={trace.reasonCode}>
+          {trace.reasonCode === "EVIDENCE_SIGNATURE_INVALID"
+            ? "Understand why the meter signature was rejected"
+            : "Understand this reason"}
+        </DocsLink>
+      </div>
       {evidence ? (
         <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
           <div>

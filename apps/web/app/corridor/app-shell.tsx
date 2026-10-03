@@ -1,3 +1,4 @@
+import { DocsLink } from "../docs-link";
 import type { ConnectionState } from "./use-corridor-stream";
 import { MotionPreferenceToggle } from "./motion-preference-toggle";
 
@@ -25,6 +26,7 @@ export function AppShell({
         </p>
       </div>
       <div className="flex items-center gap-3 text-xs text-ink-secondary">
+        <DocsLink>Docs</DocsLink>
         <MotionPreferenceToggle />
         <span
           className="h-2 w-2 rounded-full bg-current"

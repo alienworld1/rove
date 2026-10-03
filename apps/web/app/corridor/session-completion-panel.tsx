@@ -1,4 +1,6 @@
 "use client";
+
+import { DocsLink } from "../docs-link";
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CorridorOperatingView } from "@rove/contracts";
@@ -137,6 +139,9 @@ export function SessionCompletionPanel({
                         ? labels[completion.status]
                         : "This session has not finished yet."}
         </p>
+      </div>
+      <div className="mt-3">
+        <DocsLink topic="completion">How session totals are checked</DocsLink>
       </div>
       {completion ? (
         <>
