@@ -413,7 +413,12 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
         send(
           response,
           201,
-          await corridorLab.start(input.scenarioId, input.scenarioDigest),
+          await corridorLab.start(
+            input.scenarioId,
+            input.scenarioDigest,
+            undefined,
+            input.runId,
+          ),
         );
         return;
       }

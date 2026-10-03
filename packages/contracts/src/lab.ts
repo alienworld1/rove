@@ -173,6 +173,7 @@ export const labStartRunSchema = z
   .object({
     scenarioId: idSchema,
     scenarioDigest: z.string().regex(/^[0-9a-f]{64}$/),
+    runId: idSchema.optional(),
   })
   .strict();
 

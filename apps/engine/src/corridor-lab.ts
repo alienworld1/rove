@@ -217,7 +217,28 @@ export class CorridorLab {
     return this.lab.getScenario(id);
   }
 
-  async start(scenarioId: string, digest: string, replayOfRunId?: string) {
+  async start(
+    scenarioId: string,
+    digest: string,
+    replayOfRunId?: string,
+    requestedRunId?: string,
+  ) {
+    if (requestedRunId) {
+      const existing = await this.lab.getRun(requestedRunId).catch((error) => {
+        if (error instanceof StoreError && error.code === "NOT_FOUND")
+          return null;
+        throw error;
+      });
+      if (existing) {
+        if (
+          existing.run.scenarioId !== scenarioId ||
+          existing.run.scenarioDigest !== digest ||
+          existing.run.replayOfRunId !== (replayOfRunId ?? null)
+        )
+          throw new StoreError("CONFLICT");
+        return this.view(requestedRunId);
+      }
+    }
     const scenario = await this.lab.getScenario(scenarioId);
     if (scenario.digest !== digest) throw new StoreError("VERSION_CONFLICT");
     const compiled = compileLabScenario(
@@ -226,8 +247,12 @@ export class CorridorLab {
     );
     this.checkEnvironment(compiled);
     if (compiled.digest !== digest) throw new StoreError("VERSION_CONFLICT");
-    const run = await this.lab.createRun(compiled, replayOfRunId);
-    await this.initialize(run.run.id);
+    const run = await this.lab.createRun(
+      compiled,
+      replayOfRunId,
+      requestedRunId,
+    );
+    if (run.created) await this.initialize(run.run.id);
     return this.view(run.run.id);
   }
 

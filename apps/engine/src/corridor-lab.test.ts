@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import postgres from "postgres";
 import { ChargingStore, LabStore } from "@rove/persistence";
@@ -9,6 +9,56 @@ import { composeCorridorOperatingView } from "./corridor-read-model.js";
 const databaseUrl = process.env.DATABASE_URL;
 const stableId = (value: string) =>
   createHash("sha256").update(value).digest("hex");
+
+test(
+  "a lost run-start response retains one durable run and channel set",
+  { skip: !databaseUrl },
+  async () => {
+    const charging = new ChargingStore(databaseUrl!);
+    const savedRuns = new LabStore(databaseUrl!);
+    try {
+      const lab = new CorridorLab(charging, savedRuns);
+      const scenario = await lab.seed();
+      const runId = randomUUID();
+      const first = await lab.start(
+        scenario.id,
+        scenario.digest,
+        undefined,
+        runId,
+      );
+      const retried = await lab.start(
+        scenario.id,
+        scenario.digest,
+        undefined,
+        runId,
+      );
+      assert.equal(retried.run.id, first.run.id);
+      assert.deepEqual(retried.run.laneBindings, first.run.laneBindings);
+      assert.deepEqual(
+        retried.lanes.map((lane) => lane.projection?.channelId),
+        first.lanes.map((lane) => lane.projection?.channelId),
+      );
+      assert.equal(retried.events.length, first.events.length);
+      await assert.rejects(
+        lab.start(scenario.id, "f".repeat(64), undefined, runId),
+      );
+      const restored = await lab.view(runId);
+      assert.deepEqual(restored.run, retried.run);
+      const concurrentId = randomUUID();
+      const concurrent = await Promise.all([
+        lab.start(scenario.id, scenario.digest, undefined, concurrentId),
+        lab.start(scenario.id, scenario.digest, undefined, concurrentId),
+      ]);
+      assert.ok(concurrent.every((view) => view.run.id === concurrentId));
+      const committed = await lab.view(concurrentId);
+      assert.equal(Object.keys(committed.run.laneBindings).length, 3);
+      assert.equal(committed.events.length, first.events.length);
+    } finally {
+      await savedRuns.close();
+      await charging.close();
+    }
+  },
+);
 
 test(
   "a recovered dispatch uses its committed command once and parallel steps serialize",

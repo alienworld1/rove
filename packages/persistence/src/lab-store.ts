@@ -75,28 +75,51 @@ export class LabStore {
     return row;
   }
 
-  async createRun(compiled: CompiledLabScenario, replayOfRunId?: string) {
+  async createRun(
+    compiled: CompiledLabScenario,
+    replayOfRunId?: string,
+    requestedRunId?: string,
+  ) {
     const scenario = await this.getScenario(compiled.definition.id);
     if (scenario.digest !== compiled.digest)
       throw new StoreError("VERSION_CONFLICT");
-    const id = randomUUID();
+    const id = requestedRunId ?? randomUUID();
     const now = new Date().toISOString();
+    let created = false;
     await this.db.transaction(async (tx) => {
-      await tx.insert(labRuns).values({
-        id,
-        scenarioId: scenario.id,
-        scenarioDigest: compiled.digest,
-        compiledSnapshot: compiled,
-        status: "initializing",
-        cursor: 0,
-        version: 0,
-        traceOffsetMs: 0,
-        speed: "1",
-        laneBindings: {},
-        replayOfRunId: replayOfRunId ?? null,
-        startedAt: now,
-        updatedAt: now,
-      });
+      const inserted = await tx
+        .insert(labRuns)
+        .values({
+          id,
+          scenarioId: scenario.id,
+          scenarioDigest: compiled.digest,
+          compiledSnapshot: compiled,
+          status: "initializing",
+          cursor: 0,
+          version: 0,
+          traceOffsetMs: 0,
+          speed: "1",
+          laneBindings: {},
+          replayOfRunId: replayOfRunId ?? null,
+          startedAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoNothing({ target: labRuns.id })
+        .returning({ id: labRuns.id });
+      if (!inserted.length) {
+        const [existing] = await tx
+          .select()
+          .from(labRuns)
+          .where(eq(labRuns.id, id));
+        if (
+          existing.scenarioId !== compiled.definition.id ||
+          existing.scenarioDigest !== compiled.digest ||
+          existing.replayOfRunId !== (replayOfRunId ?? null)
+        )
+          throw new StoreError("CONFLICT");
+        return;
+      }
+      created = true;
       await tx.insert(labRunEvents).values(
         compiled.events.map((event, sequence) => ({
           id: randomUUID(),
@@ -115,7 +138,7 @@ export class LabStore {
         })),
       );
     });
-    return this.getRun(id);
+    return { ...(await this.getRun(id)), created };
   }
 
   async getRun(id: string) {
