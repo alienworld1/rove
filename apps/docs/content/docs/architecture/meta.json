@@ -1,0 +1,4 @@
+{
+  "title": "Architecture",
+  "pages": ["system-overview", "trust-and-authority", "failure-and-recovery"]
+}

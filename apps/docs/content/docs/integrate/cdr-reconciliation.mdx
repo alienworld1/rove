@@ -1,0 +1,158 @@
+---
+title: "CDR Reconciliation"
+description: "Check immutable accounting against final meter, authorization, and settlement totals."
+---
+
+The narrow OCPI-style adapter in `packages/ocpi/src/index.ts` accepts a concluded-session energy-only tax-free record. It follows relevant [OCPI CDR concepts](https://github.com/ocpi/ocpi/blob/2.3.0/release/core/mod_cdrs.asciidoc); it does not implement full OCPI transport or claim protocol conformance.
+
+## Binding and exact precision
+
+Session, source party, meter, charger, start/end times, currency, settlement asset mapping, and tariff must agree with authenticated session context. `totalEnergyKwh` and `totalCost` are decimal strings, preserving source text and spelling. Energy normalizes exactly to whole Wh (three kWh fractional places, with additional trailing zeroes allowed); cost normalizes exactly to configured asset base units. Sub-Wh, nonzero unsupported fractional units, numeric JSON decimals, extra fields, FX, tax, time, parking, and fixed charges are rejected.
+
+Server settings explicitly declare `CDR_CURRENCY`, `CDR_SETTLEMENT_ASSET_ID`, and `CDR_SOURCE_PARTY_ID`. Local simulation uses USD / TEST_ASSET / controlled-cpo. A six-decimal pathUSD context declares direct USD equivalence, not currency conversion.
+
+## Safe accounting example
+
+This versioned record normalizes to 1000 Wh and 500000 base units when bound to the matching six-decimal context. It is a controlled example, not a live session.
+
+```json
+{
+  "externalCdrId": "record-123",
+  "externalSessionId": "session-123",
+  "sourcePartyId": "controlled-cpo",
+  "meterId": "meter-123",
+  "chargerId": "charger-123",
+  "startedAt": "2026-10-03T12:00:00Z",
+  "endedAt": "2026-10-03T12:01:00Z",
+  "currency": "USD",
+  "totalEnergyKwh": "1.000",
+  "totalCost": "0.500000",
+  "tariffBasis": {
+    "perKwh": "500000",
+    "tariffDecimals": 6,
+    "assetDecimals": 6
+  },
+  "chargeType": "energy_only_tax_free"
+}
+```
+
+### accountingRecordSchema
+
+Current structural JSON Schema; semantic source checks still apply.
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "externalCdrId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "externalSessionId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "sourcePartyId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "meterId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "chargerId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "endedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "totalEnergyKwh": {
+      "type": "string",
+      "maxLength": 120,
+      "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+    },
+    "totalCost": {
+      "type": "string",
+      "maxLength": 120,
+      "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+    },
+    "tariffBasis": {
+      "type": "object",
+      "properties": {
+        "perKwh": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "tariffDecimals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 36
+        },
+        "assetDecimals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 36
+        }
+      },
+      "required": ["perKwh", "tariffDecimals", "assetDecimals"],
+      "additionalProperties": false
+    },
+    "chargeType": {
+      "type": "string",
+      "const": "energy_only_tax_free"
+    }
+  },
+  "required": [
+    "externalCdrId",
+    "externalSessionId",
+    "sourcePartyId",
+    "meterId",
+    "chargerId",
+    "startedAt",
+    "endedAt",
+    "currency",
+    "totalEnergyKwh",
+    "totalCost",
+    "tariffBasis",
+    "chargeType"
+  ],
+  "additionalProperties": false
+}
+```
+
+## Immutable delivery
+
+The engine retains original source text and SHA-256 content hash. Identical content under the same provider record ID is harmless; changed content conflicts. Records cannot be edited to force a match. `/api/lanes/:id/cdr` accepts authenticated external ingestion using the strict Lane command envelope; browser completion accepts only identity/version/command intent.
+
+## Four totals and two energies
+
+Compare final trusted service value, final authorized value, final settled value, and normalized accounting total exactly. Compare final accepted meter Wh with CDR Wh. Deltas are signed integer strings: accounting, authorization, and settlement minus trusted value, and CDR energy minus accepted energy. Any nonzero difference is `MISMATCH`, not a correction or rounding allowance.
+
+## Finish and close
+
+After the controlled service trace stops, focus its Lane and choose **Finish session**. The server supplies final signed evidence and its immutable fixture, authorizes remaining trusted value, and requests final settlement. **Check again** inspects existing work. Pending operations continue after navigation. **Close channel** becomes available only when matching totals, accepted final evidence, fresh authority, and resolved earlier work permit it.
+
+Zero-service totals and zero-refund closure must be verified, not confused with absent values. The canonical close receipt and exact returned reserve are retained after refresh/restart. A mismatch remains visible and blocks closure. Read [final settlement and refund proof](/docs/integrate/tempo/channel-lifecycle#close-and-refund) and [failure recovery](/docs/architecture/failure-and-recovery).

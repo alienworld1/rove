@@ -1,0 +1,26 @@
+---
+title: "Failure and Recovery"
+description: "Keep unavailable authority conservative and inspect uncertain operations before retrying."
+---
+
+A rejection, a known failed transaction, and an unknown chain outcome are different facts. The engine retains causal reasons and durable outbox status rather than treating every error as permission to retry money movement.
+
+## Evidence failures
+
+Malformed, wrong-key, invalid-signature, wrong-identity/session, duplicate, discontinuous, stale, and regressing readings cannot advance trusted value. Check the [reason](/docs/reference/reason-codes), authenticate the correct source, and deliver the next valid signed reading with expected continuity. A current accepted cumulative reading replaces conservative uncertainty; it does not rewrite rejected history.
+
+## Funding and signer failures
+
+Low headroom queues a top-up, but submitted/pending work does not count as funding. Unavailable signing stops authorization. Unavailable/stale chain state cannot establish new funded protection. Restore the actual source/signer and check authoritative state before attempting recovery. Local Lab restore events model adapter availability; they do not repair a real RPC endpoint.
+
+## Restart and unknown outcomes
+
+`apps/engine/src/recover-charging.ts` reconciles persisted pending operations and current channel truth before new financial effects. `apps/engine/src/outbox-worker.ts` and persistence retain leases, submission references, attempts, and idempotency. A timeout or crash after submission may have a successful chain transaction: first inspect the receipt/channel, not a second open or top-up.
+
+Known failed settlement/close work can be checked and retried through the supported completion path after resolving authority. Close receipt discovery validates the descriptor and exact captured/refund amounts even when live storage is cleared. Startup inspection does not itself submit fresh financial work.
+
+## Resume service safely
+
+An explicit recovery input cannot override the exposure limit, trusted evidence requirement, current chain authority, signing availability, or voucher coverage. The engine remains conservative until invariants hold. Rove emits a pause requirement. Your CPMS must enforce it on a physical charger; physical resumption also belongs to that integration.
+
+For completion, immutable CDR differences remain mismatches. There is no force-match or accounting correction endpoint. Follow [the Lab fault library](/docs/lab/fault-library) for controlled reproduction and [channel closure](/docs/integrate/tempo/channel-lifecycle#close-and-refund) for money recovery.

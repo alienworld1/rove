@@ -1,0 +1,25 @@
+---
+title: "What is Rove?"
+description: "An integration manual for charging evidence, funded payment protection, and final accounting."
+---
+
+Rove bounds bilateral credit exposure while a charging session is still delivering service. This manual is for CPO, CPMS, and eMSP engineers integrating the current evidence, payment, and control boundaries.
+
+## Start with your question
+
+- New to the business? Read [EV Roaming in 5 Minutes](/docs/start/ev-roaming).
+- Following a Lane decision? Read [how Rove works](/docs/start/how-rove-works) and the [protection window](/docs/concepts/protection-window).
+- Connecting a source? Read [meter evidence](/docs/integrate/meter-evidence), [Tempo channels](/docs/integrate/tempo/channel-lifecycle), and [accounting](/docs/integrate/cdr-reconciliation).
+- Reproducing a failure? Use [Rove Lab](/docs/lab) and the [reason reference](/docs/reference/reason-codes).
+
+## Supported scope
+
+Each Lane owns one channel, a bound meter/session identity, an immutable fixed energy tariff, and an explicit exposure policy. Accepted evidence establishes trusted service. A verified cumulative voucher backed by confirmed funding establishes payment protection. Settlement captures value separately. Final accounting checks four monetary totals and two energy totals before closure.
+
+Rove supports a narrow P-256 OCMF profile, a controlled OCPI-style accounting input, and the configured Tempo reserve precompile. It is not a full OCPI transport, OCPP control server, invoice system, or production PKI. No FX, tax, parking, or multipart tariffs are supported.
+
+## Integration prerequisites
+
+An authenticated meter transport must bind the correct session and select an allowed meter key. Payment requires cooperating payer, payee, and voucher signers, a supported configured asset/network, and confirmed reserve. Operational state requires the persistent engine and PostgreSQL. A production CPMS must consume and enforce the pause output on the physical charger.
+
+The manual and search are public and run independently of these services. [Trust and authority](/docs/architecture/trust-and-authority) explains what each source can prove. [API reference](/docs/reference/api) describes the current controlled-development access boundary.

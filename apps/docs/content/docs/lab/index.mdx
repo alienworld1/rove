@@ -1,0 +1,37 @@
+---
+title: "Rove Lab"
+description: "Reproduce the protection loop with signed digital-twin inputs and an explicit payment source."
+---
+
+Rove Lab runs deterministic multi-Lane inputs through the normal evidence verifier, protection engine, persisted events, and effect path. The local GUI uses deterministic payment simulation. It never silently turns a GUI run into live Tempo funding.
+
+## Local workflow
+
+Use Node 22+, pnpm 11.19.0, PostgreSQL, and a matching random `DEMO_SESSION_TOKEN` of at least 48 hexadecimal characters in engine/web ignored settings. Set `DATABASE_URL` for the engine; keep secrets out of docs configuration.
+
+```sh
+pnpm install
+pnpm --filter @rove/persistence db:migrate
+pnpm --filter @rove/engine simulate:charging seed
+pnpm dev:engine
+```
+
+In separate terminals start `pnpm dev:web` and `pnpm dev:docs`. Open the app root on port 3000, enter the local access key at the existing controlled-session gate, select the Northstar Mobility ↔ Voltway scenario, then start/step/play the trace. No Tempo funds are required locally. Lane C rejects a corrupted signature; its bound reaches 699 then 700 base units and pauses before valid recovery. Lanes A/B continue independently.
+
+## Scenario builder
+
+Open **Scenario builder**, edit parties, tariff, policies, Lane identities/power and fault events, or the structured definition. Changing the built-in scenario creates an editable copy. Choose **Validate scenario**, resolve field/path issues, then save/start the validated definition. A saved scenario has a compiler-backed digest; selecting a stale digest cannot silently run changed content.
+
+Use [the complete scenario and schema](/docs/lab/scenario-schema) and [fault inputs](/docs/lab/fault-library). Do not confuse a playback pause with `PAUSE_REQUIRED`: the former controls trace playback; the latter is a protection/control result.
+
+## Headless and live paths
+
+```sh
+pnpm --filter @rove/engine lab:run
+```
+
+The headless local command creates fresh independent channels in local simulation and retains history. For an explicitly selected live path, configure verified `TEMPO_*` settings and funded test-only accounts, run `probe:payment`, then `lab:run --live`. It creates three real testnet channels and may fund, top up, and partially settle them. It waits for actual confirmation; RPC waiting is separate from trace time.
+
+If a live run stops before any scenario dispatch, `lab:run --live --resume <run-id>` reconciles that same run. `lab:run --live --verify <run-id>` checks completed state without sending transactions. Inspect partially dispatched work before continuing. The Lab run leaves channels open; [completion proof](/docs/integrate/tempo/channel-lifecycle#close-and-refund) closes and accounts for reserve.
+
+The twin models power/time and local pause enforcement. It is not production charger telemetry or an OCPP controller. [Trust boundaries](/docs/architecture/trust-and-authority) remain explicit.

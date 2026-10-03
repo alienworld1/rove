@@ -27,6 +27,24 @@ The Corridor requires PostgreSQL but the local deterministic payment scenario ne
 
 The saved Northstar Mobility ↔ Voltway digital-twin scenario includes a rejected meter reading, an exact protection pause, and recovery. The scenario builder is available below the launch controls. Use `pnpm --filter @rove/engine lab:run` for the matching headless protection check. The three local payment channels are deterministic. With the funded Tempo testnet configuration, `pnpm --filter @rove/engine lab:run --live` separately runs three real channel workflows; see [charging storage and local checks](docs/charging-storage.md) before submitting testnet transactions.
 
+## Documentation
+
+The public integration manual runs independently of PostgreSQL, the engine, wallets, and RPC access:
+
+```sh
+pnpm dev:docs
+```
+
+Open [Rove Docs](http://localhost:3001/docs). The introduction links to EV roaming, protection, evidence, channel lifecycle, Lab, API, reasons, and final accounting. **Docs** and contextual guidance in the product open a new tab without changing the selected Lane/event.
+
+Local development defaults to docs on port 3001 and the product on port 3000. For builds/deployment, explicitly set `NEXT_PUBLIC_DOCS_ORIGIN` for web and `NEXT_PUBLIC_APP_ORIGIN` for docs to their HTTP(S) origins, without paths, credentials, queries, or fragments. Local build example:
+
+```sh
+NEXT_PUBLIC_DOCS_ORIGIN=http://localhost:3001 NEXT_PUBLIC_APP_ORIGIN=http://localhost:3000 pnpm build
+```
+
+The versioned public narrative lives in `apps/docs/content/docs`; repository integration guides retain runnable setup and proof details. See [documentation maintenance and checks](docs/documentation.md).
+
 ## Verification
 
 ```sh

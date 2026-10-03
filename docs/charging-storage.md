@@ -1,5 +1,7 @@
 # Charging storage and local checks
 
+Read [Rove Lab](http://localhost:3001/docs/lab), the [scenario schema](http://localhost:3001/docs/lab/scenario-schema), and the [API reference](http://localhost:3001/docs/reference/api) in the maintained manual. Start it with `pnpm dev:docs`; see [docs setup](documentation.md).
+
 Rove stores each charging Corridor, Lane, verification, protection decision, and requested effect in PostgreSQL. The web page reads a safe projection from the engine. It does not calculate protection values.
 
 ## Prepare the services
@@ -12,7 +14,7 @@ pnpm --filter @rove/persistence db:migrate
 pnpm dev:engine
 ```
 
-Start `pnpm dev:web` in another terminal. Open `http://localhost:3000`, enter the local access key in **Integration status**, and select **Open status**. The charging area uses the same restricted session. Without it, reads return an access denial.
+Start `pnpm dev:web` in another terminal. Open `http://localhost:3000`, enter the local access key at **Connect to the controlled session**. Without it, reads return an access denial.
 
 ## Run Corridor Lab locally
 

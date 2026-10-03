@@ -1,0 +1,36 @@
+---
+title: "Protection Window"
+description: "Read protected value, uncertainty, headroom, and the exact pause boundary."
+---
+
+The protection engine uses integer arithmetic. Monetary values below are settlement-asset base units; energy is Wh, maximum power is W, elapsed time is ms. Tariff precision and asset precision are explicit.
+
+## Distinct values
+
+| Value                       | Meaning                                                                                                                      |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Trusted delivered value     | Accepted cumulative energy priced by the fixed tariff; no rejected input contributes                                         |
+| Authorized value            | Verified cumulative voucher, bounded by trusted value and confirmed deposit                                                  |
+| Protected value / watermark | `min(trusted, authorized)`; monotonic across accepted transitions                                                            |
+| Settled value               | Cumulative captured payment; must not exceed authorization                                                                   |
+| Confirmed deposit           | Cumulative funded capacity from authoritative observations, not remaining escrow                                             |
+| Funded headroom             | `confirmedDeposit - authorizedValue`; unavailable deposit remains null                                                       |
+| Unverified service bound    | Conservative possible additional service since last trusted evidence, only while service has begun and evidence is not fresh |
+| Worst-case delivered value  | `trusted + unverifiedBound`                                                                                                  |
+| Unprotected exposure bound  | `max(0, worstCase - protected)`                                                                                              |
+
+The unverified service bound is an upper bound, not a meter reading. Unknown evidence is never an exact consumption value or a verified zero.
+
+## Precision and rounding
+
+`tariffValue` floors `Wh × tariffPerKwh × 10^assetDecimals / (1000 × 10^tariffDecimals)`. `maxEnergyWh` rounds `W × elapsedMs / 3,600,000` upward. `conservativeTariffBound` directly rounds `W × elapsedMs × tariffPerKwh × 10^assetDecimals / (3,600,000,000 × 10^tariffDecimals)` upward, avoiding intermediate energy rounding.
+
+These helpers live in `packages/protection/src/index.ts`. State calculations and invariants live in `packages/protection/src/transition.ts`; their adjacent tests cover equality and rounding. For the controlled Lane C trace (350000 W, tariff 3600, zero decimal scales), 1997 ms after the last trusted reading produces 699 units, and 2000 ms produces 700 units.
+
+## Pause required
+
+`exposure >= maxUnprotectedExposure` requires `PAUSE_REQUIRED`, including equality. An explicit pause or zero-grace evidence exhaustion can also require a pause. Warning and risk thresholds represent narrowing room before the maximum; low funded headroom can produce `WATCH`. Recovery requires current evidence, chain state, available signing, and restored invariants before returning to `PROTECTED`.
+
+Rove emits a pause requirement. Your CPMS must enforce it on a physical charger. The Lab digital twin enforces its own boundary without claiming to control a real charger. After verified service cessation, completion caps the uncertainty clock at the recorded end time.
+
+Read [meter rejection reasons](/docs/reference/reason-codes), [funding and top-ups](/docs/integrate/tempo/channel-lifecycle#top-ups), and [safe recovery](/docs/architecture/failure-and-recovery).

@@ -1,0 +1,62 @@
+[
+  {
+    "source": "apps/engine/src/server.ts",
+    "paths": [
+      "/api/corridors",
+      "/api/events/stream",
+      "/api/lab/",
+      "/api/lab/runs",
+      "/api/lab/scenarios",
+      "/api/lanes",
+      "/health"
+    ],
+    "matchers": [
+      "/^\\/api\\/corridors\\/([^/]+)$/",
+      "/^\\/api\\/lab\\/runs\\/([^/]+)$/",
+      "/^\\/api\\/lab\\/runs\\/([^/]+)\\/(play|pause|step|reset|speed|check)$/",
+      "/^\\/api\\/lab\\/scenarios\\/([^/]+)$/",
+      "/^\\/api\\/lanes\\/([^/]+)$/",
+      "/^\\/api\\/lanes\\/([^/]+)\\/(completion|complete|check|close|cdr|accounting|end)$/",
+      "/^\\/api\\/lanes\\/([^/]+)\\/commands$/",
+      "/^\\/api\\/lanes\\/([^/]+)\\/evidence$/",
+      "/^\\/api\\/lanes\\/([^/]+)\\/inspector$/"
+    ],
+    "schemas": [
+      "completionCommandSchema",
+      "createCorridorSchema",
+      "idSchema",
+      "labSpeedSchema",
+      "labStartRunSchema",
+      "labTransportSchema",
+      "laneCommandSchema",
+      "readinessSchema",
+      "realtimePresentationEventSchema",
+      "startLaneSchema"
+    ]
+  },
+  {
+    "source": "apps/web/app/api/charging/[...path]/route.ts",
+    "paths": [],
+    "matchers": [],
+    "schemas": [
+      "causalInspectorTraceSchema",
+      "completionCommandSchema",
+      "completionSummarySchema",
+      "corridorOperatingViewSchema",
+      "idSchema",
+      "presentationCursorSchema"
+    ]
+  },
+  {
+    "source": "apps/web/app/api/lab/[...path]/route.ts",
+    "paths": [],
+    "matchers": [],
+    "schemas": []
+  },
+  {
+    "source": "apps/web/app/api/events/stream/route.ts",
+    "paths": ["/api/events/stream"],
+    "matchers": [],
+    "schemas": ["idSchema", "presentationCursorSchema"]
+  }
+]

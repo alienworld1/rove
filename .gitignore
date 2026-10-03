@@ -65,3 +65,6 @@ node_modules/
 out/
 cache/
 test-results/
+
+**/.next/
+**/.source/

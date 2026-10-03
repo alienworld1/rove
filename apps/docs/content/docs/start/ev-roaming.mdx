@@ -1,0 +1,19 @@
+---
+title: "EV Roaming in 5 Minutes"
+description: "Follow the driver\u2019s session from commercial access to delayed accounting."
+---
+
+A driver contracts with an **eMSP** (e-Mobility Service Provider), which provides charging access and later bills the driver. The charger may belong to another business: the **CPO** (Charge Point Operator), which delivers electricity and is owed payment for it.
+
+## From access to accounting
+
+1. The eMSP arranges roaming access with the CPO. **OCPI** (Open Charge Point Interface) is a business-facing exchange protocol for information such as locations, authorization, sessions, and accounting records.
+2. The CPO's **CPMS** (Charge Point Management System) operates its chargers. **OCPP** (Open Charge Point Protocol) commonly connects chargers to that management system. Rove does not replace either system.
+3. During charging, the meter records cumulative energy. **OCMF** (Open Charge Metering Format) carries signed metering data; Rove verifies only the documented [supported profile](/docs/integrate/meter-evidence).
+4. After service ends, the CPO supplies a **CDR** (Charge Detail Record), the concluded-session energy and cost used for later commercial accounting. The eMSP and CPO may settle after electricity has already been delivered.
+
+## Why protect an active session?
+
+The commercial delay can leave the CPO exposed to delivered service that is not yet collectible. Rove uses signed readings and progressively funded cumulative authorization to make the protected amount inspectable while charging continues. It tracks uncertainty conservatively when readings or payment authority become unavailable.
+
+A bound is not a substitute for a reading, and a payment receipt is not proof of electricity delivery. [How Rove works](/docs/start/how-rove-works) connects these separate sources. [CDR reconciliation](/docs/integrate/cdr-reconciliation) explains the final check; it does not calculate a driver invoice.

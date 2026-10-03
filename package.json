@@ -5,11 +5,12 @@
   "scripts": {
     "dev:web": "pnpm --filter @rove/web dev",
     "dev:engine": "pnpm --filter @rove/engine dev",
-    "lint": "pnpm --filter @rove/web lint && pnpm exec prettier --check .",
+    "lint": "pnpm --filter @rove/web lint && pnpm --filter @rove/docs lint && pnpm exec prettier --check .",
     "format": "pnpm exec prettier --write .",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "build": "pnpm -r build"
+    "build": "pnpm -r build",
+    "dev:docs": "pnpm --filter @rove/docs dev"
   },
   "devDependencies": {
     "prettier": "^3.6.2",

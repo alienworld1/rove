@@ -1,0 +1,22 @@
+---
+title: "Trust and Authority"
+description: "Identify what a reading, signer, chain receipt, and database projection can prove."
+---
+
+Rove combines cooperating sources; it does not remove every source of trust. The protection claim depends on correct meter provenance, authenticated identity binding, confirmed reserve, and physical enforcement.
+
+## Evidence authority
+
+The verifier selects a configured public key and checks original signed bytes, meter identity, transport session binding, sequence, replay, energy continuity, and age. A valid signature under the wrong key policy or unauthenticated session mapping does not establish the intended service. The current allow-list is not production PKI, certification, key rotation, or universal charger support.
+
+## Payment authority
+
+Payer, payee, and voucher signer cooperate. The configured Tempo reserve and network define funded capacity and capture. A submitted hash is not a confirmation. Voucher verification and current authoritative chain observations are prerequisites for advancement; unavailable state cannot silently grant protection.
+
+## Projection and control
+
+PostgreSQL provides durable orchestration and historical observations. A cached deposit is not new chain truth; database projection limits are explicit. The browser cannot submit payment observations or choose final money totals. Digital-twin inputs model service and sign controlled records; they are not physical charger telemetry.
+
+Rove emits a pause requirement. Your CPMS must enforce it on a physical charger. The current Lab control stops a local twin; no production OCPP CSMS is implemented.
+
+Read [evidence integration](/docs/integrate/meter-evidence), [channel lifecycle](/docs/integrate/tempo/channel-lifecycle), and [security limitations](/docs/reference/security) before using the controlled workflows outside local development.

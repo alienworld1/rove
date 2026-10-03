@@ -1,0 +1,23 @@
+---
+title: "How Rove Works"
+description: "Understand the causal path from signed evidence to protection and closure."
+---
+
+Rove advances protection only when the evidence and payment boundaries agree. The browser displays the engine's persisted projection; it does not authorize money or decide risk.
+
+## The operating loop
+
+1. Bind the Lane to a Corridor, external session, charger, meter key, fixed tariff, power limit, and separate channel.
+2. Parse and verify original signed meter bytes. Accepted cumulative readings become trusted Wh and integer billable value.
+3. Confirm channel funding. A cooperating signer supplies a cumulative voucher no larger than trusted value or confirmed deposit.
+4. Verify that authorization. Protected value is the lesser of trusted value and valid authorization; it is distinct from settlement.
+5. Request rolling top-ups as headroom narrows. Only confirmed observations extend funded capacity. Partial settlement may capture protected value during service.
+6. When evidence is untrusted/stale, grow a conservative upper bound. At the configured exposure boundary, require a pause. Rove emits a pause requirement. Your CPMS must enforce it on a physical charger.
+7. Recover through accepted evidence, current channel truth, restored signing, and invariant checks. Recovery is not a UI reset.
+8. Verify final signed evidence and immutable accounting, settle the final total, compare totals, and close with attributed reserve refund proof.
+
+## Inspect the cause
+
+The Corridor groups independent Lanes. An attached Inspector shows the evidence or payment cause behind an event. A rejection freezes trusted advancement, even while a digital twin's potential service bound grows. [Protection calculations](/docs/concepts/protection-window) explain that difference.
+
+[Rove Lab](/docs/lab) reproduces the loop using controlled signed inputs and local payment simulation. The explicitly selected live CLI instead waits for Tempo confirmations. [Failure and recovery](/docs/architecture/failure-and-recovery) explains why an unknown outcome must be checked before retrying.

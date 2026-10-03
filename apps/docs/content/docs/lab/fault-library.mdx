@@ -1,0 +1,27 @@
+---
+title: "Fault Library"
+description: "Select controlled inputs without mistaking them for real network failures."
+---
+
+These are actual `labEventSchema` discriminants, not persisted event names. All inputs use the shared timing envelope in [scenario schema](/docs/lab/scenario-schema). Readings require `{ cumulativeMilliWh: "<integer>" }`; other inputs require strict empty parameters.
+
+| Input                | Parameters | Effect and supported recovery                                                     |
+| -------------------- | ---------- | --------------------------------------------------------------------------------- |
+| `session_start`      | empty      | Binds/starts this twin Lane before its readings                                   |
+| `valid_reading`      | reading    | Signed controlled cumulative evidence; normal verification                        |
+| `recovery_reading`   | reading    | Valid reading after a fault; normal evidence/payment checks still apply           |
+| `corrupt_signature`  | reading    | Cryptographically invalid controlled signature; cannot advance trusted value      |
+| `wrong_meter`        | reading    | Validly signed input from wrong bound meter; restore correct source               |
+| `replay_reading`     | empty      | Reuses an earlier reading; duplicate does not advance value                       |
+| `sequence_break`     | reading    | Signs a discontinuous sequence; restore expected continuity                       |
+| `evidence_gap`       | empty      | Withholds evidence so uncertainty grows; accepted recovery reading required       |
+| `signer_unavailable` | empty      | Models unavailable authorization; duration or later `signer_restored` required    |
+| `signer_restored`    | empty      | Restores local signer availability; invariants still gate authorization           |
+| `top_up_failure`     | empty      | Local payment adapter failure; no real network outage is induced                  |
+| `tempo_unavailable`  | empty      | Models unavailable chain observation; duration or later `tempo_restored` required |
+| `tempo_restored`     | empty      | Restores local observation availability; current authority must be checked        |
+| `protection_tick`    | empty      | Advances protection checks at trace time; can reach pause boundary                |
+
+Positive durations for evidence gap/signer/Tempo unavailability generate a restore/tick at the end; generated events are part of deterministic compilation, not an extra user input type. A recovery reading must follow a fault; it cannot clear an actual chain failure merely by resetting UI state.
+
+`apps/engine/src/corridor-lab.ts` dispatches these local controls. The separately selected live CLI uses actual confirmations; its RPC/transaction outcomes cannot be manufactured by a local fault label. Read [failure/recovery](/docs/architecture/failure-and-recovery) and [reason codes](/docs/reference/reason-codes).

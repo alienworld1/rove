@@ -1,5 +1,7 @@
 # Finish a charging session
 
+The maintained manual explains [CDR reconciliation](http://localhost:3001/docs/integrate/cdr-reconciliation) and [close/refund](http://localhost:3001/docs/integrate/tempo/channel-lifecycle#close-and-refund). Start it with `pnpm dev:docs`; see [docs setup](documentation.md). This guide retains runnable setup and proof pointers.
+
 Focus a Lane in the Corridor after its controlled service trace has stopped. Choose **Finish session** and confirm. Rove verifies a final signed reading, retains an immutable accounting fixture, authorizes any remaining accepted service value, and settles the final cumulative amount. **Close channel** becomes available after all four totals and both energies match and earlier payment work is resolved. The channel remains visible after closure and refresh.
 
 **Check again** checks existing work. Pending transactions continue after navigation. Differences remain visible and cannot be corrected by changing the accounting record or forcing a match.

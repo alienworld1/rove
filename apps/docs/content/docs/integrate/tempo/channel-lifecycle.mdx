@@ -1,0 +1,46 @@
+---
+title: "Tempo Channel Lifecycle"
+description: "Separate funded capacity, cumulative authorization, captured value, and canonical closure."
+---
+
+The current adapter uses the configured TIP-1034 reserve precompile. `packages/tempo/src/index.ts`, `channel.ts`, and `protocol.ts` implement the calls, typed configuration, descriptor binding, receipt checks, and voucher domain. One channel belongs to each Lane.
+
+## Open and fund
+
+The payer opens a channel with the bound parties, asset, signer, salt, and initial deposit. The engine retains the request and confirmation separately. Funding is available only after authoritative confirmation. Reserve is progressively extended rather than assuming the full session is prepaid.
+
+## Vouchers
+
+Cumulative EIP-712 vouchers authorize an amount for the channel; they are not incremental transfers. The adapter verifies descriptor/network/asset identity, signer/digest, monotonicity, and cumulative limits. Authorization cannot exceed trusted service or confirmed deposit. `payment.voucher_verified` records advancement after verification, not merely after a signature request.
+
+## Top-ups
+
+Headroom is confirmed deposit minus cumulative authorization. The reserve policy queues `payment.top_up_requested` at the configured low-headroom threshold. A request or submitted hash grants no additional headroom. Confirmed deposit increases only from the chain observation; retries check existing operations first. A fixture `top_up_failure` is a controlled local adapter result, not an induced Tempo outage.
+
+## Settlement
+
+Partial settlement captures a cumulative voucher while service continues; interval and minimum-unsettled thresholds bound when it is requested. Settled value remains separate from protected value. Final completion bypasses ordinary partial-settlement thresholds when the final valid authorization needs capture. Pending remains pending until confirmed; a failed receipt and an unknown outcome require different recovery.
+
+## Close and refund
+
+Close requires accepted final evidence, immutable accounting, matching trusted/authorized/settled/accounting totals and energies, and resolved earlier work. Rove's cooperative path verifies a canonical `ChannelClosed` receipt, matching transaction descriptor/capture arguments, parties/emitter, final cumulative captured amount, exact unused reserve, and cleared live storage. Refund is attributed to this channel: `depositBeforeClose - finalSettledValue`.
+
+Close may clear live channel storage. Historical cumulative settlement and closure references remain persisted. Empty storage, a missing live channel, or aggregate wallet movement alone is insufficient closure/refund proof. Verified zero service and zero refund are supported and remain distinct from unavailable values. Request-close/withdraw capabilities in the protocol are not an automated production dispute service in Rove.
+
+## Configuration and dated evidence
+
+The canonical [Tempo repository](https://github.com/tempoxyz/tempo#as-a-user), [TIP-1034](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1034.md), [reserve interface](https://github.com/tempoxyz/tempo/blob/main/tips/verify/src/interfaces/ITIP20ChannelReserve.sol), [Session draft](https://paymentauth.org/draft-tempo-session-00.html), and [MPPx Session design](https://github.com/wevm/mppx/blob/main/src/tempo/session/README.md) were inspected on 2026-09-27. Configuration selects RPC, chain, asset, decimals, backend, and cooperating signer identities. That dated environment was Moderato chain 42431 with six-decimal pathUSD; it is not a guaranteed current endpoint or production recommendation.
+
+The recorded funded lifecycle proof confirmed top-up, partial settlement, and a [cooperative close refund](https://explore.tempo.xyz/tx/0xb2398023e63e207b33383e2e1e90946cca7f754ac78a13059520da41aa2693a0) on 2026-09-27. Completion verification on 2026-10-03 confirmed final totals and an attributed Lane C refund of 458 base units after settling 342 from deposit 800: [close receipt](https://explore.tempo.xyz/tx/0x9a67bdf03c1c23af4019324461d0d9ea0f10d038812aab635a28137d77de8312), block 38008712, log 4. These are public dated observations, not live state.
+
+## Reproduce deliberately
+
+The following workflow creates real testnet channels, can submit top-ups, captures payment, and closes channels. Use fresh funded test-only payer/payee/signer accounts and ignored local secret settings; addresses must match keys. Read the repository's `docs/integrations.md` and `docs/session-completion.md` for configuration. Inspect submitted/pending/unknown operations before rerunning funding.
+
+```sh
+pnpm --filter @rove/engine probe:payment
+pnpm --filter @rove/engine lab:run --live
+pnpm --filter @rove/engine proof:completion <run-id>
+```
+
+These commands are not needed to read/search docs or test contextual links. [Failure and recovery](/docs/architecture/failure-and-recovery) covers uncertainty; [accounting reconciliation](/docs/integrate/cdr-reconciliation) covers final prerequisites.

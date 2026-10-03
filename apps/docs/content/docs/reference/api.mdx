@@ -1,0 +1,487 @@
+---
+title: "API Reference"
+description: "Read actual engine routes and browser proxy boundaries with current schema contracts."
+---
+
+The engine defaults to port 4100. The operating web app defaults to port 3000. These APIs are controlled-development interfaces, not a production partner SDK. The docs-only `GET /api/search` reads the public corpus and has no engine authority.
+
+## Authentication and errors
+
+Engine `/health` is public. Operational routes require `NODE_ENV=development`, a configured `DEMO_SESSION_TOKEN`, and `Authorization: Bearer <local-access-key>`. Browser proxies use the existing HttpOnly controlled-session cookie and forward the secret server-side. Completion mutations additionally require the browser request Origin to match the web origin. Docs neither accepts nor transfers this key.
+
+Strict Zod schemas validate shape/units and identity; Lane body ID must match path. Engine JSON intake is capped at 70000 bytes; browser completion at 2000 bytes, Lab proxy at 70000 bytes. Do not generalize the completion Origin check into a claim that every existing proxy has identical CSRF behavior.
+
+Engine errors: malformed contracts/validation 400; access denial 403; unknown record 404; command/version conflict 409 (current version when supplied); unavailable storage/recovery or unhandled source failure 503. SSE limits excess concurrent connections to 429. Engine errors contain safe code/message/currentVersion; internal secrets/stacks are not public responses.
+
+## Engine routes
+
+Source for every engine row: `apps/engine/src/server.ts`. Schemas: `packages/contracts/src` (accounting: `packages/ocpi/src/index.ts`).
+
+| Method     | Engine path                                       | Behavior / output                                                         | Input or output contract          |
+| ---------- | ------------------------------------------------- | ------------------------------------------------------------------------- | --------------------------------- |
+| GET        | `/health`                                         | Public readiness; 200 ready / 503 blocked                                 | `readinessSchema`                 |
+| GET / POST | `/api/corridors`                                  | List / create; POST 201, idempotent command                               | `createCorridorSchema`            |
+| GET        | `/api/corridors/:id`                              | Safe current or trace projection                                          | `corridorOperatingViewSchema`     |
+| POST       | `/api/lanes`                                      | Start bound Lane, configured live payment adapter required; 201           | `startLaneSchema`                 |
+| GET        | `/api/lanes/:id`                                  | Current Lane projection                                                   | `laneProjectionSchema`            |
+| GET        | `/api/lanes/:id/inspector`                        | Safe history or selected event (?event=ID)                                | `causalInspectorTraceSchema`      |
+| POST       | `/api/lanes/:id/evidence`                         | ObserveEvidence only; 200 committed projection                            | `laneCommandSchema`               |
+| POST       | `/api/lanes/:id/commands`                         | TickProtectionClock, RequirePause, BeginRecovery, PaymentUnavailable only | `laneCommandSchema`               |
+| GET        | `/api/lanes/:id/completion`                       | Summary, readiness, allowed controls                                      | `completionSummarySchema`         |
+| GET        | `/api/lanes/:id/accounting`                       | Retained immutable source text and normalized accounting                  | `accountingRecordSchema`          |
+| POST       | `/api/lanes/:id/complete`                         | Controlled server-supplied final evidence/accounting; 202                 | `completionCommandSchema`         |
+| POST       | `/api/lanes/:id/check`                            | Inspect/recover retained work; 202                                        | `completionCommandSchema`         |
+| POST       | `/api/lanes/:id/close`                            | Request canonical final close; 202                                        | `completionCommandSchema`         |
+| POST       | `/api/lanes/:id/end`                              | External CompleteLane with external_adapter cessation; 202                | `laneCommandSchema`               |
+| POST       | `/api/lanes/:id/cdr`                              | External ReceiveCDR with raw immutable record; 202                        | `laneCommandSchema`               |
+| GET / POST | `/api/lab/scenarios`                              | List / validate and save definition (201)                                 | `labScenarioSchema`               |
+| GET        | `/api/lab/scenarios/:id`                          | Definition, digest, validation status                                     | `labScenarioDetailSchema`         |
+| POST       | `/api/lab/runs`                                   | Start saved scenario and digest; 201                                      | `labStartRunSchema`               |
+| GET        | `/api/lab/runs/:id`                               | Run, Lane projections, environment, dispatch events                       | `labRunViewSchema`                |
+| POST       | `/api/lab/runs/:id/{play,pause,step,reset,check}` | Versioned playback or check; reset retains prior history                  | `labTransportSchema`              |
+| POST       | `/api/lab/runs/:id/speed`                         | Version plus speed 0.25 / 0.5 / 1 / 2 / 4                                 | `labSpeedSchema`                  |
+| GET        | `/api/events/stream`                              | Presentation SSE; query/cursor bounds and connection limit                | `realtimePresentationEventSchema` |
+
+## Browser routes
+
+`GET /api/charging/corridors[/:id]` and `/api/charging/lanes/:id[/inspector|completion|accounting]` proxy allowed reads. A Corridor trace selector is a decimal integer cursor; Inspector event selector is a validated ID. `POST /api/charging/lanes/:id/{complete|check|close}` accepts only `commandId`, `correlationId`, `laneId`, `expectedVersion`. No amount, final evidence, accounting record, or chain observation can be supplied through these browser mutations.
+
+`/api/lab/scenarios[/:id]`, `/api/lab/runs[/:id]`, and run transport paths proxy the listed Lab operations. `GET /api/events/stream` proxies allowed presentation SSE. `/api/integration-status` establishes/reads the existing controlled session; `/api/health` reports readiness. Browser proxy availability depends on the engine and access gate; public docs do not.
+
+## Commands, units, and idempotency
+
+The Lane command envelope carries `commandId`, `correlationId`, `laneId`, `expectedVersion`, optional injected development `now`, and a discriminated `payload`. Identical command delivery returns the retained outcome; changed content under the same command ID conflicts. A stale version returns conflict: refresh and reassess intent before issuing another command.
+
+Money/Wh/power are decimal integer strings with explicit scales; clocks are ISO timestamps or integer ms offsets. JSON floats cannot stand in for exact accounting strings. External evidence and CDR endpoints use the Lane envelope. `ObserveEvidence` carries raw signed text, bound transport session ID, and explicit final marker where required. `/end` accepts `CompleteLane` with `endSource: "external_adapter"`; `/cdr` accepts `ReceiveCDR` with raw immutable accounting text. External payment observations are never accepted through the generic HTTP command endpoint.
+
+### Completion command example
+
+The following safe browser body is schema-validated; replace identifiers/version from your current authenticated view. It does not choose money totals.
+
+```json
+{
+  "commandId": "finish-example",
+  "correlationId": "request-example",
+  "laneId": "lane-example",
+  "expectedVersion": 3
+}
+```
+
+### completionCommandSchema
+
+Current structural JSON Schema; semantic source checks still apply.
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "commandId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "laneId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "expectedVersion": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    }
+  },
+  "required": ["commandId", "correlationId", "laneId", "expectedVersion"],
+  "additionalProperties": false
+}
+```
+
+### laneCommandSchema
+
+Current structural JSON Schema; semantic source checks still apply.
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "commandId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "causationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "laneId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "expectedVersion": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "now": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "payload": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "ObserveEvidence"
+            },
+            "raw": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 65536
+            },
+            "transportSessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            },
+            "final": {
+              "type": "boolean"
+            }
+          },
+          "required": ["type", "raw", "transportSessionId"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "ObservePayment"
+            },
+            "channelId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            },
+            "network": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            },
+            "assetId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            },
+            "observedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+            },
+            "confirmedDeposit": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            },
+            "settledValue": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            },
+            "chainHeight": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "type",
+            "channelId",
+            "network",
+            "assetId",
+            "observedAt",
+            "confirmedDeposit",
+            "settledValue",
+            "chainHeight"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "PaymentUnavailable"
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "PAYMENT_CHAIN_STATE_UNAVAILABLE",
+                "PAYMENT_CHAIN_STATE_STALE"
+              ]
+            }
+          },
+          "required": ["type", "reason"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "CompleteLane"
+            },
+            "serviceStartedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+            },
+            "serviceEndedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+            },
+            "endSource": {
+              "type": "string",
+              "enum": ["controlled_twin", "external_adapter"]
+            }
+          },
+          "required": ["type", "serviceEndedAt", "endSource"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "ReceiveCDR"
+            },
+            "raw": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60000
+            }
+          },
+          "required": ["type", "raw"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "CheckCompletion"
+            }
+          },
+          "required": ["type"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "CloseChannel"
+            }
+          },
+          "required": ["type"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "TickProtectionClock"
+            }
+          },
+          "required": ["type"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "RequirePause"
+            }
+          },
+          "required": ["type"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "BeginRecovery"
+            }
+          },
+          "required": ["type"],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "required": [
+    "commandId",
+    "correlationId",
+    "laneId",
+    "expectedVersion",
+    "payload"
+  ],
+  "additionalProperties": false
+}
+```
+
+## SSE and reload
+
+Request `GET /api/events/stream?corridor=<id>` with optional `run`, cursor, or `Last-Event-ID`. Data follows `realtimePresentationEventSchema`; event IDs/versions support ordering and deduplication. An out-of-window/future cursor emits `resync_required`. Reload the authoritative projection; SSE is not a money command or a durable replay of every domain payload. See `apps/engine/src/presentation-stream.ts` and the web stream proxy.
+
+### realtimePresentationEventSchema
+
+Current structural JSON Schema; semantic source checks still apply.
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "corridor_projection_changed",
+        "lane_projection_changed",
+        "lab_run_changed",
+        "resync_required"
+      ]
+    },
+    "corridorId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "laneId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._:-]+$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "runId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._:-]+$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "projectionVersion": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "reasonCode": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 120
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "eventType": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 120
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "laneVersion": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["eventType", "laneVersion"],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "id",
+    "type",
+    "corridorId",
+    "laneId",
+    "runId",
+    "projectionVersion",
+    "reasonCode",
+    "occurredAt",
+    "payload"
+  ],
+  "additionalProperties": false
+}
+```
+
+Read [system boundaries](/docs/architecture/system-overview), [Lab schema](/docs/lab/scenario-schema), and [security](/docs/reference/security).

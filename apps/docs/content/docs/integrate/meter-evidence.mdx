@@ -1,0 +1,30 @@
+---
+title: "Meter Evidence"
+description: "Integrate the supported signed OCMF profile without rewriting signed bytes."
+---
+
+`verifyOcmf` in `packages/evidence/src/index.ts` supports `OCMF|<original JSON data>|<signature JSON>` with a DER ECDSA P-256 / SHA-256 signature (`SD`) over the original UTF-8 data section. The configured public key is DER SPKI hex on `prime256v1`. Reserializing or normalizing the signed JSON changes the bytes and can invalidate the signature.
+
+Supported profile identifier: `ocmf-secp256r1-sha256`.
+
+## Input and checks
+
+The adapter accepts at most 64 KiB of raw UTF-8. Data has string `GS` meter serial, signed `PG` pagination `T<number>`, and 1–256 `RD` records. Supported readings use numeric kWh tokens and the recognized timestamp format; the verifier does not validate every OCMF transaction or register marker; kWh text has at most six fractional places and becomes integer milliWh. The trusted projection prices whole Wh. The session comes from authenticated transport binding, not an invented signed session field.
+
+`EvidenceInput` supplies `raw`, `publicKeyHex`, `expectedMeterId`, `expectedSessionId`, `transportSessionId`, `maxAgeMs`, `now`, and optionally the last accepted hash/time/milliWh/sequence. Checks reject malformed shape, unsupported key, invalid signature, wrong meter/session, duplicate raw hash, nonconsecutive signed sequence, stale/future time, and energy regression. Output includes accepted/reason, hash, signature/continuity/freshness flags, timestamp, sequence, and cumulative units when available.
+
+## Checked historical example
+
+`packages/evidence/fixtures/safe-ocmf-example.json` contains the two original signed records and public key from [SAFE e.V.'s transparency example](https://github.com/SAFE-eV/transparenzsoftware/blob/main/XML_Format.md). Source serial is `17619300`, pagination `T32`, and source-container transaction ID is `29`. The source time is historical; the proof injects a clock near that time and validates its continuity. A tampered signature is rejected. The key is an example source key, not a production trust root or a live cadence demonstration.
+
+```sh
+pnpm --filter @rove/engine proof:evidence
+```
+
+The checked fixture remains in the repository rather than being replaced with a fabricated signature. A live authenticated adapter supplies its real key/identity and actual freshness policy.
+
+## Final readings and rejection
+
+A final reading must be explicitly identified through the supported intake and associated with service cessation. Ordinary late readings cannot retroactively redefine a concluded session. Rejected evidence cannot advance trusted billable value or authorization; it retains a reason and only conservative uncertainty can grow. Never silently retry by skipping the expected sequence or accepting changed bytes under the old signature.
+
+Use [the exact reason reference](/docs/reference/reason-codes#evidence-signature-invalid), then [the bound](/docs/concepts/protection-window) and [recovery prerequisites](/docs/architecture/failure-and-recovery). See [API reference](/docs/reference/api) for the engine-only raw evidence envelope.

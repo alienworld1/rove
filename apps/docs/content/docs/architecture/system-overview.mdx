@@ -1,0 +1,31 @@
+---
+title: "System Overview"
+description: "Trace commands, durable effects, safe projections, and live notifications."
+---
+
+The web app runs at the application root. Corridor, Lab, focused Lanes, and Inspectors share this surface. Documentation is a separate public application.
+
+## Runtime boundaries
+
+```text
+Meter transport / controlled twin → engine evidence verifier
+Browser → allowed web proxy → engine command handler
+Engine ↔ PostgreSQL: Lane + events + transactional outbox
+Outbox worker → cooperating signers / Tempo reserve adapter
+Verified observations → Lane transition → persisted projection
+Projection + safe Inspector → browser; SSE → refresh notification
+Public MDX + checked references → docs + local search
+Pause requirement → external CPMS enforcement
+```
+
+`apps/engine/src/server.ts` owns the controlled HTTP boundary. `packages/persistence/src/index.ts` persists versioned state, events, idempotent command results, and outbox work. `apps/engine/src/outbox-worker.ts` executes/reconciles effects separately from the command commit. A database transaction commits related state and effects atomically; it does not make an external chain transaction atomic with PostgreSQL.
+
+## Concurrency and recovery
+
+Per-Lane serialization and optimistic versions prevent competing commands from advancing the same state twice. Separate Lanes can progress independently. Startup recovery checks uncertain external work before allowing new financial movement. An expired processing lease or lost receipt must be reconciled with authoritative state, not interpreted as permission to duplicate funding.
+
+## Read model and SSE
+
+`apps/engine/src/corridor-read-model.ts` composes safe current/historical projections. `apps/engine/src/presentation-stream.ts` encodes SSE. Notifications carry IDs, versions, and safe event context; they prompt authoritative reads and are not a complete domain-event payload stream. Cursor gaps or unsupported replay require a fresh snapshot. See [domain events](/docs/reference/domain-events) and [API reference](/docs/reference/api).
+
+Docs build/search do not import the engine, database, keys, or transaction adapters. [Trust and authority](/docs/architecture/trust-and-authority) explains why persisted projections cannot replace source truth.

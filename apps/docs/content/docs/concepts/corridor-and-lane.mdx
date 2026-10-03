@@ -1,0 +1,18 @@
+---
+title: "Corridor and Lane"
+description: "Separate bilateral context from each session\u2019s evidence and payment authority."
+---
+
+A **Corridor** is one bilateral relationship: payer eMSP ↔ payee CPO. It carries the asset/network, tariff snapshot, ordered protection thresholds, reserve policy, and settlement policy used to initialize Lanes.
+
+## Independent ownership
+
+A **Lane** binds one external charging session, charger, allowed meter identity, maximum power in watts, expected proof interval in milliseconds, and one channel. It retains its own version, evidence freshness, authorization, settlement, confirmed deposit, exposure bound, and completion record.
+
+The three controlled Lanes in the built-in Lab scenario share a Corridor but have separate reserves and channels. A fault in Lane C does not pool or borrow Lane A/B's protection. Aggregate Corridor projections summarize the individual Lanes; they do not create spendable funding or change per-Lane authority.
+
+## State and selection
+
+The persisted states are `INITIALIZING`, `PROTECTED`, `WATCH`, `AT_RISK`, `PAUSE_REQUIRED`, `RECOVERING`, `COMPLETING`, `RECONCILED`, and `CLOSED`. Current state, causal history, and historical trace selection are different views of the same retained records. Selecting an event sends no financial command.
+
+The canonical types are in `packages/domain/src/index.ts`; browser presentation contracts are in `packages/contracts/src/corridor.ts`. [System overview](/docs/architecture/system-overview) explains persistence and projections. [Protection window](/docs/concepts/protection-window) defines the values that must remain independent.

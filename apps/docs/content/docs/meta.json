@@ -1,0 +1,12 @@
+{
+  "title": "Rove Docs",
+  "pages": [
+    "index",
+    "start",
+    "concepts",
+    "architecture",
+    "integrate",
+    "lab",
+    "reference"
+  ]
+}

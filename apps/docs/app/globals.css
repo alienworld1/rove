@@ -1,0 +1,39 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@source "../node_modules/fumadocs-ui/dist/**/*.js";
+@theme {
+  --color-fd-background: #f1f3f2;
+  --color-fd-foreground: #18201e;
+  --color-fd-muted: #e7eae8;
+  --color-fd-muted-foreground: #47514e;
+  --color-fd-card: #ffffff;
+  --color-fd-card-foreground: #18201e;
+  --color-fd-popover: #ffffff;
+  --color-fd-popover-foreground: #18201e;
+  --color-fd-border: #bec6c2;
+  --color-fd-primary: #4d6672;
+  --color-fd-primary-foreground: #ffffff;
+  --color-fd-secondary: #f8f9f7;
+  --color-fd-secondary-foreground: #47514e;
+  --color-fd-accent: #e2e7e5;
+  --color-fd-accent-foreground: #18201e;
+  --font-sans: "IBM Plex Sans", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+}
+:focus-visible {
+  outline: 2px solid var(--color-fd-primary);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

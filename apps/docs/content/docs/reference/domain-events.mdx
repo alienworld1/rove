@@ -1,0 +1,63 @@
+---
+title: "Domain Events"
+description: "Distinguish persisted causal records from commands, observations, effects, and SSE."
+---
+
+The persisted event envelope is defined by `domainEvents` in `packages/persistence/src/schema.ts`. It includes ID, ordinal, type, schema version, Corridor/Lane/version/correlation/causation identifiers, reason, trace/occurred time, optional evidence/channel/transaction/CDR references, and a JSON payload. Ordinals order recorded notifications; trace time describes the controlled scenario independently of wall time.
+
+## Emitted names and conditions
+
+| Event                                                     | Emission / payload boundary                                                                                                                      | Source                                             |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------- |
+| `corridor.created`                                        | Corridor configuration committed.                                                                                                                | `packages/persistence/src/index.ts`                |
+| `lane.at_risk`                                            | Projection changed to AT_RISK; reason and exposure/protected values describe its condition.                                                      | `packages/protection/src/transition.ts`            |
+| `lane.closed`                                             | Projection changed to CLOSED; reason and exposure/protected values describe its condition.                                                       | `packages/protection/src/transition.ts`            |
+| `lane.completing`                                         | Projection changed to COMPLETING; reason and exposure/protected values describe its condition.                                                   | `packages/protection/src/transition.ts`            |
+| `lane.completion_checked`                                 | Completion prerequisites inspected; no successful match is implied.                                                                              | `packages/protection/src/completion.ts`            |
+| `lane.initializing`                                       | Projection changed to INITIALIZING; reason and exposure/protected values describe its condition.                                                 | `packages/protection/src/transition.ts`            |
+| `lane.pause_required`                                     | Projection changed to PAUSE_REQUIRED; reason and exposure/protected values describe its condition.                                               | `packages/protection/src/transition.ts`            |
+| `lane.protected`                                          | Projection changed to PROTECTED; reason and exposure/protected values describe its condition.                                                    | `packages/protection/src/transition.ts`            |
+| `lane.protection_checked`                                 | Protection evaluated without a different causal event.                                                                                           | `packages/persistence/src/index.ts`                |
+| `lane.protection_restored`                                | Normal invariants restored after degradation.                                                                                                    | `packages/protection/src/transition.ts`            |
+| `lane.reconciled`                                         | Projection changed to RECONCILED; reason and exposure/protected values describe its condition.                                                   | `packages/protection/src/transition.ts`            |
+| `lane.recovering`                                         | Projection changed to RECOVERING; reason and exposure/protected values describe its condition.                                                   | `packages/protection/src/transition.ts`            |
+| `lane.service_ended`                                      | Authenticated service cessation recorded; uncertainty is capped at end time.                                                                     | `packages/protection/src/transition.ts`            |
+| `lane.watch`                                              | Projection changed to WATCH; reason and exposure/protected values describe its condition.                                                        | `packages/protection/src/transition.ts`            |
+| `meter.evidence_accepted`                                 | Verified cumulative reading accepted; payload includes trusted energy/value context.                                                             | `packages/protection/src/transition.ts`            |
+| `meter.evidence_rejected`                                 | Reading rejected with reason/hash; no trusted advancement.                                                                                       | `packages/protection/src/transition.ts`            |
+| `pause.requested`                                         | External pause requirement queued; this does not prove physical enforcement.                                                                     | `packages/persistence/src/index.ts`                |
+| `payment.chain_observed`                                  | Bound authoritative deposit/settlement observation retained.                                                                                     | `packages/protection/src/transition.ts`            |
+| `payment.chain_unavailable`                               | Channel authority unavailable or stale.                                                                                                          | `packages/protection/src/transition.ts`            |
+| `payment.channel_closed`                                  | Canonical close/refund fact accepted; historical final settlement retained.                                                                      | `packages/persistence/src/index.ts`                |
+| `payment.close_requested`                                 | Close intent queued after final prerequisites.                                                                                                   | `packages/persistence/src/index.ts`                |
+| `payment.operation_failed`                                | Known effect failure supplied to transition.                                                                                                     | `packages/protection/src/transition.ts`            |
+| `payment.operation_rechecked`                             | Existing failed completion work rechecked through supported recovery.                                                                            | `packages/persistence/src/index.ts`                |
+| `payment.signer_restored`                                 | Signer available again; invariants still gate advancement.                                                                                       | `packages/protection/src/transition.ts`            |
+| `payment.signer_unavailable`                              | Voucher signer unavailable.                                                                                                                      | `packages/protection/src/transition.ts`            |
+| `payment.voucher_verified`                                | Cumulative authorization verified with amount/digest.                                                                                            | `packages/persistence/src/index.ts`                |
+| `session.accounting_mismatch`                             | Comparison differs; payload links comparison/CDR and signed deltas.                                                                              | `packages/persistence/src/index.ts`                |
+| `session.reconciled`                                      | Exact four-total and energy comparison matched.                                                                                                  | `packages/persistence/src/index.ts`                |
+| `payment.{open,top_up,settlement,close,voucher}_{status}` | Persisted outbox status transition (pending, submitted, completed, failed, or processing as actually recorded), not a universal receipt payload. | `packages/persistence/src/index.ts` → finishEffect |
+
+These are bounded source-backed names, including dynamic Lane-state and payment-operation families. Payloads vary by emitter; there is no exhaustive discriminated universal payload union. The browser's safe Inspector and projection are narrower public read contracts than internal storage.
+
+## What is not a domain event?
+
+- HTTP commands express intent: `ObserveEvidence`, `CompleteLane`, `ReceiveCDR`, `CloseChannel`, clock/pause/recovery commands.
+- Verified observations supply facts such as `EvidenceObserved`, `VoucherVerified`, `PaymentObserved`, and `ChannelClosed` to transitions.
+- Outbox effects request external work, such as `payment.top_up_requested`, `payment.settlement_requested`, `payment.close_requested`, and `pause.requested`. Some share a name with a persisted event; their payload/transport is not interchangeable.
+- SSE `projection_changed`, `lab_run_changed`, and `resync_required` are presentation notifications. They do not authorize payment or carry the whole domain payload.
+
+## Safe interpretation
+
+A requested/submitted payment event is not confirmation. Read the current operation and linked verified observation. A state event explains why the projection changed; it is not permission to bypass the current version/access gate. Example event names and schema structure below come only from versioned code, never a live private record.
+
+See [API and SSE](/docs/reference/api), [reason meanings](/docs/reference/reason-codes), and [system overview](/docs/architecture/system-overview).
+
+## Outbox and presentation name classification
+
+`payment.open_requested` queues initial channel funding. `payment.voucher_requested`, `payment.top_up_requested`, and `payment.settlement_requested` are durable effect intents, not confirmation. `payment.close_requested` is both a retained intent event and a close effect. `pause.requested` also crosses the external control boundary.
+
+The concrete lifecycle status names include `payment.open_submitted`, `payment.open_completed`, `payment.top_up_submitted`, `payment.top_up_completed`, `payment.settlement_submitted`, `payment.settlement_completed`, `payment.close_submitted`, `payment.close_completed`, `payment.voucher_completed`, and corresponding failed/pending statuses. They come from the dynamic operation/status emitter in `packages/persistence/src/index.ts`; completed work must be interpreted with its linked authoritative observation.
+
+`payment.settlement_confirmed` is a retained read-model compatibility label, not a separate current transition emitter. `lane.closed` is the dynamic CLOSED state name, while `payment.channel_closed` carries canonical closure facts. Effect names and compatibility labels do not imply a universal payload schema.

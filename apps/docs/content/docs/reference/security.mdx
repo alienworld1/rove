@@ -1,0 +1,24 @@
+---
+title: "Security and Supported Boundaries"
+description: "Understand controlled-session access, key handling, replay defenses, and production limitations."
+---
+
+The current operating interface is a restricted local development session. It is not enterprise IAM, partner authorization, production PKI, or a consumer wallet flow. Public documentation reading/search requires no operational credential.
+
+## Access and secrets
+
+The engine requires development mode and a matching bearer secret; the browser gate establishes the existing HttpOnly controlled-session cookie. The shared access key is at least 48 hexadecimal characters. Keep access keys, payer/payee/signer private keys, private RPC URLs, and database credentials in ignored local settings or appropriate secret storage. Never paste them into documentation links, snippets, search data, screenshots, or logs.
+
+Only `NEXT_PUBLIC_DOCS_ORIGIN` and `NEXT_PUBLIC_APP_ORIGIN` belong in cross-application navigation configuration. They must be HTTP(S) origins without credentials, paths, queries, or fragments. Deployed builds require explicit origins. Public links include no run/Lane/event payload or return redirect. The original product tab preserves inspection state.
+
+## Validation and source authority
+
+Strict schemas, body bounds, path/body identity checks, command idempotency, optimistic versions, evidence hash/sequence/time continuity, and monotonic voucher limits protect the current boundaries. Completion browser mutations check same Origin. These defenses do not replace production transport authentication, partner-scoped authorization, key rotation, rate controls, or a complete access audit.
+
+Authenticate meter session binding and key provenance; an allow-listed example key is not certification. Keep signer authority server-side. Current chain observations and canonical receipts establish money outcomes; database projections and submitted hashes cannot establish new funding. Browser consumers receive sanitized projections rather than raw operational secrets.
+
+## Physical and accounting limitations
+
+Rove emits a pause requirement. Your CPMS must enforce it on a physical charger. Controlled twin enforcement is not production OCPP control. Accounting supports immutable energy-only tax-free records with explicit currency/asset equivalence, not invoices, FX, refunds to drivers, or generalized OCPI conformance.
+
+Read [trust and authority](/docs/architecture/trust-and-authority), [API access boundaries](/docs/reference/api), and [meter integration](/docs/integrate/meter-evidence) before connecting real sources.

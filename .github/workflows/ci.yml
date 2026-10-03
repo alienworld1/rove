@@ -5,6 +5,9 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_DOCS_ORIGIN: http://localhost:3001
+      NEXT_PUBLIC_APP_ORIGIN: http://localhost:3000
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -15,6 +18,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @rove/docs check:references
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test

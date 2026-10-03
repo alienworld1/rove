@@ -1,5 +1,7 @@
 # Integration evidence
 
+The maintained manual explains [meter evidence](http://localhost:3001/docs/integrate/meter-evidence) and [channel lifecycle](http://localhost:3001/docs/integrate/tempo/channel-lifecycle). Start it with `pnpm dev:docs`; see [docs setup](documentation.md). This guide retains runnable setup and proof pointers.
+
 ## Signed meter source
 
 The fixture in `packages/evidence/fixtures/safe-ocmf-example.json` copies the OCMF payload and public key from [SAFE e.V.'s published transparency software example](https://github.com/SAFE-eV/transparenzsoftware/blob/main/XML_Format.md). The sample contains two signed readings from source serial `17619300`, signed pagination `T32`, and a source-container `transactionId` of `29`. OCMF signs its data section as original bytes; the record's `SD` field is a DER ECDSA signature verified with P-256 and SHA-256. The selected key is a source example key, not a production trust root.
