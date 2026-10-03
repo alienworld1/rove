@@ -1,5 +1,6 @@
 import {
   causalInspectorTraceSchema,
+  completionSummarySchema,
   corridorOperatingViewSchema,
   labRunViewSchema,
   labScenarioDetailSchema,
@@ -129,4 +130,34 @@ export async function readInspector(
       response.status,
     );
   return causalInspectorTraceSchema.parse(value);
+}
+
+export async function readCompletion(laneId: string) {
+  return completionSummarySchema.parse(
+    await readJson(
+      `/api/charging/lanes/${encodeURIComponent(laneId)}/completion`,
+    ),
+  );
+}
+export async function controlCompletion(
+  laneId: string,
+  expectedVersion: number,
+  action: "complete" | "check" | "close",
+) {
+  return completionSummarySchema.parse(
+    await readJson(
+      `/api/charging/lanes/${encodeURIComponent(laneId)}/${action}`,
+      {
+        commandId: crypto.randomUUID(),
+        correlationId: crypto.randomUUID(),
+        laneId,
+        expectedVersion,
+      },
+    ),
+  );
+}
+export async function readAccountingRecord(laneId: string) {
+  return readJson(
+    `/api/charging/lanes/${encodeURIComponent(laneId)}/accounting`,
+  );
 }

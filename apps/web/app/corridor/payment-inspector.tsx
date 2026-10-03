@@ -5,7 +5,8 @@ const operationCopy = {
   open: "Open channel",
   voucher: "Authorize value",
   top_up: "Top-up",
-  settle: "Partial settlement",
+  settle: "Settlement",
+  close: "Close channel",
 } as const;
 
 export function PaymentInspector({
@@ -86,6 +87,43 @@ export function PaymentInspector({
               {payment.operationStatus ?? "Unavailable"}
             </dd>
           </div>
+          {payment.closure ? (
+            <>
+              <div>
+                <dt className="text-ink-tertiary">Expected refund</dt>
+                <dd className="mt-0.5 tabular-nums text-ink">
+                  {formatOperationalValue(
+                    payment.closure.expectedRefund,
+                    assetDecimals,
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-ink-tertiary">Confirmed refund</dt>
+                <dd className="mt-0.5 tabular-nums text-ink">
+                  {formatOperationalValue(
+                    payment.closure.confirmedRefund,
+                    assetDecimals,
+                  )}
+                </dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="text-ink-tertiary">
+                  Receipt block · close event
+                </dt>
+                <dd className="mt-0.5 break-all font-mono text-ink">
+                  {payment.closure.receiptBlock ?? "Unavailable"} ·{" "}
+                  {payment.closure.closeEventReference ?? "Unavailable"}
+                </dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="text-ink-tertiary">Refund evidence</dt>
+                <dd className="mt-0.5 break-all font-mono text-ink">
+                  {payment.closure.refundEvidenceReference ?? "Unavailable"}
+                </dd>
+              </div>
+            </>
+          ) : null}
           {payment.transactionHash ? (
             <div className="col-span-2">
               <dt className="text-ink-tertiary">

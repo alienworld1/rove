@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { idSchema, labScenarioSchema } from "@rove/contracts";
+import { SessionCompletionPanel } from "./session-completion-panel";
 import { AppShell } from "./app-shell";
 import {
   controlRun,
@@ -318,6 +319,10 @@ export function CorridorWorkspace({
             </div>
           ) : null}
           <CorridorViewport view={corridor.data} />
+          <SessionCompletionPanel
+            view={corridor.data}
+            connected={realtime.connection === "live"}
+          />
           {run.data ? (
             <LabPlaybackControls
               run={run.data.run}

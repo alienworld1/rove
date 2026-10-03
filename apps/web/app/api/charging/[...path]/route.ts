@@ -1,6 +1,8 @@
 import { readBaseConfig } from "@rove/config";
 import {
   causalInspectorTraceSchema,
+  completionCommandSchema,
+  completionSummarySchema,
   corridorOperatingViewSchema,
   idSchema,
   presentationCursorSchema,
@@ -40,7 +42,11 @@ export async function GET(
     path.length < 1 ||
     path.length > 3 ||
     !["corridors", "lanes"].includes(path[0]) ||
-    (path.length === 3 && !(path[0] === "lanes" && path[2] === "inspector")) ||
+    (path.length === 3 &&
+      !(
+        path[0] === "lanes" &&
+        ["inspector", "completion", "accounting"].includes(path[2])
+      )) ||
     path.some(
       (segment) =>
         segment === "." ||
@@ -71,6 +77,7 @@ export async function GET(
       const value = JSON.parse(text) as unknown;
       if (path[0] === "corridors" && path.length === 2)
         corridorOperatingViewSchema.parse(value);
+      if (path.at(-1) === "completion") completionSummarySchema.parse(value);
       if (path.at(-1) === "inspector" && event)
         causalInspectorTraceSchema.parse(value);
     }
@@ -85,6 +92,87 @@ export async function GET(
     return Response.json(
       { message: "Corridor state couldn't be displayed safely." },
       { status: 503, headers: { "cache-control": "no-store" } },
+    );
+  }
+}
+
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ path: string[] }> },
+) {
+  const config = readBaseConfig();
+  const headers = { "cache-control": "no-store" };
+  if (
+    config.NODE_ENV !== "development" ||
+    !config.DEMO_SESSION_TOKEN ||
+    !hasDemoSession(request, config.DEMO_SESSION_TOKEN) ||
+    request.headers.get("origin") !== new URL(request.url).origin
+  )
+    return Response.json(
+      { message: "You don't have access to this charging session." },
+      { status: 403, headers },
+    );
+  const { path } = await context.params;
+  if (
+    path.length !== 3 ||
+    path[0] !== "lanes" ||
+    !idSchema.safeParse(path[1]).success ||
+    !["complete", "check", "close"].includes(path[2])
+  )
+    return new Response(null, { status: 404, headers });
+  try {
+    const reader = request.body?.getReader();
+    if (!reader) throw new Error("BODY_REQUIRED");
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > 2000) {
+        await reader.cancel();
+        return Response.json(
+          { message: "This request is too large." },
+          { status: 413, headers },
+        );
+      }
+      chunks.push(value);
+    }
+    const body = completionCommandSchema.parse(
+      JSON.parse(Buffer.concat(chunks).toString("utf8")),
+    );
+    if (body.laneId !== path[1])
+      return Response.json(
+        { message: "You don't have access to this charging session." },
+        { status: 403, headers },
+      );
+    const upstream = await fetch(
+      new URL(`/api/${path.join("/")}`, config.ENGINE_ORIGIN),
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${config.DEMO_SESSION_TOKEN}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+        cache: "no-store",
+        signal: AbortSignal.timeout(5000),
+      },
+    );
+    const value = await upstream.json();
+    if (upstream.ok) completionSummarySchema.parse(value);
+    return Response.json(value, { status: upstream.status, headers });
+  } catch (error) {
+    const invalid =
+      error instanceof SyntaxError ||
+      (error instanceof Error && error.name === "ZodError");
+    return Response.json(
+      {
+        message: invalid
+          ? "Check this session and try again."
+          : "Payment state is unavailable. Check again.",
+      },
+      { status: invalid ? 400 : 503, headers },
     );
   }
 }
