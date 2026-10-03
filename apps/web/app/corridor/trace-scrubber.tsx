@@ -64,7 +64,7 @@ export function TraceScrubber({
             run.faultTraceOffsetMs === null ||
             !points.includes(run.faultTraceOffsetMs)
           }
-          className="rounded-sm border border-line-strong px-3 py-1.5 text-xs text-ink focus-visible:outline-2 focus-visible:outline-info disabled:text-ink-disabled"
+          className="min-h-11 rounded-sm border border-line-strong px-3 py-1.5 text-xs text-ink focus-visible:outline-2 focus-visible:outline-info disabled:text-ink-disabled"
         >
           Jump to fault
         </button>
@@ -78,7 +78,7 @@ export function TraceScrubber({
             run.recoveryTraceOffsetMs === null ||
             !points.includes(run.recoveryTraceOffsetMs)
           }
-          className="rounded-sm border border-line-strong px-3 py-1.5 text-xs text-ink focus-visible:outline-2 focus-visible:outline-info disabled:text-ink-disabled"
+          className="min-h-11 rounded-sm border border-line-strong px-3 py-1.5 text-xs text-ink focus-visible:outline-2 focus-visible:outline-info disabled:text-ink-disabled"
         >
           Jump to recovery
         </button>
@@ -86,7 +86,7 @@ export function TraceScrubber({
           <button
             type="button"
             onClick={() => onChange(null)}
-            className="rounded-sm border border-line px-3 py-1.5 text-xs text-ink-secondary focus-visible:outline-2 focus-visible:outline-info"
+            className="min-h-11 rounded-sm border border-line px-3 py-1.5 text-xs text-ink-secondary focus-visible:outline-2 focus-visible:outline-info"
           >
             Return to live trace
           </button>

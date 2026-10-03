@@ -22,6 +22,7 @@ export function AttachedInspector({
   docked,
   onClose,
   onRetry,
+  current,
 }: {
   trace: CausalInspectorTrace | null;
   loading: boolean;
@@ -32,6 +33,7 @@ export function AttachedInspector({
   docked: boolean;
   onClose: () => void;
   onRetry: () => void;
+  current: boolean;
 }) {
   const [rawOpen, setRawOpen] = useState(false);
   const rawTrigger = useRef<HTMLButtonElement>(null);
@@ -53,21 +55,40 @@ export function AttachedInspector({
         type="button"
         onClick={onClose}
         aria-label="Close details"
-        className="float-right ml-3 rounded-sm px-2 py-1 text-sm text-ink-secondary focus-visible:outline-2 focus-visible:outline-info"
+        className="float-right ml-3 min-h-11 rounded-sm px-2 py-1 text-sm text-ink-secondary focus-visible:outline-2 focus-visible:outline-info"
       >
         Close
       </button>
-      {loading ? (
+      {!current && trace ? (
+        <p role="status" className="mb-3 text-sm text-ink-secondary">
+          Recorded event retained. Live updates are interrupted.
+        </p>
+      ) : null}
+      {error && trace ? (
+        <div role="status" className="mb-3 text-sm text-ink-secondary">
+          <p>
+            Event details could not be checked. Showing the last checked record.
+          </p>
+          <button
+            type="button"
+            onClick={onRetry}
+            className="min-h-11 underline focus-visible:outline-2 focus-visible:outline-info"
+          >
+            Try again
+          </button>
+        </div>
+      ) : null}
+      {loading && !trace ? (
         <p className="min-h-36 text-sm text-ink-secondary">
           Loading event details…
         </p>
-      ) : error ? (
+      ) : error && !trace ? (
         <div className="min-h-36">
           <p className="text-sm text-critical">{error}</p>
           <button
             type="button"
             onClick={onRetry}
-            className="mt-4 rounded-sm border border-line-strong px-3 py-2 text-sm text-ink focus-visible:outline-2 focus-visible:outline-info"
+            className="mt-4 min-h-11 rounded-sm border border-line-strong px-3 py-2 text-sm text-ink focus-visible:outline-2 focus-visible:outline-info"
           >
             Try again
           </button>
@@ -99,7 +120,7 @@ export function AttachedInspector({
             ref={rawTrigger}
             type="button"
             onClick={() => setRawOpen(true)}
-            className="mt-4 rounded-sm border border-line-strong px-3 py-2 text-sm text-ink focus-visible:outline-2 focus-visible:outline-info"
+            className="mt-4 min-h-11 rounded-sm border border-line-strong px-3 py-2 text-sm text-ink focus-visible:outline-2 focus-visible:outline-info"
           >
             View raw details
           </button>

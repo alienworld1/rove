@@ -55,6 +55,7 @@ export function CorridorLane({
   onSelectEvent,
   setSelectedEventAnchor,
   causalTrace,
+  current,
 }: {
   lane: CorridorOperatingView["lanes"][number];
   assetDecimals: number;
@@ -66,6 +67,7 @@ export function CorridorLane({
   onSelectEvent: (eventId: string) => void;
   setSelectedEventAnchor: (element: SVGElement | null) => void;
   causalTrace: CausalInspectorTrace | null;
+  current: boolean;
 }) {
   const reducedMotion = useReducedMotion();
   const [initialEventIds] = useState(
@@ -115,7 +117,7 @@ export function CorridorLane({
     lane,
     geometry,
     reducedMotion,
-    selectedTraceOffsetMs !== null,
+    selectedTraceOffsetMs !== null || !current,
   );
   const summaryId = `lane-summary-${projection.id}`;
   return (
@@ -127,6 +129,7 @@ export function CorridorLane({
       aria-labelledby={`lane-title-${projection.id}`}
     >
       <button
+        id={`lane-control-${projection.id}`}
         type="button"
         onClick={onSelectLane}
         aria-expanded={focused}
@@ -143,7 +146,7 @@ export function CorridorLane({
           {lane.powerClass}
         </span>
         <span
-          className={`block text-[10px] leading-3 font-semibold ${projection.state === "PROTECTED" ? "text-protected" : projection.state === "PAUSE_REQUIRED" ? "text-critical" : "text-risk"}`}
+          className={`block text-[10px] leading-3 font-semibold ${projection.state === "PROTECTED" ? "text-protected" : projection.state === "PAUSE_REQUIRED" ? "text-critical" : "text-risk-deep"}`}
         >
           {stateCopy[projection.state]}
         </span>
@@ -301,6 +304,7 @@ export function CorridorLane({
                     anomalous={anomalous}
                     muted={beyondTrace}
                     animate={
+                      current &&
                       selectedTraceOffsetMs === null &&
                       !initialEventIds.has(event.eventId)
                     }

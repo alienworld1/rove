@@ -13,7 +13,7 @@ export function AccountingRecordDialog({ laneId }: { laneId: string }) {
     <Dialog.Root>
       <Dialog.Trigger
         onClick={() => void record.refetch()}
-        className="rounded-sm border border-line px-3 py-2 text-xs focus-visible:outline-2 focus-visible:outline-info"
+        className="min-h-11 rounded-sm border border-line px-3 py-2 text-xs focus-visible:outline-2 focus-visible:outline-info"
       >
         View accounting record
       </Dialog.Trigger>
@@ -37,7 +37,7 @@ export function AccountingRecordDialog({ laneId }: { laneId: string }) {
               {JSON.stringify(record.data, null, 2)}
             </pre>
           )}
-          <Dialog.Close className="mt-5 rounded-sm bg-ink px-3 py-2 text-sm text-pure focus-visible:outline-2 focus-visible:outline-info">
+          <Dialog.Close className="mt-5 min-h-11 rounded-sm bg-ink px-3 py-2 text-sm text-pure focus-visible:outline-2 focus-visible:outline-info">
             Close details
           </Dialog.Close>
         </Dialog.Content>

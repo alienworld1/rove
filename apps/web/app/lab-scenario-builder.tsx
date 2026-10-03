@@ -2,6 +2,8 @@
 
 import { DocsLink } from "./docs-link";
 
+import { useEffect, useRef } from "react";
+
 import type { LabScenario } from "@rove/contracts";
 import { LabFaultEditor } from "./lab-fault-editor";
 import { LabScenarioFields } from "./lab-scenario-fields";
@@ -19,6 +21,10 @@ export function LabScenarioBuilder({
   busy: boolean;
   issues: { path: string; message: string }[];
 }) {
+  const definitionInput = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (issues.length) definitionInput.current?.focus();
+  }, [issues]);
   let scenario: LabScenario | null = null;
   try {
     scenario = JSON.parse(draft) as LabScenario;
@@ -69,6 +75,7 @@ export function LabScenarioBuilder({
         data.
       </p>
       <textarea
+        ref={definitionInput}
         id="lab-scenario-definition"
         value={draft}
         onChange={(event) => onChange(event.target.value)}
@@ -99,7 +106,7 @@ export function LabScenarioBuilder({
         type="button"
         onClick={onValidate}
         disabled={busy || !scenario}
-        className="mt-4 rounded-sm border border-line-strong bg-ink px-4 py-2 text-sm font-semibold text-pure focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
+        className="mt-4 min-h-11 rounded-sm border border-line-strong bg-ink px-4 py-2 text-sm font-semibold text-pure focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
       >
         {busy ? "Checking scenario…" : "Validate scenario"}
       </button>

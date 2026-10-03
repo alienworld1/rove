@@ -59,7 +59,7 @@ export function LabPlaybackControls({
             type="button"
             onClick={() => onAction("pause")}
             disabled={busy}
-            className="rounded-sm border border-line-strong bg-raised px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
+            className="min-h-11 rounded-sm border border-line-strong bg-raised px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
           >
             Pause
           </button>
@@ -68,7 +68,7 @@ export function LabPlaybackControls({
             type="button"
             onClick={() => onAction("play")}
             disabled={busy || finished || run.status === "initializing"}
-            className="rounded-sm border border-line-strong bg-ink px-4 py-2 text-sm font-semibold text-pure focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
+            className="min-h-11 rounded-sm border border-line-strong bg-ink px-4 py-2 text-sm font-semibold text-pure focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
           >
             Play
           </button>
@@ -82,7 +82,7 @@ export function LabPlaybackControls({
             run.status === "running" ||
             run.status === "initializing"
           }
-          className="rounded-sm border border-line-strong bg-raised px-4 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
+          className="min-h-11 rounded-sm border border-line-strong bg-raised px-4 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
         >
           Step event
         </button>
@@ -90,7 +90,7 @@ export function LabPlaybackControls({
           type="button"
           onClick={() => onAction("reset")}
           disabled={busy}
-          className="rounded-sm border border-line-strong bg-raised px-4 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
+          className="min-h-11 rounded-sm border border-line-strong bg-raised px-4 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
         >
           Replay
         </button>
@@ -99,7 +99,7 @@ export function LabPlaybackControls({
             type="button"
             onClick={onCheck}
             disabled={busy}
-            className="rounded-sm border border-line-strong bg-raised px-4 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
+            className="min-h-11 rounded-sm border border-line-strong bg-raised px-4 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
           >
             Check again
           </button>
@@ -114,13 +114,13 @@ export function LabPlaybackControls({
       ) : null}
       <fieldset
         className="mt-3 flex flex-wrap items-center gap-3 text-sm text-ink-secondary"
-        disabled={busy}
+        disabled={busy || finished}
       >
         <legend className="float-left mr-3 py-1">Playback speed</legend>
         {speeds.map((speed) => (
           <label
             key={speed}
-            className="inline-flex cursor-pointer items-center gap-1"
+            className="inline-flex min-h-11 cursor-pointer items-center gap-1"
           >
             <input
               type="radio"

@@ -39,8 +39,10 @@ function replaceSelectionUrl(
 
 export function CorridorViewport({
   view: liveView,
+  current,
 }: {
   view: CorridorOperatingView;
+  current: boolean;
 }) {
   const selection = useCorridorSelection();
   const historical = useQuery({
@@ -164,11 +166,13 @@ export function CorridorViewport({
   });
 
   function selectLane(laneId: string | null) {
+    setSelectionMessage("");
     const next = laneId === selection.focusedLaneId ? null : laneId;
     selection.setLane(next);
     replaceSelectionUrl(view.corridor.id, next, null, null);
   }
   function selectEvent(laneId: string, eventId: string) {
+    setSelectionMessage("");
     eventTrigger.current = document.activeElement;
     selection.setEvent(laneId, eventId);
     replaceSelectionUrl(
@@ -202,6 +206,10 @@ export function CorridorViewport({
             `[data-event-id="${CSS.escape(eventId)}"]`,
           )
           ?.focus();
+      if (document.activeElement === document.body)
+        document
+          .getElementById(`lane-control-${selection.focusedLaneId}`)
+          ?.focus();
     });
   }
   function selectTrace(offsetMs: number | null) {
@@ -232,7 +240,9 @@ export function CorridorViewport({
           {view.aggregate.activeLaneCount === 1 ? "Lane" : "Lanes"} ·{" "}
           {view.aggregate.attentionLaneIds.length
             ? `${view.aggregate.attentionLaneIds.length} need attention`
-            : "All protection ready"}
+            : current
+              ? "All protection ready"
+              : "Last checked protection state"}
         </p>
       </div>
       <CorridorAggregateBand
@@ -243,6 +253,11 @@ export function CorridorViewport({
           )
           .map((lane) => lane.label)}
       />
+      {!current ? (
+        <p className="mt-2 text-sm text-ink-secondary">
+          Values and exposure bounds reflect the last checked state.
+        </p>
+      ) : null}
       {selection.traceOffsetMs !== null ? (
         <p
           role="status"
@@ -322,6 +337,7 @@ export function CorridorViewport({
                     }
                     setSelectedEventAnchor={refs.setReference}
                     causalTrace={inspector.data ?? null}
+                    current={current}
                   />
                 ))
               )}
@@ -346,10 +362,15 @@ export function CorridorViewport({
             docked={middlewareData.avoidOperatingSurface?.dock !== false}
             onClose={closeInspector}
             onRetry={() => void inspector.refetch()}
+            current={current}
           />
         ) : null}
       </div>
-      <div className="sr-only" role="status" aria-live="polite">
+      <div
+        className="mt-3 text-sm text-ink-secondary"
+        role="status"
+        aria-live="polite"
+      >
         {selectionMessage}
       </div>
       <div className="sr-only" role="alert" aria-live="assertive">

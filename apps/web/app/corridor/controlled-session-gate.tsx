@@ -42,7 +42,7 @@ export function ControlledSessionGate({
         Connect to the controlled session
       </h2>
       <p className="mt-3 text-sm text-ink-secondary">
-        Enter your local access key to explore the Corridor.
+        Enter your local access key to open the Corridor.
       </p>
       <form
         onSubmit={(event) => void connect(event)}

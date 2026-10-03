@@ -89,11 +89,11 @@ export function RawDetailsDialog({
             <button
               type="button"
               onClick={() => void copyReference()}
-              className="rounded-sm border border-line-strong px-3 py-2 text-sm text-ink focus-visible:outline-2 focus-visible:outline-info"
+              className="min-h-11 rounded-sm border border-line-strong px-3 py-2 text-sm text-ink focus-visible:outline-2 focus-visible:outline-info"
             >
               {copied ? "Reference copied" : "Copy reference"}
             </button>
-            <Dialog.Close className="rounded-sm bg-ink px-3 py-2 text-sm font-semibold text-pure focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink">
+            <Dialog.Close className="min-h-11 rounded-sm bg-ink px-3 py-2 text-sm font-semibold text-pure focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink">
               Close details
             </Dialog.Close>
           </div>

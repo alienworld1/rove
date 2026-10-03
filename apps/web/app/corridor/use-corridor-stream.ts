@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { realtimePresentationEventSchema } from "@rove/contracts";
 import { acceptRealtimeEvent, type RealtimeCursor } from "./realtime-state";
+import { refreshCorridorContext } from "./refresh-corridor-context";
 
 export type ConnectionState = "connecting" | "live" | "reconnecting" | "stale";
 
@@ -16,20 +17,21 @@ export function useCorridorStream(
   const [connection, setConnection] = useState<ConnectionState>("connecting");
   const [restored, setRestored] = useState(false);
   const failures = useRef(0);
-  const cursorCorridorId = useRef<string | null>(null);
+  const cursorScope = useRef<string | null>(null);
   const cursor = useRef<RealtimeCursor>({
     projectionVersion,
     announcedEventIds: new Set(),
   });
   useEffect(() => {
-    if (cursorCorridorId.current === corridorId) return;
-    cursorCorridorId.current = corridorId;
+    const scope = `${corridorId}:${runId}`;
+    if (cursorScope.current === scope) return;
+    cursorScope.current = scope;
     cursor.current = {
       projectionVersion,
       announcedEventIds: new Set(),
     };
     failures.current = 0;
-  }, [corridorId, projectionVersion]);
+  }, [corridorId, runId, projectionVersion]);
   useEffect(() => {
     cursor.current = {
       ...cursor.current,
@@ -44,6 +46,8 @@ export function useCorridorStream(
     let source: EventSource | null = null;
     let retryTimer: number | undefined;
     let disposed = false;
+    const refresh = () =>
+      refreshCorridorContext(queryClient, corridorId, runId);
     const eventTypes = [
       "corridor_projection_changed",
       "lane_projection_changed",
@@ -67,17 +71,20 @@ export function useCorridorStream(
       const accepted = acceptRealtimeEvent(cursor.current, parsed.data);
       if (!accepted.accepted) return;
       cursor.current = accepted.state;
+      const activeSource = source;
       if (accepted.resync) setConnection("connecting");
-      void Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["corridor", corridorId] }),
-        queryClient.invalidateQueries({ queryKey: ["inspector"] }),
-        ...(runId
-          ? [queryClient.invalidateQueries({ queryKey: ["run", runId] })]
-          : []),
-      ]).then(() => {
-        if (!accepted.resync || disposed || !source || document.hidden) return;
-        const read = queryClient.getQueryState(["corridor", corridorId]);
-        setConnection(read?.status === "success" ? "live" : "stale");
+      void refresh().then((checkedVersion) => {
+        if (
+          !accepted.resync ||
+          disposed ||
+          !source ||
+          source !== activeSource ||
+          document.hidden
+        )
+          return;
+        if (checkedVersion !== null)
+          cursor.current.projectionVersion = checkedVersion;
+        setConnection(checkedVersion !== null ? "live" : "stale");
       });
     };
     const connect = () => {
@@ -87,31 +94,29 @@ export function useCorridorStream(
         cursor: String(cursor.current.projectionVersion),
       });
       if (runId) query.set("run", runId);
-      source = new EventSource(`/api/events/stream?${query}`);
+      const activeSource = new EventSource(`/api/events/stream?${query}`);
+      source = activeSource;
       for (const type of eventTypes) source.addEventListener(type, onEvent);
       source.onopen = () => {
         const recovered = failures.current > 0;
-        void queryClient
-          .invalidateQueries({ queryKey: ["corridor", corridorId] })
-          .then(() => {
-            if (disposed || !source || document.hidden) return;
-            const read = queryClient.getQueryState(["corridor", corridorId]);
-            if (read?.status === "error") {
-              setConnection("stale");
-              return;
-            }
-            setRestored(recovered);
-            failures.current = 0;
-            setConnection("live");
-          });
-        if (runId)
-          void queryClient.invalidateQueries({ queryKey: ["run", runId] });
+        void refresh().then((checkedVersion) => {
+          if (disposed || source !== activeSource || document.hidden) return;
+          if (checkedVersion === null) {
+            setConnection("stale");
+            return;
+          }
+          setRestored(recovered);
+          failures.current = 0;
+          setConnection("live");
+        });
       };
       source.onerror = () => {
         source?.close();
         source = null;
         failures.current += 1;
+        setRestored(false);
         setConnection(failures.current >= 3 ? "stale" : "reconnecting");
+        void refresh();
         const delay = Math.min(
           30_000,
           1_000 * 2 ** Math.min(failures.current - 1, 5),
@@ -127,6 +132,7 @@ export function useCorridorStream(
       source?.close();
       source = null;
       setConnection("reconnecting");
+      setRestored(false);
       if (!document.hidden) connect();
     };
     document.addEventListener("visibilitychange", onVisibility);

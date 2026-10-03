@@ -35,7 +35,9 @@ async function proxy(
   if (
     config.NODE_ENV !== "development" ||
     !config.DEMO_SESSION_TOKEN ||
-    !hasDemoSession(request, config.DEMO_SESSION_TOKEN)
+    !hasDemoSession(request, config.DEMO_SESSION_TOKEN) ||
+    (method === "POST" &&
+      request.headers.get("origin") !== new URL(request.url).origin)
   )
     return Response.json(
       { message: "You don't have access to this Corridor Lab." },

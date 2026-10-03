@@ -22,14 +22,33 @@ export class CorridorApiError extends Error {
   }
 }
 
-async function readJson(path: string, body?: unknown) {
+function parseRead<T>(
+  schema: {
+    safeParse: (
+      value: unknown,
+    ) => { success: true; data: T } | { success: false };
+  },
+  value: unknown,
+): T {
+  const result = schema.safeParse(value);
+  if (!result.success)
+    throw new CorridorApiError(
+      "Corridor state couldn't be displayed safely. Check again.",
+      502,
+    );
+  return result.data;
+}
+
+async function readJson(path: string, body?: unknown, signal?: AbortSignal) {
   const response = await fetch(path, {
     method: body === undefined ? "GET" : "POST",
     headers:
       body === undefined ? undefined : { "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
     cache: "no-store",
-    signal: AbortSignal.timeout(10_000),
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(10_000)])
+      : AbortSignal.timeout(10_000),
   });
   const value = (await response.json()) as {
     message?: string;
@@ -46,15 +65,21 @@ async function readJson(path: string, body?: unknown) {
 
 export type ScenarioSummary = ReturnType<typeof labScenarioSummarySchema.parse>;
 
-export async function readScenarios() {
-  return labScenarioSummarySchema
-    .array()
-    .parse(await readJson("/api/lab/scenarios"));
+export async function readScenarios({ signal }: { signal?: AbortSignal } = {}) {
+  return parseRead(
+    labScenarioSummarySchema.array(),
+    await readJson("/api/lab/scenarios", undefined, signal),
+  );
 }
 
-export async function readScenario(id: string) {
-  return labScenarioDetailSchema.parse(
-    await readJson(`/api/lab/scenarios/${encodeURIComponent(id)}`),
+export async function readScenario(id: string, signal?: AbortSignal) {
+  return parseRead(
+    labScenarioDetailSchema,
+    await readJson(
+      `/api/lab/scenarios/${encodeURIComponent(id)}`,
+      undefined,
+      signal,
+    ),
   );
 }
 
@@ -64,20 +89,33 @@ export async function saveScenario(definition: unknown) {
   );
 }
 
-export async function readRun(id: string): Promise<LabRunView> {
-  return labRunViewSchema.parse(
-    await readJson(`/api/lab/runs/${encodeURIComponent(id)}`),
+export async function readRun(
+  id: string,
+  signal?: AbortSignal,
+): Promise<LabRunView> {
+  const view = parseRead(
+    labRunViewSchema,
+    await readJson(
+      `/api/lab/runs/${encodeURIComponent(id)}`,
+      undefined,
+      signal,
+    ),
   );
+  if (view.run.id !== id)
+    throw new CorridorApiError("That selection is no longer available.", 502);
+  return view;
 }
 
 export async function startRun(
   scenario: LabScenario,
   digest: string,
+  runId: string,
 ): Promise<LabRunView> {
   return labRunViewSchema.parse(
     await readJson("/api/lab/runs", {
       scenarioId: scenario.id,
       scenarioDigest: digest,
+      runId,
     }),
   );
 }
@@ -102,7 +140,12 @@ export async function readCorridor(
 ): Promise<CorridorOperatingView> {
   const response = await fetch(
     `/api/charging/corridors/${encodeURIComponent(corridorId)}${traceOffsetMs === null ? "" : `?trace=${traceOffsetMs}`}`,
-    { cache: "no-store", signal: signal ?? AbortSignal.timeout(10_000) },
+    {
+      cache: "no-store",
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(10_000)])
+        : AbortSignal.timeout(10_000),
+    },
   );
   const value = (await response.json()) as { message?: string };
   if (!response.ok)
@@ -110,7 +153,10 @@ export async function readCorridor(
       value.message ?? "Corridor state couldn't be refreshed.",
       response.status,
     );
-  return corridorOperatingViewSchema.parse(value);
+  const view = parseRead(corridorOperatingViewSchema, value);
+  if (view.corridor.id !== corridorId)
+    throw new CorridorApiError("That selection is no longer available.", 502);
+  return view;
 }
 
 export async function readInspector(
@@ -121,7 +167,12 @@ export async function readInspector(
   const query = new URLSearchParams({ event: eventId });
   const response = await fetch(
     `/api/charging/lanes/${encodeURIComponent(laneId)}/inspector?${query}`,
-    { cache: "no-store", signal: signal ?? AbortSignal.timeout(10_000) },
+    {
+      cache: "no-store",
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(10_000)])
+        : AbortSignal.timeout(10_000),
+    },
   );
   const value = (await response.json()) as { message?: string };
   if (!response.ok)
@@ -129,27 +180,39 @@ export async function readInspector(
       value.message ?? "Event details are unavailable right now. Try again.",
       response.status,
     );
-  return causalInspectorTraceSchema.parse(value);
+  const trace = parseRead(causalInspectorTraceSchema, value);
+  if (trace.laneId !== laneId || trace.eventId !== eventId)
+    throw new CorridorApiError("That selection is no longer available.", 502);
+  return trace;
 }
 
-export async function readCompletion(laneId: string) {
-  return completionSummarySchema.parse(
+export async function readCompletion(laneId: string, signal?: AbortSignal) {
+  const summary = parseRead(
+    completionSummarySchema,
     await readJson(
       `/api/charging/lanes/${encodeURIComponent(laneId)}/completion`,
+      undefined,
+      signal,
     ),
   );
+  if (summary.laneId !== laneId)
+    throw new CorridorApiError("That selection is no longer available.", 502);
+  return summary;
 }
 export async function controlCompletion(
   laneId: string,
   expectedVersion: number,
   action: "complete" | "check" | "close",
+  intent = {
+    commandId: crypto.randomUUID(),
+    correlationId: crypto.randomUUID(),
+  },
 ) {
   return completionSummarySchema.parse(
     await readJson(
       `/api/charging/lanes/${encodeURIComponent(laneId)}/${action}`,
       {
-        commandId: crypto.randomUUID(),
-        correlationId: crypto.randomUUID(),
+        ...intent,
         laneId,
         expectedVersion,
       },

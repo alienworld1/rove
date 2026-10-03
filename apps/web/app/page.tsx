@@ -15,7 +15,9 @@ export default async function Home({
       : null;
   };
   return (
-    <CorridorQueryProvider>
+    <CorridorQueryProvider
+      controlledMode={process.env.NODE_ENV === "development"}
+    >
       <CorridorWorkspace
         controlledMode={process.env.NODE_ENV === "development"}
         initialRunId={selectedId("run")}

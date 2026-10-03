@@ -58,7 +58,7 @@ export function CorridorWorkspace({
   const effectiveScenarioId = scenarioId || summaries.data?.[0]?.id || "";
   const scenario = useQuery({
     queryKey: ["scenario", effectiveScenarioId],
-    queryFn: () => readScenario(effectiveScenarioId),
+    queryFn: ({ signal }) => readScenario(effectiveScenarioId, signal),
     enabled: effectiveScenarioId.length > 0 && runId === null,
   });
   const draft =
@@ -66,7 +66,7 @@ export function CorridorWorkspace({
     (scenario.data ? JSON.stringify(scenario.data.definition, null, 2) : "");
   const run = useQuery({
     queryKey: ["run", runId],
-    queryFn: () => readRun(runId!),
+    queryFn: ({ signal }) => readRun(runId!, signal),
     enabled: runId !== null,
     refetchInterval: (query) =>
       query.state.data?.run.status === "initializing" ? 1_500 : false,
@@ -93,11 +93,24 @@ export function CorridorWorkspace({
       const definition = savedDigest
         ? labScenarioSchema.parse(JSON.parse(draft) as unknown)
         : scenario.data!.definition;
-      return startRun(definition, savedDigest ?? scenario.data!.digest);
+      const requestedRunId = crypto.randomUUID();
+      const url = new URL(window.location.href);
+      url.searchParams.set("run", requestedRunId);
+      url.searchParams.set("scenario", definition.id);
+      for (const key of ["corridor", "lane", "event", "trace"])
+        url.searchParams.delete(key);
+      window.history.pushState(null, "", url);
+      return startRun(
+        definition,
+        savedDigest ?? scenario.data!.digest,
+        requestedRunId,
+      );
     },
     onSuccess: (next) => {
-      setRunId(next.run.id);
       queryClient.setQueryData(["run", next.run.id], next);
+      if (new URL(window.location.href).searchParams.get("run") !== next.run.id)
+        return;
+      setRunId(next.run.id);
       const nextCorridorId = next.lanes.find((lane) => lane.projection)
         ?.projection?.corridorId;
       const url = new URL(window.location.href);
@@ -105,13 +118,25 @@ export function CorridorWorkspace({
       url.searchParams.set("scenario", next.scenario.id);
       if (nextCorridorId) url.searchParams.set("corridor", nextCorridorId);
       setUrlCorridorId(nextCorridorId ?? null);
-      window.history.pushState(null, "", url);
+      window.history.replaceState(null, "", url);
       setMessage("Run ready");
     },
-    onError: (error) =>
+    onError: (error) => {
+      const url = new URL(window.location.href);
+      if (
+        error instanceof CorridorApiError &&
+        [400, 403, 404, 409, 422].includes(error.status)
+      ) {
+        url.searchParams.delete("run");
+        window.history.replaceState(null, "", url);
+      } else {
+        setRunId(validId(url.searchParams.get("run")));
+        setUrlCorridorId(null);
+      }
       setMessage(
-        error instanceof Error ? error.message : "This run couldn't start.",
-      ),
+        "The run's start could not be checked. Check its saved state before starting another run.",
+      );
+    },
   });
   const validate = useMutation({
     mutationFn: () => saveScenario(JSON.parse(draft) as unknown),
@@ -205,6 +230,7 @@ export function CorridorWorkspace({
       );
       setRunId(validId(url.searchParams.get("run")));
       setUrlCorridorId(validId(url.searchParams.get("corridor")));
+      setScenarioId(validId(url.searchParams.get("scenario")) ?? "");
     };
     syncSelection();
     window.addEventListener("popstate", syncSelection);
@@ -217,7 +243,8 @@ export function CorridorWorkspace({
     run.error,
     corridor.error,
   ].some((error) => error instanceof CorridorApiError && error.status === 403);
-  const stale = realtime.connection === "stale";
+  const stale =
+    realtime.connection !== "live" || corridor.isError || run.isError;
   const loadingRun = runId !== null && (run.isLoading || corridor.isLoading);
   return (
     <main className="mx-auto w-full max-w-[1720px] px-5 py-5 sm:px-8 lg:px-12">
@@ -283,7 +310,7 @@ export function CorridorWorkspace({
           </>
         ) : (
           <p className="py-20 text-center text-sm text-ink-secondary">
-            No active charging Lanes.
+            No scenarios are available yet.
           </p>
         )
       ) : loadingRun ? (
@@ -295,34 +322,35 @@ export function CorridorWorkspace({
         />
       ) : corridor.error && !corridor.data ? (
         <CorridorErrorState
-          message="Corridor state couldn't be refreshed."
+          message="Corridor state is unavailable. Try again."
           onRetry={() => void corridor.refetch()}
         />
       ) : corridor.data ? (
         <>
           <SourceDisclosure environment={corridor.data.environment} />
           {stale || corridor.error || run.error ? (
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-l-4 border-risk bg-risk-faint px-4 py-3 text-sm text-risk-deep">
+            <div
+              role="status"
+              className="mt-4 flex flex-wrap items-center justify-between gap-3 border-l-4 border-risk bg-risk-faint px-4 py-3 text-sm text-risk-deep"
+            >
               <p>
-                Live updates are unavailable. Values last checked{" "}
-                {new Date(corridor.data.checkedAt).toLocaleTimeString()}.
+                Live updates interrupted. Showing the last checked state.
+                Checked {new Date(corridor.data.checkedAt).toLocaleTimeString()}
+                .
               </p>
               <button
                 type="button"
                 onClick={() =>
                   void Promise.all([corridor.refetch(), run.refetch()])
                 }
-                className="rounded-sm border border-risk px-3 py-1.5 focus-visible:outline-2 focus-visible:outline-risk"
+                className="min-h-11 rounded-sm border border-risk px-3 py-1.5 focus-visible:outline-2 focus-visible:outline-risk"
               >
-                Check latest state
+                Check again
               </button>
             </div>
           ) : null}
-          <CorridorViewport view={corridor.data} />
-          <SessionCompletionPanel
-            view={corridor.data}
-            connected={realtime.connection === "live"}
-          />
+          <CorridorViewport view={corridor.data} current={!stale} />
+          <SessionCompletionPanel view={corridor.data} connected={!stale} />
           {run.data ? (
             <LabPlaybackControls
               run={run.data.run}

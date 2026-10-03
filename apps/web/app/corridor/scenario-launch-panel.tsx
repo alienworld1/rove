@@ -44,7 +44,7 @@ export function ScenarioLaunchPanel({
             value={selectedId}
             onChange={(event) => onSelect(event.target.value)}
             disabled={busy}
-            className="mt-1 block w-full rounded-sm border border-line-strong bg-pure px-3 py-2 text-sm text-ink focus-visible:outline-2 focus-visible:outline-info"
+            className="mt-1 block w-full min-h-11 rounded-sm border border-line-strong bg-pure px-3 py-2 text-sm text-ink focus-visible:outline-2 focus-visible:outline-info"
           >
             {summaries.map((summary) => (
               <option key={summary.id} value={summary.id}>
@@ -57,7 +57,7 @@ export function ScenarioLaunchPanel({
           type="button"
           onClick={onStart}
           disabled={busy || !scenario}
-          className="rounded-sm bg-ink px-4 py-2 text-sm font-semibold text-pure focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:bg-ink-disabled"
+          className="min-h-11 rounded-sm bg-ink px-4 py-2 text-sm font-semibold text-pure focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:bg-ink-disabled"
         >
           {busy ? "Preparing…" : "Start run"}
         </button>

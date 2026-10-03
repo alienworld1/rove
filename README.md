@@ -4,7 +4,7 @@ Rove checks the service and integration boundaries needed for trusted charging e
 
 ## Run locally
 
-Use Node.js 22 and pnpm 11.19.0. From the repository root:
+Use Node.js 22 and pnpm 11.19.0. Prepare the ignored environment file and PostgreSQL described below before starting the services. From the repository root:
 
 ```sh
 pnpm install
@@ -24,6 +24,12 @@ Pause and scrub the recorded trace to inspect committed Lane snapshots and their
 Copy `.env.example` to an ignored `.env` file for local settings. The engine reads settings from its process environment; shell values may be loaded with `set -a; . ./.env; set +a` before starting it. The web process needs the same `ENGINE_ORIGIN` and `DEMO_SESSION_TOKEN` values. Generate a random hexadecimal token of at least 48 characters for the local access key. It is entered on the page and kept in an HTTP-only cookie.
 
 The Corridor requires PostgreSQL but the local deterministic payment scenario needs no payer key. Run `pnpm --filter @rove/persistence db:migrate` after setting `DATABASE_URL`. The source disclosure identifies whether payment is local simulation or Tempo. See [charging storage and local checks](docs/charging-storage.md) for the controlled live session path.
+
+For local session completion, set `CDR_CURRENCY=USD`, `CDR_SETTLEMENT_ASSET_ID=TEST_ASSET`, and `CDR_SOURCE_PARTY_ID=controlled-cpo`. When switching to Tempo, set the accounting asset to the configured Tempo asset and restart the engine. A different asset is an accounting mismatch, not permission to correct the record automatically.
+
+Protected APIs are available only in the controlled development environment. A successful production build does not enable hosted access. Public documentation remains available independently; deployment and a production access model require separate setup.
+
+During an outage, the Corridor and selected event retain their last checked records. Their values and bounds describe that checked state. Commands remain unavailable until current reads succeed. **Check again** refreshes or reconciles existing work; it does not establish that an uncertain payment failed. If session access expires, protected caches and streams are cleared; enter the local access key again to restore validated URL context.
 
 The saved Northstar Mobility ↔ Voltway digital-twin scenario includes a rejected meter reading, an exact protection pause, and recovery. The scenario builder is available below the launch controls. Use `pnpm --filter @rove/engine lab:run` for the matching headless protection check. The three local payment channels are deterministic. With the funded Tempo testnet configuration, `pnpm --filter @rove/engine lab:run --live` separately runs three real channel workflows; see [charging storage and local checks](docs/charging-storage.md) before submitting testnet transactions.
 

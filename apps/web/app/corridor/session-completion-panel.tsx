@@ -4,7 +4,11 @@ import { DocsLink } from "../docs-link";
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CorridorOperatingView } from "@rove/contracts";
-import { readCompletion, controlCompletion } from "./api";
+import { readCompletion, controlCompletion, CorridorApiError } from "./api";
+import {
+  retainCompletionIntent,
+  type CompletionIntent,
+} from "./completion-intent";
 import { formatOperationalValue } from "./format-operational-value";
 import { useCorridorSelection } from "./corridor-selection";
 import { CompletionConfirmation } from "./completion-confirmation";
@@ -34,24 +38,45 @@ export function SessionCompletionPanel({
   const lane = view.lanes.find((lane) => lane.projection.id === focusedLaneId);
   const queryClient = useQueryClient();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const confirmationLane = useRef<string | null>(null);
   const [confirm, setConfirm] = useState<"complete" | "close" | null>(null);
+  const intents = useRef(new Map<string, CompletionIntent>());
   const summary = useQuery({
     queryKey: ["completion", focusedLaneId, lane?.projection.version],
-    queryFn: () => readCompletion(focusedLaneId!),
+    queryFn: ({ signal }) => readCompletion(focusedLaneId!, signal),
     enabled: Boolean(lane),
     refetchInterval: connected && trace === null ? 3000 : false,
   });
   const mutation = useMutation({
-    mutationFn: (action: "complete" | "check" | "close") =>
-      controlCompletion(focusedLaneId!, summary.data!.version, action),
-    onSuccess: async () => {
+    mutationFn: (action: "complete" | "check" | "close") => {
+      const key = `${focusedLaneId}:${action}`;
+      const intent = retainCompletionIntent(
+        intents.current.get(key),
+        focusedLaneId!,
+        summary.data!.version,
+      );
+      if (action !== "check") intents.current.set(key, intent);
+      return controlCompletion(
+        intent.laneId,
+        intent.expectedVersion,
+        action,
+        intent,
+      );
+    },
+    onSuccess: async (result, action) => {
+      intents.current.delete(`${result.laneId}:${action}`);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["completion"] }),
         queryClient.invalidateQueries({ queryKey: ["corridor"] }),
         queryClient.invalidateQueries({ queryKey: ["run"] }),
       ]);
     },
-    onError: () => {
+    onError: (error, action) => {
+      if (
+        error instanceof CorridorApiError &&
+        [400, 403, 404, 409, 422].includes(error.status)
+      )
+        intents.current.delete(`${focusedLaneId}:${action}`);
       void summary.refetch();
     },
   });
@@ -67,6 +92,7 @@ export function SessionCompletionPanel({
     trace !== null ||
     mutation.isPending ||
     !summary.data ||
+    summary.isError ||
     recovery?.status !== "ready";
   const rows = [
     [
@@ -234,9 +260,10 @@ export function SessionCompletionPanel({
             }
             onClick={(event) => {
               triggerRef.current = event.currentTarget;
+              confirmationLane.current = lane.projection.id;
               setConfirm("complete");
             }}
-            className="rounded-sm bg-ink px-3 py-2 text-xs text-pure focus-visible:outline-2 focus-visible:outline-info disabled:opacity-40"
+            className="min-h-11 rounded-sm bg-ink px-3 py-2 text-xs text-pure focus-visible:outline-2 focus-visible:outline-info disabled:opacity-40"
           >
             Finish session
           </button>
@@ -247,9 +274,10 @@ export function SessionCompletionPanel({
             disabled={disabled || !summary.data?.canClose}
             onClick={(event) => {
               triggerRef.current = event.currentTarget;
+              confirmationLane.current = lane.projection.id;
               setConfirm("close");
             }}
-            className="rounded-sm bg-ink px-3 py-2 text-xs text-pure focus-visible:outline-2 focus-visible:outline-info disabled:opacity-40"
+            className="min-h-11 rounded-sm bg-ink px-3 py-2 text-xs text-pure focus-visible:outline-2 focus-visible:outline-info disabled:opacity-40"
           >
             Close channel
           </button>
@@ -260,7 +288,7 @@ export function SessionCompletionPanel({
           onClick={() =>
             summary.data ? mutation.mutate("check") : void summary.refetch()
           }
-          className="rounded-sm border border-line px-3 py-2 text-xs focus-visible:outline-2 focus-visible:outline-info disabled:opacity-40"
+          className="min-h-11 rounded-sm border border-line px-3 py-2 text-xs focus-visible:outline-2 focus-visible:outline-info disabled:opacity-40"
         >
           Check again
         </button>
@@ -271,7 +299,7 @@ export function SessionCompletionPanel({
           <button
             type="button"
             onClick={() => inspect(summary.data!.evidenceEventId!)}
-            className="rounded-sm border border-line px-3 py-2 text-xs focus-visible:outline-2 focus-visible:outline-info"
+            className="min-h-11 rounded-sm border border-line px-3 py-2 text-xs focus-visible:outline-2 focus-visible:outline-info"
           >
             View evidence
           </button>
@@ -280,13 +308,21 @@ export function SessionCompletionPanel({
           <button
             type="button"
             onClick={() => inspect(summary.data!.paymentEventId!)}
-            className="rounded-sm border border-line px-3 py-2 text-xs focus-visible:outline-2 focus-visible:outline-info"
+            className="min-h-11 rounded-sm border border-line px-3 py-2 text-xs focus-visible:outline-2 focus-visible:outline-info"
           >
             View payment
           </button>
         ) : null}
       </div>
-      {!completion ? (
+      {trace !== null ? (
+        <p className="mt-2 text-xs text-ink-secondary">
+          Return to the live view to continue.
+        </p>
+      ) : mutation.isPending ? (
+        <p role="status" className="mt-2 text-xs text-ink-secondary">
+          Checking payment state
+        </p>
+      ) : !completion ? (
         <p className="mt-2 text-xs text-ink-secondary">
           Available after the service trace has stopped.
         </p>
@@ -306,7 +342,16 @@ export function SessionCompletionPanel({
         action={confirm}
         onCancel={() => setConfirm(null)}
         onConfirm={() => {
-          if (confirm) mutation.mutate(confirm);
+          if (
+            confirm &&
+            confirmationLane.current === focusedLaneId &&
+            !disabled &&
+            (confirm === "complete"
+              ? summary.data?.canFinish &&
+                view.activeRun?.status === "completed"
+              : summary.data?.canClose)
+          )
+            mutation.mutate(confirm);
           setConfirm(null);
         }}
       />

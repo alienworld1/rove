@@ -48,6 +48,8 @@ Source for every engine row: `apps/engine/src/server.ts`. Schemas: `packages/con
 
 `/api/lab/scenarios[/:id]`, `/api/lab/runs[/:id]`, and run transport paths proxy the listed Lab operations. `GET /api/events/stream` proxies allowed presentation SSE. `/api/integration-status` establishes/reads the existing controlled session; `/api/health` reports readiness. Browser proxy availability depends on the engine and access gate; public docs do not.
 
+Browser mutations require the current session cookie and a matching `Origin`. A run start accepts an optional `runId`: retain the same identity with its scenario ID and digest when checking an interrupted start. An identical retry returns that durable run; reuse with different content conflicts. The product saves the identity in its URL before starting, so refreshing checks the existing run instead of opening another set of channels. Without `runId`, a start creates a fresh run.
+
 ## Commands, units, and idempotency
 
 The Lane command envelope carries `commandId`, `correlationId`, `laneId`, `expectedVersion`, optional injected development `now`, and a discriminated `payload`. Identical command delivery returns the retained outcome; changed content under the same command ID conflicts. A stale version returns conflict: refresh and reassess intent before issuing another command.

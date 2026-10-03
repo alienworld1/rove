@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { animated, useSpring } from "@react-spring/web";
 import {
   eventLabelFor,
@@ -35,15 +35,17 @@ export function CommittedEventMark({
   const evidence =
     event.eventType.startsWith("meter.") &&
     ["accepted", "rejected"].includes(event.outcome);
+  const played = useRef(!animate);
   const [spring, api] = useSpring(() => ({
     x: animate && evidence && !reducedMotion ? 10 : x,
     opacity: animate && evidence ? 0.4 : 1,
   }));
   useEffect(() => {
-    if (!animate || !evidence) {
+    if (!animate || !evidence || played.current) {
       api.set({ x, opacity: 1 });
       return;
     }
+    played.current = true;
     void api.start({
       config: motionPresets.direct,
       to: async (next) => {
@@ -89,9 +91,9 @@ export function CommittedEventMark({
       className="cursor-pointer focus-visible:outline-2 focus-visible:outline-info"
     >
       <rect
-        x="-4"
+        x="-6"
         y={focused ? 7 : anomalous ? -25 : -50}
-        width="8"
+        width="12"
         height={focused ? 46 : anomalous ? 110 : 158}
         fill="transparent"
       />

@@ -39,13 +39,13 @@ export function CompletionConfirmation({
               : "Finish this session and check its final reading and accounting record. The digital twin will remain stopped."}
           </Dialog.Description>
           <div className="mt-5 flex justify-end gap-3">
-            <Dialog.Close className="rounded-sm border border-line px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-info">
+            <Dialog.Close className="min-h-11 rounded-sm border border-line px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-info">
               Cancel
             </Dialog.Close>
             <button
               type="button"
               onClick={onConfirm}
-              className="rounded-sm bg-ink px-3 py-2 text-sm text-pure focus-visible:outline-2 focus-visible:outline-info"
+              className="min-h-11 rounded-sm bg-ink px-3 py-2 text-sm text-pure focus-visible:outline-2 focus-visible:outline-info"
             >
               {action === "close" ? "Close channel" : "Finish session"}
             </button>

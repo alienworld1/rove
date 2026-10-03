@@ -26,6 +26,8 @@ pnpm --filter @rove/engine simulate:charging seed
 
 The command prints the saved scenario ID and digest. Open `http://localhost:3000`, enter the local access key, and use **Corridor Lab** to validate, start, step, play, pause, and replay it. The three digital-twin Lanes have independent signed meter inputs and local deterministic payment channels. The payment label distinguishes these checks from Tempo confirmation.
 
+To finish a stopped local session, configure `CDR_CURRENCY=USD`, `CDR_SETTLEMENT_ASSET_ID=TEST_ASSET`, and `CDR_SOURCE_PARTY_ID=controlled-cpo` before starting the engine. Return to the live view, focus a Lane, and select **Finish session**. Inspect the accounting totals before selecting **Close channel**. For live Tempo runs, the accounting asset must instead match `TEMPO_ASSET_ADDRESS`.
+
 The engine also accepts controlled `POST /api/corridors`, `POST /api/lanes`, `GET /api/corridors/:id`, and `GET /api/lanes/:id` requests on port 4100. Send `Authorization: Bearer $DEMO_SESSION_TOKEN`; the engine must be in local development mode. Creation bodies use the schemas in `packages/contracts/src/charging.ts`. A Corridor needs explicit parties, asset, network, integer tariff/precision, ordered protection thresholds, reserve/settlement policy, and an allowed meter public key. A Lane needs that Corridor ID, unique external session ID, charger/meter IDs, positive max power in watts, and proof interval in milliseconds. Both creations require a unique `commandId` and a `correlationId`. An identical command retry returns the original outcome; a reused key with changed content is rejected.
 
 For the repeatable headless run:
@@ -71,6 +73,8 @@ Use the next signed sequence value after the last accepted record. For a corrupt
 
 To inspect command conflicts, send `POST /api/lanes/:id/evidence` with `commandId`, `correlationId`, `laneId`, `expectedVersion`, and an `ObserveEvidence` payload containing the raw signed record and transport session ID. Repeating the same command returns the same version. Changing its payload with the same key returns 409; an old `expectedVersion` returns 409 with the current version. External payment observations cannot be supplied through the HTTP command path.
 
+For `POST /api/lab/runs`, include a stable `runId` alongside the saved `scenarioId` and `scenarioDigest` when a start must survive a lost response. Check `GET /api/lab/runs/:id` or repeat the same start envelope; do not invent a new identity to resolve an uncertain start. The browser preserves this identity in the URL before submitting. Reuse with different scenario content is rejected.
+
 The local test suite exercises signed evidence, rejected identity binding, stale versions, concurrent Lane writes, and atomic rollback against PostgreSQL when `DATABASE_URL` is set:
 
 ```sh
@@ -80,3 +84,5 @@ pnpm test
 ```
 
 The browser shows an unavailable message if the engine or database read fails. Restore the service and select **Check again**. A historical chain snapshot is labeled as needing a fresh check; it does not grant new payment protection.
+
+Use an isolated PostgreSQL database for verification, set `DATABASE_URL`, and migrate it before `pnpm test`. Without that variable, database-dependent suites skip their checks; a skipped suite is not evidence of persistence or recovery. Keep existing run histories and uncertain channel obligations intact when repeating live checks. The protected engine and browser proxies require development mode; building the app alone does not establish a supported hosted access model.
