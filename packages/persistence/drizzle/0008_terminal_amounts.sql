@@ -1,0 +1,2 @@
+ALTER TABLE "payment_operations" DROP CONSTRAINT "payment_operation_amount_positive";--> statement-breakpoint
+ALTER TABLE "payment_operations" ADD CONSTRAINT "payment_operation_amount_positive" CHECK ("payment_operations"."requested_amount" > 0 or ("payment_operations"."requested_amount" = 0 and "payment_operations"."operation" in ('close', 'voucher')));

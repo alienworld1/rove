@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { laneStates } from "@rove/domain";
+import { sessionCompletionSchema } from "./completion.ts";
 import {
   decimalSchema,
   idSchema,
@@ -267,6 +268,7 @@ export const causalInspectorTraceSchema = z
           .nullable(),
         transactionHash: z.string().max(256).nullable(),
         confirmedAt: instantSchema.nullable(),
+        closure: sessionCompletionSchema.shape.closure.default(null),
       })
       .strict()
       .nullable(),

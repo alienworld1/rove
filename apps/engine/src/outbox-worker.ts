@@ -44,8 +44,15 @@ export async function processNextEffect(
   now = new Date().toISOString(),
   laneId?: string,
   excludeLab = false,
+  reconcileOnly = false,
 ) {
-  const job = await store.claimOutbox(now, 30_000, laneId, excludeLab);
+  const job = await store.claimOutbox(
+    now,
+    30_000,
+    laneId,
+    excludeLab,
+    reconcileOnly,
+  );
   if (!job) return false;
   const backoff = Math.min(300_000, 1_000 * 2 ** Math.min(job.attemptCount, 8));
   const nextAttemptAt = new Date(Date.parse(now) + backoff).toISOString();
@@ -59,6 +66,7 @@ export async function processNextEffect(
       job.effectCreatedAt,
     );
     const receipt =
+      !reconcileOnly &&
       reconciled.status === "not_found" &&
       (job.attemptCount === 1 ||
         job.effectType === "payment.voucher_requested" ||
@@ -95,14 +103,10 @@ export async function processNextEffect(
           : undefined,
     );
   } catch {
-    if (adapter.fail)
-      await adapter
-        .fail(job.laneId, job.effectType, job.idempotencyKey)
-        .catch(() => undefined);
     await store.finishOutbox(
       job.id,
       job.leaseToken!,
-      "failed",
+      job.externalReference ? "submitted" : "pending",
       nextAttemptAt,
       job.externalReference ?? undefined,
       "EFFECT_STATUS_UNAVAILABLE",

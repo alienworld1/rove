@@ -96,3 +96,12 @@ export function proofPrerequisites(env: NodeJS.ProcessEnv = process.env) {
     evidenceConfigured: evidenceSchema.safeParse(env).success,
   };
 }
+
+const accountingSchema = z.object({
+  CDR_CURRENCY: z.string().regex(/^[A-Z]{3}$/),
+  CDR_SETTLEMENT_ASSET_ID: z.string().min(1).max(128),
+  CDR_SOURCE_PARTY_ID: z.string().regex(/^[A-Za-z0-9._:-]{1,128}$/),
+});
+export function readAccountingConfig(env: NodeJS.ProcessEnv = process.env) {
+  return parseSettings(accountingSchema, env);
+}

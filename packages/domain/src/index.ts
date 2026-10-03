@@ -50,6 +50,68 @@ export type CorridorConfig = {
   updatedAt: string;
 };
 
+export type SessionCompletion = {
+  status:
+    | "awaiting_end_evidence"
+    | "awaiting_cdr"
+    | "awaiting_authorization"
+    | "awaiting_settlement"
+    | "mismatch"
+    | "reconciled"
+    | "closing"
+    | "closed";
+  serviceStartedAt: string;
+  serviceEndedAt: string;
+  endSource: "controlled_twin" | "external_adapter";
+  finalVoucherDigest: string | null;
+  finalEvidenceHash: string | null;
+  finalEvidenceSequence: number | null;
+  finalTrustedEnergyWh: string | null;
+  finalTrustedValue: string | null;
+  finalAuthorizedValue: string | null;
+  finalSettledValue: string | null;
+  cdr: {
+    id: string;
+    contentHash: string;
+    totalEnergyWh: string;
+    normalizedTotal: string;
+    currency: string;
+    sourcePartyId: string;
+    source: "controlled_fixture" | "external_adapter";
+  } | null;
+  comparison: {
+    id: string;
+    laneVersion: number;
+    checkedAt: string;
+    status: "MATCH" | "MISMATCH";
+    deltas: {
+      energyWh: string;
+      accounting: string;
+      authorization: string;
+      settlement: string;
+    };
+    reasonCodes: string[];
+    references: {
+      evidenceHash: string;
+      voucherDigest: string | null;
+      chainObservedAt: string | null;
+      cdrId: string;
+    };
+  } | null;
+  closure: {
+    depositBeforeClose: string;
+    settledBeforeClose: string;
+    expectedRefund: string;
+    confirmedRefund: string | null;
+    transactionHash: string | null;
+    receiptBlock: string | null;
+    closeEventReference: string | null;
+    refundEvidenceReference: string | null;
+    observedAt: string | null;
+  } | null;
+  reasonCodes: string[];
+};
+
 export type Lane = {
   id: string;
   version: number;
@@ -88,6 +150,7 @@ export type Lane = {
   unprotectedExposureBound: string;
   reasonCodes: string[];
   finalCdrId: string | null;
+  completion?: SessionCompletion | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -125,6 +188,16 @@ export type CommandEnvelope<T> = {
 };
 
 export type TransitionEffect =
+  | {
+      type: "payment.close_requested";
+      idempotencyKey: string;
+      payload: {
+        laneId: string;
+        channelId: string;
+        amount: string;
+        priorDeposit: string;
+      };
+    }
   | {
       type: "pause.requested";
       idempotencyKey: string;
@@ -166,9 +239,29 @@ export type TransitionResult = {
 
 export type VerifiedObservation =
   | {
+      type: "ServiceEnded";
+      startedAt?: string;
+      endedAt: string;
+      source: "controlled_twin" | "external_adapter";
+    }
+  | {
+      type: "ChannelClosed";
+      channelId: string;
+      network: string;
+      assetId: string;
+      finalSettledValue: string;
+      depositBeforeClose: string;
+      confirmedRefund: string;
+      transactionHash: string;
+      receiptBlock: string;
+      closeEventReference: string;
+      observedAt: string;
+    }
+  | {
       type: "EvidenceObserved";
       evidenceHash: string;
       accepted: boolean;
+      final?: boolean;
       reasonCode?: string;
       observedAt?: string;
       sequence?: number;

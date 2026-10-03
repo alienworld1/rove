@@ -8,6 +8,7 @@ export { runTempoProof, TempoProofError } from "./proof.js";
 export type { TempoProofConfig, TempoProofStep } from "./proof.js";
 export { createTempoChannelAdapter } from "./channel.js";
 export type {
+  ClosureObservation,
   ChannelDescriptor,
   ChannelObservation,
   TempoChannelConfig,

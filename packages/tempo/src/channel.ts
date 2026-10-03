@@ -1,5 +1,6 @@
 import {
   createPublicClient,
+  decodeFunctionData,
   createWalletClient,
   defineChain,
   hashTypedData,
@@ -50,6 +51,27 @@ export type ChannelObservation = {
   transactionHash?: Hash;
   descriptor?: ChannelDescriptor;
 };
+export type ClosureObservation = {
+  type: "ChannelClosed";
+  channelId: Hash;
+  network: string;
+  assetId: string;
+  finalSettledValue: string;
+  depositBeforeClose: string;
+  confirmedRefund: string;
+  transactionHash: Hash;
+  receiptBlock: string;
+  closeEventReference: string;
+  observedAt: string;
+};
+export type ClosureLookup =
+  | { status: "pending" | "not_found" | "unknown"; externalReference?: Hash }
+  | { status: "failed"; externalReference: Hash; reasonCode: string }
+  | {
+      status: "completed";
+      externalReference: Hash;
+      observation: ClosureObservation;
+    };
 export type ChannelLookup =
   | { status: "pending" | "not_found" | "unknown"; externalReference?: Hash }
   | { status: "failed"; externalReference: Hash; reasonCode: string }
@@ -135,6 +157,24 @@ export function createTempoChannelAdapter(config: TempoChannelConfig) {
       throw new Error("PAYMENT_CHANNEL_MISMATCH");
   }
 
+  async function readLifecycle(channelId: Hash) {
+    const state = await client.readContract({
+      address: reserveAddress,
+      abi: channelAbi,
+      functionName: "getChannelState",
+      args: [channelId],
+    });
+    return {
+      status:
+        state.deposit === 0n
+          ? ("unknown" as const)
+          : state.closeRequestedAt !== 0
+            ? ("close_requested" as const)
+            : ("active" as const),
+      state,
+    };
+  }
+
   async function readChannel(
     channelId: Hash,
     transactionHash?: Hash,
@@ -179,6 +219,12 @@ export function createTempoChannelAdapter(config: TempoChannelConfig) {
           externalReference: hash,
           reasonCode: "PAYMENT_TRANSACTION_MISMATCH",
         };
+      const [block, network] = await Promise.all([
+        client.getBlock({ blockNumber: result.blockNumber }),
+        client.getChainId(),
+      ]);
+      if (block.hash !== result.blockHash || network !== config.chainId)
+        return { status: "unknown" as const, externalReference: hash };
       return { status: "confirmed" as const, receipt: result };
     } catch {
       try {
@@ -232,6 +278,7 @@ export function createTempoChannelAdapter(config: TempoChannelConfig) {
     key: string,
     reference?: Hash,
     createdAt?: string,
+    priorDeposit?: bigint,
   ): Promise<ChannelLookup> {
     try {
       if (!reference) {
@@ -309,7 +356,7 @@ export function createTempoChannelAdapter(config: TempoChannelConfig) {
   }
 
   async function signVoucher(channelId: Hash, amount: bigint) {
-    if (amount <= 0n || amount >= 2n ** 96n)
+    if (amount < 0n || amount >= 2n ** 96n)
       throw new Error("PAYMENT_AUTHORIZATION_INVALID");
     const domain = voucherDomain(config.chainId);
     const message = { channelId, cumulativeAmount: amount };
@@ -391,8 +438,42 @@ export function createTempoChannelAdapter(config: TempoChannelConfig) {
     channelId: Hash,
     amount: bigint,
     reference?: Hash,
+    createdAt?: string,
+    priorDeposit?: bigint,
   ): Promise<ChannelLookup> {
-    if (!reference) return { status: "not_found" };
+    if (!reference) {
+      const event = parseAbiItem(
+        operation === "top_up"
+          ? "event TopUp(bytes32 indexed channelId,address indexed payer,address indexed payee,uint96 additionalDeposit,uint96 newDeposit)"
+          : "event Settled(bytes32 indexed channelId,address indexed payer,address indexed payee,uint96 cumulativeAmount,uint96 deltaPaid,uint96 newSettled)",
+      );
+      const latest = await client.getBlockNumber();
+      for (
+        let from = await firstBlockAt(createdAt);
+        from <= latest;
+        from += 500n
+      ) {
+        const logs = await client.getLogs({
+          address: reserveAddress,
+          event,
+          args: { channelId },
+          fromBlock: from,
+          toBlock: from + 499n < latest ? from + 499n : latest,
+        });
+        const matching = logs.filter((log) =>
+          "additionalDeposit" in log.args
+            ? log.args.additionalDeposit === amount &&
+              (priorDeposit === undefined ||
+                log.args.newDeposit === priorDeposit + amount)
+            : "cumulativeAmount" in log.args &&
+              log.args.cumulativeAmount === amount,
+        );
+        if (matching.length !== 1) continue;
+        reference = matching[0].transactionHash ?? undefined;
+        if (reference) break;
+      }
+      if (!reference) return { status: "unknown" };
+    }
     const result = await receipt(reference);
     if (result.status !== "confirmed") return result;
     try {
@@ -411,7 +492,9 @@ export function createTempoChannelAdapter(config: TempoChannelConfig) {
         (operation === "top_up" &&
           eventName === "TopUp" &&
           "additionalDeposit" in event.args &&
-          event.args.additionalDeposit !== amount) ||
+          (event.args.additionalDeposit !== amount ||
+            (priorDeposit !== undefined &&
+              event.args.newDeposit !== priorDeposit + amount))) ||
         (operation === "settle" &&
           eventName === "Settled" &&
           "cumulativeAmount" in event.args &&
@@ -428,7 +511,125 @@ export function createTempoChannelAdapter(config: TempoChannelConfig) {
     }
   }
 
+  async function submitClose(
+    channelId: Hash,
+    descriptor: ChannelDescriptor,
+    amount: bigint,
+    deposit: bigint,
+    signature: Hex,
+  ) {
+    await assertDescriptor(channelId, descriptor);
+    const current = await readChannel(channelId);
+    if (
+      BigInt(current.confirmedDeposit) !== deposit ||
+      BigInt(current.settledValue) !== amount
+    )
+      throw new Error("PAYMENT_CLOSURE_INVALID");
+    const hash = await payeeClient.writeContract({
+      address: reserveAddress,
+      abi: channelAbi,
+      functionName: "close",
+      args: [descriptor, amount, amount, signature],
+    });
+    return { status: "submitted" as const, externalReference: hash };
+  }
+
+  async function reconcileClose(
+    channelId: Hash,
+    descriptor: ChannelDescriptor,
+    amount: bigint,
+    deposit: bigint,
+    reference?: Hash,
+    createdAt?: string,
+  ): Promise<ClosureLookup> {
+    try {
+      await assertDescriptor(channelId, descriptor);
+      if (!reference) {
+        const event = parseAbiItem(
+          "event ChannelClosed(bytes32 indexed channelId,address indexed payer,address indexed payee,uint96 settledToPayee,uint96 refundedToPayer)",
+        );
+        const latest = await client.getBlockNumber();
+        for (
+          let from = await firstBlockAt(createdAt);
+          from <= latest;
+          from += 500n
+        ) {
+          const logs = await client.getLogs({
+            address: reserveAddress,
+            event,
+            args: { channelId },
+            fromBlock: from,
+            toBlock: from + 499n < latest ? from + 499n : latest,
+          });
+          if (logs.length === 1 && logs[0].transactionHash) {
+            reference = logs[0].transactionHash;
+            break;
+          }
+        }
+        if (!reference) return { status: "unknown" };
+      }
+      const result = await receipt(reference);
+      if (result.status !== "confirmed") return result;
+      const closed = parseEventLogs({
+        abi: channelAbi,
+        logs: result.receipt.logs,
+        eventName: "ChannelClosed",
+        strict: true,
+      }).find(
+        (event) =>
+          event.args.channelId.toLowerCase() === channelId.toLowerCase(),
+      );
+      const transaction = await client.getTransaction({ hash: reference });
+      const call = decodeFunctionData({
+        abi: channelAbi,
+        data: transaction.input,
+      });
+      if (
+        call.functionName !== "close" ||
+        call.args[1] !== amount ||
+        call.args[2] !== amount
+      )
+        return { status: "unknown", externalReference: reference };
+      await assertDescriptor(channelId, call.args[0]);
+      const { state } = await readLifecycle(channelId);
+      if (
+        !closed ||
+        closed.address.toLowerCase() !== reserveAddress.toLowerCase() ||
+        closed.args.payer.toLowerCase() !== descriptor.payer.toLowerCase() ||
+        closed.args.payee.toLowerCase() !== descriptor.payee.toLowerCase() ||
+        closed.args.settledToPayee !== amount ||
+        closed.args.refundedToPayer !== deposit - amount ||
+        state.deposit !== 0n ||
+        state.settled !== 0n ||
+        state.closeRequestedAt !== 0
+      )
+        return { status: "unknown", externalReference: reference };
+      return {
+        status: "completed",
+        externalReference: reference,
+        observation: {
+          type: "ChannelClosed",
+          channelId,
+          network: `eip155:${config.chainId}`,
+          assetId: config.assetAddress.toLowerCase(),
+          finalSettledValue: amount.toString(),
+          depositBeforeClose: deposit.toString(),
+          confirmedRefund: closed.args.refundedToPayer.toString(),
+          transactionHash: reference,
+          receiptBlock: result.receipt.blockNumber.toString(),
+          closeEventReference: `${reference}:${closed.logIndex}`,
+          observedAt: new Date().toISOString(),
+        },
+      };
+    } catch {
+      return { status: "unknown", externalReference: reference };
+    }
+  }
+
   return {
+    readLifecycle,
+    submitClose,
+    reconcileClose,
     readChannel,
     reconcileOpen,
     submitOpen,

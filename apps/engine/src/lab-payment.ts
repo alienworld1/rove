@@ -38,6 +38,26 @@ export function createLocalLabPaymentAdapter(
       };
       return { status: "completed", observation: voucher };
     }
+    if (type === "payment.close_requested")
+      return {
+        status: "completed",
+        externalReference: `local-${stableId(key)}`,
+        observation: {
+          type: "ChannelClosed",
+          channelId,
+          network: "local-simulation",
+          assetId: current.lane.settlementAssetId,
+          finalSettledValue: request.amount!,
+          depositBeforeClose: request.priorDeposit!,
+          confirmedRefund: (
+            BigInt(request.priorDeposit!) - BigInt(request.amount!)
+          ).toString(),
+          transactionHash: `local-${stableId(key)}`,
+          receiptBlock: "3",
+          closeEventReference: `local-${stableId(key)}:0`,
+          observedAt: traceEpoch,
+        },
+      };
     const confirmedDeposit =
       type === "payment.open_requested"
         ? request.amount!
@@ -77,7 +97,9 @@ export function createLocalLabPaymentAdapter(
         return { status: "completed" };
       if (
         type === "payment.voucher_requested" &&
-        BigInt(current.lane.authorizedValue) >= BigInt(request.amount!)
+        (BigInt(request.amount!) > 0n
+          ? BigInt(current.lane.authorizedValue) >= BigInt(request.amount!)
+          : current.voucher !== null)
       )
         return { status: "completed" };
       if (
@@ -97,6 +119,22 @@ export function createLocalLabPaymentAdapter(
     async confirm(laneId, type, observation, key) {
       if (type === "pause.requested" || !observation) return;
       const current = await store.getLane(laneId);
+      if (type === "payment.close_requested") {
+        if (current.state === "CLOSED") return;
+        await store.advanceLane(
+          {
+            commandId: stableId(`${key}:confirmed`),
+            correlationId: stableId(key),
+            laneId,
+            expectedVersion: current.version,
+            now: traceEpoch,
+            payload: { type: "TickProtectionClock" },
+          },
+          "local-simulation",
+          observation as import("@rove/domain").VerifiedObservation,
+        );
+        return;
+      }
       const voucher =
         type === "payment.voucher_requested"
           ? (observation as VerifiedVoucher)

@@ -78,12 +78,16 @@ function traceEvent(
 
 export function summarizeCorridor(lanes: LaneProjection[]) {
   const orderedAttention = lanes
-    .filter((lane) => lane.state !== "PROTECTED")
+    .filter((lane) => severity[lane.state] > 0)
     .sort((left, right) => severity[right.state] - severity[left.state]);
   const states = new Set(lanes.map((lane) => lane.state));
-  const headrooms = lanes.map((lane) => lane.fundedHeadroom);
+  const headrooms = lanes.map((lane) =>
+    lane.state === "CLOSED" ? "0" : lane.fundedHeadroom,
+  );
   return {
-    activeLaneCount: lanes.length,
+    activeLaneCount: lanes.filter(
+      (lane) => !["COMPLETING", "RECONCILED", "CLOSED"].includes(lane.state),
+    ).length,
     attentionLaneIds: orderedAttention.map((lane) => lane.id),
     state: states.size === 1 && lanes[0] ? lanes[0].state : ("MIXED" as const),
     trustedDeliveredValue: sum(lanes.map((lane) => lane.trustedDeliveredValue)),

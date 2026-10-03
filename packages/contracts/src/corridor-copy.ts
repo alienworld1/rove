@@ -1,4 +1,11 @@
 const reasonText = {
+  FINAL_EVIDENCE_MISSING: "Waiting for the final signed reading.",
+  CDR_MISSING: "Waiting for the final accounting record.",
+  FINAL_AUTHORIZATION_PENDING: "Waiting for final payment authorization.",
+  FINAL_SETTLEMENT_PENDING: "Final settlement awaiting confirmation.",
+  CDR_SERVICE_MISMATCH: "Session totals don't match.",
+  SESSION_TOTALS_MATCH: "Session totals match.",
+  CHANNEL_CLOSED: "Channel closed. Unused reserve has been checked.",
   EVIDENCE_SIGNATURE_INVALID: "Meter signature could not be verified.",
   EVIDENCE_SOURCE_MISMATCH: "The reading came from a different meter.",
   EVIDENCE_SESSION_MISMATCH: "The reading belongs to a different session.",
@@ -30,6 +37,14 @@ export function reasonTextFor(code: string | null | undefined) {
 }
 
 export function eventLabelFor(type: string) {
+  if (type === "lane.service_ended") return "Service ended";
+  if (type === "session.reconciled") return "Session totals match";
+  if (type === "session.accounting_mismatch")
+    return "Accounting difference found";
+  if (type === "payment.channel_closed") return "Unused reserve returned";
+  if (type.includes("close_submitted")) return "Channel close submitted";
+  if (type.includes("close_completed")) return "Channel close confirmed";
+  if (type.includes("close_requested")) return "Channel close requested";
   if (type.includes("evidence_accepted")) return "Meter reading accepted";
   if (type.includes("evidence_rejected")) return "Meter reading rejected";
   if (type.includes("voucher")) return "Protection advanced";

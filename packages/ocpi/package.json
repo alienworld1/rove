@@ -1,5 +1,24 @@
 {
   "name": "@rove/ocpi",
   "private": true,
-  "version": "0.0.0"
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test src/*.test.ts",
+    "build": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@rove/contracts": "workspace:*",
+    "@rove/domain": "workspace:*",
+    "@rove/protection": "workspace:*",
+    "zod": "^4.1.0"
+  }
 }

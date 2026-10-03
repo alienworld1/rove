@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { labRunViewSchema, type LabScenarioEvent } from "@rove/contracts";
-import { readPaymentConfig } from "@rove/config";
+import { readAccountingConfig, readPaymentConfig } from "@rove/config";
 import {
   compileLabScenario,
   LabValidationError,
@@ -26,6 +26,127 @@ export class CorridorLab {
     private charging: ChargingStore,
     private lab: LabStore,
   ) {}
+
+  async finishLane(input: import("@rove/contracts").CompletionCommand) {
+    const current = await this.charging.getPaymentContext(input.laneId);
+    const view = await this.viewForCorridor(current.lane.corridorId);
+    if (!view || view.run.status !== "completed")
+      throw new StoreError("VALIDATION");
+    const laneKey = Object.entries(view.run.laneBindings).find(
+      ([, id]) => id === input.laneId,
+    )?.[0];
+    const definition = view.scenario.lanes.find((lane) => lane.key === laneKey);
+    if (!definition) throw new StoreError("ACCESS_DENIED");
+    const settings = readAccountingConfig();
+    if (
+      settings.CDR_SETTLEMENT_ASSET_ID.toLowerCase() !==
+      current.lane.settlementAssetId.toLowerCase()
+    )
+      throw new StoreError("VALIDATION");
+    const local = current.lane.tempoNetwork === "local-simulation";
+    const instant =
+      current.lane.completion?.serviceEndedAt ??
+      (local
+        ? new Date(
+            Date.parse(view.scenario.traceEpoch) + view.run.traceOffsetMs + 1,
+          ).toISOString()
+        : new Date().toISOString());
+    await this.charging.advanceLane(
+      {
+        ...input,
+        now: instant,
+        payload: {
+          type: "CompleteLane",
+          serviceStartedAt: view.scenario.traceEpoch,
+          serviceEndedAt: instant,
+          endSource: "controlled_twin",
+        },
+      },
+      "corridor-lab",
+    );
+    let context = await this.charging.getPaymentContext(input.laneId);
+    if (!context.lane.completion?.finalEvidenceHash) {
+      const endReading = view.scenario.events
+        .filter(
+          (event) =>
+            event.laneKey === laneKey &&
+            event.traceOffsetMs <= view.run.traceOffsetMs &&
+            "cumulativeMilliWh" in event.parameters,
+        )
+        .sort((a, b) => a.traceOffsetMs - b.traceOffsetMs)
+        .at(-1);
+      if (!endReading || !("cumulativeMilliWh" in endReading.parameters))
+        throw new StoreError("VALIDATION");
+      const raw = controlledReading({
+        lane: definition,
+        sessionId: context.lane.externalSessionId,
+        instant,
+        sequence: (context.lane.lastEvidenceSequence ?? 0) + 1,
+        cumulativeMilliWh: endReading.parameters.cumulativeMilliWh,
+      });
+      await this.charging.advanceLane(
+        {
+          commandId: `${input.commandId}:final`,
+          correlationId: input.correlationId,
+          laneId: input.laneId,
+          expectedVersion: context.lane.version,
+          now: instant,
+          payload: {
+            type: "ObserveEvidence",
+            raw,
+            transportSessionId: context.lane.externalSessionId,
+            final: true,
+          },
+        },
+        "corridor-lab",
+      );
+      context = await this.charging.getPaymentContext(input.laneId);
+    }
+    if (
+      context.lane.completion?.finalTrustedEnergyWh !== null &&
+      context.lane.completion?.finalTrustedEnergyWh !== undefined &&
+      !context.lane.finalCdrId
+    ) {
+      const amount = BigInt(context.lane.completion.finalTrustedValue!);
+      const precision = context.lane.tariff.assetDecimals;
+      const divisor = 10n ** BigInt(precision);
+      const cost = precision
+        ? `${amount / divisor}.${(amount % divisor).toString().padStart(precision, "0")}`
+        : amount.toString();
+      const energy = BigInt(context.lane.completion.finalTrustedEnergyWh);
+      await this.charging.advanceLane(
+        {
+          commandId: `${input.commandId}:cdr`,
+          correlationId: input.correlationId,
+          laneId: input.laneId,
+          expectedVersion: context.lane.version,
+          now: instant,
+          payload: {
+            type: "ReceiveCDR",
+            raw: JSON.stringify({
+              externalCdrId: `end-${input.laneId}`,
+              externalSessionId: context.lane.externalSessionId,
+              sourcePartyId: settings.CDR_SOURCE_PARTY_ID,
+              meterId: context.lane.meterId,
+              chargerId: context.lane.chargerId,
+              startedAt: context.lane.completion.serviceStartedAt,
+              endedAt: instant,
+              currency: settings.CDR_CURRENCY,
+              totalEnergyKwh: `${energy / 1000n}.${(energy % 1000n).toString().padStart(3, "0")}`,
+              totalCost: cost,
+              tariffBasis: context.lane.tariff,
+              chargeType: "energy_only_tax_free",
+            }),
+          },
+        },
+        "corridor-lab",
+      );
+    }
+    if (local) {
+      await this.drainLocal(input.laneId, instant);
+    }
+    return this.charging.getCompletion(input.laneId);
+  }
 
   async runVersion(runId: string) {
     const { run } = await this.lab.getRun(runId);
@@ -153,6 +274,11 @@ export class CorridorLab {
   }
 
   private async drainLive(laneId: string) {
+    if (
+      this.charging.recoveryEnforced &&
+      this.charging.recovery.get(laneId)?.status !== "ready"
+    )
+      return false;
     const adapter = createChargingEffectAdapter(this.charging);
     return processNextEffect(
       this.charging,
@@ -236,7 +362,7 @@ export class CorridorLab {
           compiled.definition.corridor.tempoNetwork === "local-simulation"
             ? "Local deterministic payment"
             : "Tempo",
-        settlement: "Partial settlement; final close is outside this run",
+        settlement: "Cumulative settlement and channel completion",
       },
       lanes,
       events: events.map((event) => ({
@@ -360,6 +486,12 @@ export class CorridorLab {
   async dispatchOne(runId: string, expectedVersion: number) {
     const snapshot = await this.lab.getRun(runId);
     const unavailableLanes = new Set<string>();
+    if (this.charging.recoveryEnforced)
+      for (const [key, id] of Object.entries(
+        snapshot.run.laneBindings as Record<string, string>,
+      ))
+        if (this.charging.recovery.get(id)?.status !== "ready")
+          unavailableLanes.add(key);
     const definition = snapshot.run.compiledSnapshot as CompiledLabScenario;
     if (definition.definition.corridor.tempoNetwork !== "local-simulation") {
       const bindings = snapshot.run.laneBindings as Record<string, string>;

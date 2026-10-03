@@ -103,6 +103,7 @@ export const laneCommandSchema = z
           type: z.literal("ObserveEvidence"),
           raw: z.string().min(1).max(65536),
           transportSessionId: idSchema,
+          final: z.boolean().optional(),
         })
         .strict(),
       z
@@ -126,6 +127,22 @@ export const laneCommandSchema = z
           ]),
         })
         .strict(),
+      z
+        .object({
+          type: z.literal("CompleteLane"),
+          serviceStartedAt: instantSchema.optional(),
+          serviceEndedAt: instantSchema,
+          endSource: z.enum(["controlled_twin", "external_adapter"]),
+        })
+        .strict(),
+      z
+        .object({
+          type: z.literal("ReceiveCDR"),
+          raw: z.string().min(1).max(60000),
+        })
+        .strict(),
+      z.object({ type: z.literal("CheckCompletion") }).strict(),
+      z.object({ type: z.literal("CloseChannel") }).strict(),
       z.object({ type: z.literal("TickProtectionClock") }).strict(),
       z.object({ type: z.literal("RequirePause") }).strict(),
       z.object({ type: z.literal("BeginRecovery") }).strict(),
@@ -161,7 +178,7 @@ export const laneProjectionSchema = z
     operations: z.array(
       z
         .object({
-          type: z.enum(["open", "voucher", "top_up", "settle"]),
+          type: z.enum(["open", "voucher", "top_up", "settle", "close"]),
           status: z.enum(["pending", "submitted", "confirmed", "failed"]),
           requestedAmount: decimalSchema,
           transactionHash: z.string().nullable(),

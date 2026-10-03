@@ -67,3 +67,18 @@ test("presentation cursors are bounded and events use standard framing", () => {
   assert.match(encoded, /^id: 42\nevent: lane_projection_changed\ndata: /);
   assert.match(encoded, /\n\n$/);
 });
+
+test("closed sessions retain totals without active attention or unused reserve", () => {
+  const aggregate = summarizeCorridor([
+    lane("closed", "CLOSED", {
+      trusted: "500000",
+      protected: "500000",
+      exposure: "0",
+      headroom: "250000",
+    }),
+  ]);
+  assert.equal(aggregate.activeLaneCount, 0);
+  assert.deepEqual(aggregate.attentionLaneIds, []);
+  assert.equal(aggregate.settledValue, "1");
+  assert.equal(aggregate.unusedFundedHeadroom, "0");
+});

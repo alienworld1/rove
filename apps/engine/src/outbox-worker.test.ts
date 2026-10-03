@@ -143,3 +143,69 @@ test("an uncertain submitted effect remains submitted for reconciliation", async
   await processNextEffect(store, adapter, now);
   assert.equal(finalStatus, "submitted");
 });
+
+test("startup discovery cannot submit financial work and preserves unknown outcomes", async () => {
+  let submissions = 0;
+  let status = "";
+  const store = {
+    claimOutbox: async () => ({
+      id: "job",
+      laneId: "lane",
+      effectType: "payment.close_requested",
+      idempotencyKey: "close-key",
+      externalReference: null,
+      attemptCount: 1,
+      leaseToken: "lease",
+      payload: {},
+      previousStatus: "pending",
+    }),
+    finishOutbox: async (_id: string, _lease: string, next: string) => {
+      status = next;
+    },
+  } as unknown as ChargingStore;
+  const adapter: EffectAdapter = {
+    reconcile: async () => ({ status: "not_found" }),
+    submit: async () => {
+      submissions++;
+      return { status: "submitted" };
+    },
+  };
+  await processNextEffect(store, adapter, now, "lane", false, true);
+  assert.equal(submissions, 0);
+  assert.equal(status, "pending");
+});
+
+test("RPC timeouts keep submitted financial work unresolved rather than reverted", async () => {
+  let status = "";
+  let failures = 0;
+  const store = {
+    claimOutbox: async () => ({
+      id: "job",
+      laneId: "lane",
+      effectType: "payment.close_requested",
+      idempotencyKey: "close-key",
+      externalReference: "hash",
+      attemptCount: 2,
+      leaseToken: "lease",
+      payload: {},
+      previousStatus: "submitted",
+    }),
+    finishOutbox: async (_id: string, _lease: string, next: string) => {
+      status = next;
+    },
+  } as unknown as ChargingStore;
+  const adapter: EffectAdapter = {
+    reconcile: async () => {
+      throw new Error("RPC_TIMEOUT");
+    },
+    submit: async () => {
+      throw new Error("Unexpected submission");
+    },
+    fail: async () => {
+      failures++;
+    },
+  };
+  await processNextEffect(store, adapter, now);
+  assert.equal(status, "submitted");
+  assert.equal(failures, 0);
+});

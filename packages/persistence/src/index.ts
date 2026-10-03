@@ -1,3 +1,6 @@
+import { readAccountingConfig } from "@rove/config";
+import { normalizeAccountingRecord, compareSessionTotals } from "@rove/ocpi";
+import { completionSummarySchema } from "@rove/contracts";
 import { createHash, randomUUID } from "node:crypto";
 import { and, eq, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -22,6 +25,8 @@ import { verifyOcmf } from "@rove/evidence";
 import { transitionLane } from "@rove/protection";
 import {
   auditProjection,
+  cdrs,
+  reconciliations,
   corridors,
   domainEvents,
   evidenceVerifications,
@@ -33,6 +38,7 @@ import {
   processedCommands,
   tempoChainSnapshots,
   tempoChannels,
+  tempoTransactions,
   tempoVouchers,
 } from "./schema.js";
 export { LabStore } from "./lab-store.js";
@@ -162,6 +168,7 @@ function fromRow(row: LaneRow): Lane {
     unprotectedExposureBound: row.unprotectedExposureBound,
     reasonCodes: row.reasonCodes as string[],
     finalCdrId: row.finalCdrId,
+    completion: row.completion as Lane["completion"],
     createdAt: date(row.createdAt),
     updatedAt: date(row.updatedAt),
   };
@@ -206,6 +213,7 @@ function laneValues(lane: Lane) {
     unprotectedExposureBound: lane.unprotectedExposureBound,
     reasonCodes: lane.reasonCodes,
     finalCdrId: lane.finalCdrId,
+    completion: lane.completion ?? null,
     createdAt: lane.createdAt,
     updatedAt: lane.updatedAt,
   };
@@ -265,6 +273,7 @@ function projectionValues(projection?: Record<string, unknown>) {
 }
 
 function operationStatusAtEvent(eventType: string, current: string | null) {
+  if (eventType === "payment.channel_closed") return "confirmed";
   const stage =
     /^payment\.(?:open|top_up|settlement|voucher)_(pending|submitted|completed|failed)$/.exec(
       eventType,
@@ -313,6 +322,116 @@ function verificationChecks(reasonCode: string | null) {
 export class ChargingStore {
   private client: ReturnType<typeof postgres>;
   private db: Database;
+  readonly recovery = new Map<
+    string,
+    {
+      status: "pending" | "ready" | "blocked";
+      checkedAt: string | null;
+      reasonCodes: string[];
+    }
+  >();
+  recoveryEnforced = false;
+
+  async requestEffectCheck(laneId: string) {
+    await this.db
+      .update(outboxJobs)
+      .set({ nextAttemptAt: new Date().toISOString() })
+      .where(
+        and(
+          eq(outboxJobs.laneId, laneId),
+          sql`${outboxJobs.status} in ('pending', 'submitted', 'failed') and ${outboxJobs.attemptCount} > 0`,
+        ),
+      );
+  }
+
+  async hasUnresolvedSubmission(laneId: string) {
+    const [row] = await this.db
+      .select({ id: outboxJobs.id })
+      .from(outboxJobs)
+      .where(
+        and(
+          eq(outboxJobs.laneId, laneId),
+          sql`${outboxJobs.attemptCount} > 0 and ${outboxJobs.status} <> 'completed' and not (${outboxJobs.status} = 'failed' and ${outboxJobs.lastError} = 'PAYMENT_TRANSACTION_FAILED')`,
+        ),
+      )
+      .limit(1);
+    return Boolean(row);
+  }
+
+  async listRecoveryLanes() {
+    return (await this.db.select().from(lanes)).map(fromRow);
+  }
+
+  async getCompletion(laneId: string) {
+    return this.consistentRead((store) => store.readCompletion(laneId));
+  }
+
+  private async readCompletion(laneId: string) {
+    const context = await this.getPaymentContext(laneId);
+    const projection = await this.getLane(laneId);
+    const completion = context.lane.completion
+      ? structuredClone(context.lane.completion)
+      : null;
+    if (completion?.closure && !completion.closure.transactionHash)
+      completion.closure.transactionHash =
+        projection.operations.find((operation) => operation.type === "close")
+          ?.transactionHash ?? null;
+    const recovery = this.recovery.get(laneId) ?? {
+      status: this.recoveryEnforced ? ("pending" as const) : ("ready" as const),
+      checkedAt: null,
+      reasonCodes: [],
+    };
+    const events = await this.db
+      .select()
+      .from(domainEvents)
+      .where(eq(domainEvents.laneId, laneId))
+      .orderBy(sql`${domainEvents.ordinal} desc`);
+    return completionSummarySchema.parse({
+      laneId,
+      externalSessionId: context.lane.externalSessionId,
+      version: projection.version,
+      completion,
+      recovery,
+      failedOperations: projection.operations
+        .filter((operation) => operation.status === "failed")
+        .map((operation) => ({
+          operation: operation.type,
+          reasonCode: operation.reasonCode,
+        })),
+      canFinish:
+        !completion &&
+        projection.meterSource === "controlled-fixture" &&
+        recovery.status === "ready",
+      canClose:
+        completion?.status === "reconciled" &&
+        completion.comparison?.status === "MATCH" &&
+        (projection.chainFreshness === "current" ||
+          (context.lane.tempoNetwork === "local-simulation" &&
+            context.lane.chainHealth === "fresh")) &&
+        recovery.status === "ready" &&
+        projection.operations.every((op) => op.status === "confirmed"),
+      paymentSource: projection.paymentSource,
+      evidenceEventId:
+        events.find(
+          (event) => event.evidenceHash === completion?.finalEvidenceHash,
+        )?.id ?? null,
+      paymentEventId:
+        events.find((event) => event.type === "payment.channel_closed")?.id ??
+        events.find((event) => event.txHash)?.id ??
+        null,
+    });
+  }
+
+  async getAccountingRecord(laneId: string) {
+    const lane = await this.getPaymentContext(laneId);
+    if (!lane.lane.finalCdrId) throw new StoreError("NOT_FOUND");
+    const [cdr] = await this.db
+      .select()
+      .from(cdrs)
+      .where(and(eq(cdrs.id, lane.lane.finalCdrId), eq(cdrs.laneId, laneId)));
+    if (!cdr) throw new StoreError("NOT_FOUND");
+    return { id: cdr.id, raw: cdr.rawText, normalization: cdr.normalization };
+  }
 
   constructor(databaseUrl: string) {
     this.client = postgres(databaseUrl, {
@@ -413,7 +532,8 @@ export class ChargingStore {
 
   async startLane(input: StartLaneInput, actor: string) {
     const requestHash = hash(input);
-    return this.db.transaction(async (tx) => {
+    let created = false;
+    const result = await this.db.transaction(async (tx) => {
       await tx.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${input.commandId}, 0))`,
       );
@@ -560,8 +680,16 @@ export class ChargingStore {
         outcome,
         createdAt: now,
       });
+      created = true;
       return outcome;
     });
+    if (created)
+      this.recovery.set(result.id, {
+        status: "ready",
+        checkedAt: new Date().toISOString(),
+        reasonCodes: [],
+      });
+    return result;
   }
 
   async getCorridor(id: string) {
@@ -1032,8 +1160,15 @@ export class ChargingStore {
                 .limit(1)
             )[0]
           : undefined;
+        const terminalCompletion =
+          event.type === "payment.channel_closed"
+            ? (laneRow.completion as
+                import("@rove/domain").SessionCompletion | null)
+            : null;
         const voucherDigest =
           payload.digest ??
+          terminalCompletion?.finalVoucherDigest ??
+          terminalCompletion?.comparison?.references.voucherDigest ??
           (downstreamVoucherEvent?.payload as { digest?: string } | undefined)
             ?.digest;
         const voucher = voucherDigest
@@ -1123,6 +1258,7 @@ export class ChargingStore {
                   cumulativeWh: evidence.cumulativeWh,
                   verifierVersion: verification.verifierVersion,
                   accepted: verification.accepted,
+
                   checks,
                   raw: null,
                 }
@@ -1162,8 +1298,10 @@ export class ChargingStore {
                 authorizedValue: after.authorized,
                 settledValue: after.settled,
                 fundedHeadroom: after.headroom,
-                operationType: operation?.operation ?? null,
+                operationType:
+                  operation?.operation ?? (terminalCompletion ? "close" : null),
                 operationStatus,
+                closure: terminalCompletion?.closure ?? null,
                 transactionHash: operation?.txHash ?? event.txHash,
                 confirmedAt:
                   operationStatus === "confirmed" && operation?.confirmedAt
@@ -1327,6 +1465,31 @@ export class ChargingStore {
         process.env.NODE_ENV === "production"
       )
         throw new StoreError("ACCESS_DENIED");
+      if (
+        this.recoveryEnforced &&
+        this.recovery.get(lane.id)?.status !== "ready" &&
+        !override &&
+        actor !== "engine-recovery"
+      )
+        throw new StoreError("VALIDATION");
+      if (
+        lane.completion &&
+        input.payload.type === "ObserveEvidence" &&
+        (!input.payload.final || lane.completion.finalEvidenceHash)
+      )
+        throw new StoreError("VALIDATION");
+      if (
+        !lane.completion &&
+        input.payload.type === "ObserveEvidence" &&
+        input.payload.final
+      )
+        throw new StoreError("VALIDATION");
+      if (
+        input.payload.type === "CompleteLane" &&
+        actor !== "corridor-lab" &&
+        actor !== "external-adapter"
+      )
+        throw new StoreError("ACCESS_DENIED");
       let observation: VerifiedObservation | undefined = override;
       let verification: ReturnType<typeof verifyOcmf> | undefined;
       if (!observation && input.payload.type === "ObserveEvidence") {
@@ -1380,6 +1543,7 @@ export class ChargingStore {
           type: "EvidenceObserved",
           evidenceHash: verification.rawPayloadHash,
           accepted: verification.accepted,
+          final: input.payload.final,
           reasonCode: verification.reasonCode,
           observedAt: verification.observedAt,
           sequence: verification.sequence,
@@ -1391,13 +1555,94 @@ export class ChargingStore {
         if (payload.type === "ObservePayment")
           throw new StoreError("ACCESS_DENIED");
         observation =
-          payload.type === "PaymentUnavailable"
-            ? { type: "PaymentUnavailable", reasonCode: payload.reason }
-            : payload.type === "TickProtectionClock"
+          payload.type === "CompleteLane"
+            ? {
+                type: "ServiceEnded",
+                startedAt: payload.serviceStartedAt,
+                endedAt: payload.serviceEndedAt,
+                source: payload.endSource,
+              }
+            : payload.type === "ReceiveCDR" ||
+                payload.type === "CheckCompletion" ||
+                payload.type === "CloseChannel"
               ? { type: "ClockTick" }
-              : payload.type === "RequirePause"
-                ? { type: "PauseRequired" }
-                : { type: "RecoveryBegun" };
+              : payload.type === "PaymentUnavailable"
+                ? { type: "PaymentUnavailable", reasonCode: payload.reason }
+                : payload.type === "TickProtectionClock"
+                  ? { type: "ClockTick" }
+                  : payload.type === "RequirePause"
+                    ? { type: "PauseRequired" }
+                    : { type: "RecoveryBegun" };
+      }
+      if (input.payload.type === "ReceiveCDR") {
+        if (!lane.completion || lane.state === "CLOSED")
+          throw new StoreError("VALIDATION");
+        const settings = readAccountingConfig();
+        if (
+          settings.CDR_SETTLEMENT_ASSET_ID.toLowerCase() !==
+          lane.settlementAssetId.toLowerCase()
+        )
+          throw new StoreError("VALIDATION");
+        const normalized = normalizeAccountingRecord(
+          input.payload.raw,
+          {
+            externalSessionId: lane.externalSessionId,
+            sourcePartyId: settings.CDR_SOURCE_PARTY_ID,
+            meterId: lane.meterId,
+            chargerId: lane.chargerId,
+            startedAt: lane.completion.serviceStartedAt,
+            endedAt: lane.completion.serviceEndedAt,
+            currency: settings.CDR_CURRENCY,
+            settlementAssetId: lane.settlementAssetId,
+            tariff: lane.tariff,
+          },
+          now,
+        );
+        const [existingCdr] = await tx
+          .select()
+          .from(cdrs)
+          .where(
+            and(
+              eq(cdrs.sourcePartyId, normalized.record.sourcePartyId),
+              eq(cdrs.externalCdrId, normalized.record.externalCdrId),
+            ),
+          );
+        if (
+          existingCdr &&
+          (existingCdr.contentHash !== normalized.contentHash ||
+            existingCdr.laneId !== lane.id)
+        )
+          throw new StoreError("CONFLICT");
+        if (lane.finalCdrId && lane.finalCdrId !== existingCdr?.id)
+          throw new StoreError("CONFLICT");
+        const cdrId = existingCdr?.id ?? randomUUID();
+        if (!existingCdr)
+          await tx.insert(cdrs).values({
+            id: cdrId,
+            laneId: lane.id,
+            externalSessionId: lane.externalSessionId,
+            raw: normalized.record,
+            rawText: normalized.raw,
+            sourcePartyId: normalized.record.sourcePartyId,
+            externalCdrId: normalized.record.externalCdrId,
+            contentHash: normalized.contentHash,
+            normalization: normalized,
+            normalizedTotal: normalized.normalizedTotal,
+            receivedAt: now,
+          });
+        lane.finalCdrId = cdrId;
+        lane.completion.cdr = {
+          id: cdrId,
+          contentHash: normalized.contentHash,
+          totalEnergyWh: normalized.totalEnergyWh,
+          normalizedTotal: normalized.normalizedTotal,
+          currency: normalized.record.currency,
+          sourcePartyId: normalized.record.sourcePartyId,
+          source:
+            actor === "corridor-lab"
+              ? "controlled_fixture"
+              : "external_adapter",
+        };
       }
       const result = transitionLane(
         lane,
@@ -1405,6 +1650,183 @@ export class ChargingStore {
         now,
         `${input.commandId}:pause`,
       );
+      const completion = result.lane.completion;
+      if (
+        completion &&
+        completion.finalEvidenceHash &&
+        completion.cdr &&
+        ["mismatch", "reconciled"].includes(completion.status)
+      ) {
+        const comparison = compareSessionTotals({
+          trustedEnergyWh: completion.finalTrustedEnergyWh!,
+          cdrEnergyWh: completion.cdr.totalEnergyWh,
+          trustedValue: completion.finalTrustedValue!,
+          cdrTotal: completion.cdr.normalizedTotal,
+          authorizedValue: result.lane.authorizedValue,
+          settledValue: result.lane.settledValue,
+        });
+        const [currentVoucher] = await tx
+          .select()
+          .from(tempoVouchers)
+          .where(
+            and(
+              eq(tempoVouchers.channelId, lane.channelId ?? ""),
+              eq(tempoVouchers.verificationStatus, "verified"),
+              eq(tempoVouchers.cumulativeAmount, result.lane.authorizedValue),
+            ),
+          )
+          .orderBy(sql`${tempoVouchers.createdAt} desc`)
+          .limit(1);
+        if (voucher?.cumulativeAmount === completion.finalTrustedValue)
+          completion.finalVoucherDigest = voucher.digest;
+        else if (
+          currentVoucher?.cumulativeAmount === completion.finalTrustedValue
+        )
+          completion.finalVoucherDigest = currentVoucher.digest;
+        completion.comparison = {
+          ...comparison,
+          id: randomUUID(),
+          laneVersion: result.lane.version,
+          checkedAt: now,
+          references: {
+            evidenceHash: completion.finalEvidenceHash,
+            voucherDigest: voucher?.digest ?? currentVoucher?.digest ?? null,
+            chainObservedAt: result.lane.lastChainObservedAt,
+            cdrId: completion.cdr.id,
+          },
+        };
+        await tx.insert(reconciliations).values({
+          id: completion.comparison.id,
+          laneId: lane.id,
+          cdrId: completion.cdr.id,
+          status: comparison.status,
+          comparedTotal: completion.finalTrustedValue,
+          comparison: {
+            ...completion.comparison,
+            trustedEnergyWh: completion.finalTrustedEnergyWh,
+            cdrEnergyWh: completion.cdr.totalEnergyWh,
+            trustedValue: completion.finalTrustedValue,
+            authorizedValue: result.lane.authorizedValue,
+            settledValue: result.lane.settledValue,
+            cdrTotal: completion.cdr.normalizedTotal,
+          },
+          reasonCode: comparison.reasonCodes[0] ?? null,
+          checkedAt: now,
+        });
+        result.events.push({
+          type:
+            comparison.status === "MATCH"
+              ? "session.reconciled"
+              : "session.accounting_mismatch",
+          payload: {
+            comparisonId: completion.comparison.id,
+            cdrId: completion.cdr.id,
+            deltas: comparison.deltas,
+          },
+        });
+      }
+      if (
+        input.payload.type === "CheckCompletion" &&
+        completion &&
+        completion.status !== "mismatch" &&
+        result.lane.chainHealth === "fresh"
+      ) {
+        const failed = await tx
+          .select()
+          .from(outboxJobs)
+          .where(
+            and(
+              eq(outboxJobs.laneId, lane.id),
+              eq(outboxJobs.status, "failed"),
+              eq(outboxJobs.lastError, "PAYMENT_TRANSACTION_FAILED"),
+            ),
+          );
+        for (const job of failed) {
+          if (
+            ![
+              "payment.top_up_requested",
+              "payment.settlement_requested",
+              "payment.close_requested",
+            ].includes(job.effectType)
+          )
+            continue;
+          await tx
+            .update(outboxJobs)
+            .set({
+              status: "pending",
+              attemptCount: 0,
+              externalReference: null,
+              lastError: null,
+              nextAttemptAt: now,
+            })
+            .where(eq(outboxJobs.id, job.id));
+          await tx
+            .update(paymentOperations)
+            .set({
+              status: "pending",
+              txHash: null,
+              lastReason: null,
+              attempts: 0,
+            })
+            .where(eq(paymentOperations.idempotencyKey, job.idempotencyKey));
+          result.events.push({
+            type: "payment.operation_rechecked",
+            payload: { operationId: job.id },
+          });
+        }
+      }
+      if (input.payload.type === "CloseChannel") {
+        const pending = await tx
+          .select()
+          .from(outboxJobs)
+          .where(
+            and(
+              eq(outboxJobs.laneId, lane.id),
+              sql`${outboxJobs.status} <> 'completed'`,
+            ),
+          );
+        if (
+          !completion ||
+          completion.status !== "reconciled" ||
+          completion.comparison?.status !== "MATCH" ||
+          result.lane.chainHealth !== "fresh" ||
+          !result.lane.confirmedDeposit ||
+          !result.lane.channelId ||
+          pending.length
+        )
+          throw new StoreError("VALIDATION");
+        completion.status = "closing";
+        completion.closure = {
+          depositBeforeClose: result.lane.confirmedDeposit,
+          settledBeforeClose: result.lane.settledValue,
+          expectedRefund: (
+            BigInt(result.lane.confirmedDeposit) -
+            BigInt(result.lane.settledValue)
+          ).toString(),
+          confirmedRefund: null,
+          transactionHash: null,
+          receiptBlock: null,
+          closeEventReference: null,
+          refundEvidenceReference: null,
+          observedAt: null,
+        };
+        result.effects.push({
+          type: "payment.close_requested",
+          idempotencyKey: `${lane.id}:close`,
+          payload: {
+            laneId: lane.id,
+            channelId: lane.channelId!,
+            amount: result.lane.settledValue,
+            priorDeposit: result.lane.confirmedDeposit,
+          },
+        });
+        result.events.push({ type: "payment.close_requested", payload: {} });
+      }
+      if (
+        this.recoveryEnforced &&
+        this.recovery.get(lane.id)?.status !== "ready"
+      )
+        result.effects = [];
       await beforePersist?.();
       if (observation.type === "VoucherVerified") {
         if (
@@ -1570,6 +1992,7 @@ export class ChargingStore {
           evidenceHash: item.evidenceHash,
           channelId: item.channelId,
           txHash: item.txHash,
+          cdrId: result.lane.finalCdrId ?? undefined,
         });
         await tx.insert(auditProjection).values({
           eventId,
@@ -1587,14 +2010,17 @@ export class ChargingStore {
         if (
           effect.type === "payment.voucher_requested" ||
           effect.type === "payment.settlement_requested" ||
-          effect.type === "payment.top_up_requested"
+          effect.type === "payment.top_up_requested" ||
+          effect.type === "payment.close_requested"
         ) {
           const operation =
             effect.type === "payment.voucher_requested"
               ? "voucher"
               : effect.type === "payment.settlement_requested"
                 ? "settle"
-                : "top_up";
+                : effect.type === "payment.close_requested"
+                  ? "close"
+                  : "top_up";
           const previousOperations = await tx
             .select()
             .from(paymentOperations)
@@ -1618,6 +2044,7 @@ export class ChargingStore {
             continue;
           if (
             operation === "settle" &&
+            !result.lane.completion &&
             previousOperations.some(
               (item) =>
                 item.status === "confirmed" &&
@@ -1654,7 +2081,9 @@ export class ChargingStore {
                   ? "voucher"
                   : effect.type === "payment.top_up_requested"
                     ? "top_up"
-                    : "settle",
+                    : effect.type === "payment.close_requested"
+                      ? "close"
+                      : "settle",
               requestedAmount: effect.payload.amount,
               status: "pending",
               idempotencyKey: effect.idempotencyKey,
@@ -1685,10 +2114,11 @@ export class ChargingStore {
     leaseMs: number,
     laneId?: string,
     excludeLab = false,
+    reconcileOnly = false,
   ) {
     return this.db.transaction(async (tx) => {
       const rows = await tx.execute(
-        sql`select outbox_jobs.id, outbox_jobs.status, domain_events.occurred_at as effect_created_at from outbox_jobs join domain_events on domain_events.id = outbox_jobs.event_id where (outbox_jobs.attempt_count < 8 or outbox_jobs.status in ('pending', 'submitted')) and (outbox_jobs.status in ('pending', 'submitted', 'failed') or (outbox_jobs.status = 'processing' and outbox_jobs.lease_until < ${now})) and outbox_jobs.next_attempt_at <= ${now} and (${laneId ?? null}::text is null or outbox_jobs.lane_id = ${laneId ?? null}) and (${excludeLab} = false or not exists (select 1 from lab_runs, jsonb_each_text(lab_runs.lane_bindings) as binding where binding.value = outbox_jobs.lane_id)) order by outbox_jobs.next_attempt_at for update of outbox_jobs skip locked limit 1`,
+        sql`select outbox_jobs.id, outbox_jobs.status, domain_events.occurred_at as effect_created_at from outbox_jobs join domain_events on domain_events.id = outbox_jobs.event_id where (${reconcileOnly} = false or outbox_jobs.attempt_count > 0) and (outbox_jobs.attempt_count < 8 or outbox_jobs.status in ('pending', 'submitted')) and (outbox_jobs.status in ('pending', 'submitted', 'failed') or (outbox_jobs.status = 'processing' and outbox_jobs.lease_until < ${now})) and outbox_jobs.next_attempt_at <= ${now} and (${laneId ?? null}::text is null or outbox_jobs.lane_id = ${laneId ?? null}) and (${excludeLab} = false or not exists (select 1 from lab_runs, jsonb_each_text(lab_runs.lane_bindings) as binding where binding.value = outbox_jobs.lane_id)) order by outbox_jobs.next_attempt_at for update of outbox_jobs skip locked limit 1`,
       );
       const id = rows[0]?.id as string | undefined;
       if (!id) return null;
@@ -1757,7 +2187,9 @@ export class ChargingStore {
                 ? "top_up"
                 : job.effectType === "payment.settlement_requested"
                   ? "settlement"
-                  : "voucher";
+                  : job.effectType === "payment.close_requested"
+                    ? "close"
+                    : "voucher";
           await tx.insert(domainEvents).values({
             id: randomUUID(),
             type: `payment.${operation}_${status}`,
@@ -1778,6 +2210,30 @@ export class ChargingStore {
             txHash: externalReference,
           });
         }
+      }
+      if (job.effectType.startsWith("payment.") && externalReference) {
+        const channelId = (job.payload as { channelId?: string }).channelId;
+        if (channelId)
+          await tx
+            .insert(tempoTransactions)
+            .values({
+              id: randomUUID(),
+              channelId,
+              txHash: externalReference,
+              operation: job.effectType,
+              status,
+              submittedAt: new Date().toISOString(),
+              confirmedAt:
+                status === "completed" ? new Date().toISOString() : null,
+            })
+            .onConflictDoUpdate({
+              target: tempoTransactions.txHash,
+              set: {
+                status,
+                confirmedAt:
+                  status === "completed" ? new Date().toISOString() : null,
+              },
+            });
       }
       if (job.effectType.startsWith("payment."))
         await tx

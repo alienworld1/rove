@@ -37,6 +37,9 @@ importers:
       '@rove/lab':
         specifier: workspace:*
         version: link:../../packages/lab
+      '@rove/ocpi':
+        specifier: workspace:*
+        version: link:../../packages/ocpi
       '@rove/persistence':
         specifier: workspace:*
         version: link:../../packages/persistence
@@ -196,10 +199,36 @@ importers:
         specifier: ^5.9.2
         version: 5.9.3
 
-  packages/ocpi: {}
+  packages/ocpi:
+    dependencies:
+      '@rove/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@rove/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@rove/protection':
+        specifier: workspace:*
+        version: link:../protection
+      zod:
+        specifier: ^4.1.0
+        version: 4.6.5
+    devDependencies:
+      '@types/node':
+        specifier: ^20
+        version: 20.19.43
+      tsx:
+        specifier: ^4.20.0
+        version: 4.23.15
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
 
   packages/persistence:
     dependencies:
+      '@rove/config':
+        specifier: workspace:*
+        version: link:../config
       '@rove/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -212,6 +241,9 @@ importers:
       '@rove/lab':
         specifier: workspace:*
         version: link:../lab
+      '@rove/ocpi':
+        specifier: workspace:*
+        version: link:../ocpi
       '@rove/protection':
         specifier: workspace:*
         version: link:../protection

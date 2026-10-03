@@ -14,7 +14,9 @@
     "control:charging": "node --import tsx src/control-charging.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test src/*.test.ts",
-    "build": "tsc --noEmit"
+    "build": "tsc --noEmit",
+    "proof:completion": "node --import tsx src/prove-completion.ts",
+    "proof:terminal": "node --import tsx src/prove-terminal-cases.ts"
   },
   "dependencies": {
     "@noble/curves": "^1.9.1",
@@ -25,7 +27,8 @@
     "@rove/lab": "workspace:*",
     "@rove/persistence": "workspace:*",
     "@rove/protection": "workspace:*",
-    "@rove/tempo": "workspace:*"
+    "@rove/tempo": "workspace:*",
+    "@rove/ocpi": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20",

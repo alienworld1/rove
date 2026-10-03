@@ -408,3 +408,171 @@ test("property sweep keeps authorization, settlement, protection and exposure bo
     assert.ok(BigInt(next.unprotectedExposureBound) >= 0n);
   }
 });
+
+test("service end caps uncertainty and rejected final readings cannot authorize", () => {
+  const initial = {
+    ...lane(),
+    serviceStarted: true,
+    lastTrustedEvidenceAt: "2026-01-01T00:00:00.000Z",
+    evidenceHealth: "stale" as const,
+  };
+  const ended = transitionLane(
+    initial,
+    {
+      type: "ServiceEnded",
+      source: "controlled_twin",
+      endedAt: "2026-01-01T00:00:10.000Z",
+    },
+    "2026-01-01T00:00:10.000Z",
+    "end",
+  );
+  const later = transitionLane(
+    ended.lane,
+    { type: "ClockTick" },
+    "2026-01-01T01:00:00.000Z",
+    "clock",
+  );
+  assert.equal(later.lane.state, "COMPLETING");
+  assert.equal(
+    later.lane.unverifiedServiceBound,
+    ended.lane.unverifiedServiceBound,
+  );
+  const rejected = transitionLane(
+    later.lane,
+    {
+      type: "EvidenceObserved",
+      final: true,
+      evidenceHash: "invalid",
+      accepted: false,
+      reasonCode: "EVIDENCE_SIGNATURE_INVALID",
+    },
+    "2026-01-01T01:00:00.000Z",
+    "reading",
+  );
+  assert.equal(rejected.lane.completion?.finalTrustedValue, null);
+  assert.equal(rejected.effects.length, 0);
+  assert.throws(
+    () =>
+      transitionLane(
+        later.lane,
+        { type: "RecoveryBegun" },
+        "2026-01-01T01:00:00.000Z",
+        "resume",
+      ),
+    /SERVICE_ALREADY_ENDED/,
+  );
+});
+
+test("compatible accounting waits for authorization and final settlement ignores partial thresholds", () => {
+  const now = "2026-01-01T00:00:01.000Z";
+  const ended = transitionLane(
+    {
+      ...lane(),
+      channelId: "channel",
+      confirmedDeposit: "200",
+      chainHealth: "fresh",
+      lastChainObservedAt: now,
+      settlementPolicy: {
+        minimumIntervalMs: 100000,
+        minimumUnsettledProtectedValue: "1000",
+      },
+    },
+    { type: "ServiceEnded", source: "controlled_twin", endedAt: now },
+    now,
+    "end",
+  ).lane;
+  const accepted = transitionLane(
+    ended,
+    {
+      type: "EvidenceObserved",
+      final: true,
+      evidenceHash: "final",
+      accepted: true,
+      observedAt: now,
+      sequence: 1,
+      cumulativeWh: "10",
+    },
+    now,
+    "reading",
+  ).lane;
+  assert.equal(accepted.completion?.status, "awaiting_cdr");
+  accepted.completion!.cdr = {
+    id: "cdr",
+    contentHash: "hash",
+    totalEnergyWh: "10",
+    normalizedTotal: "10",
+    currency: "USD",
+    sourcePartyId: "cpo",
+    source: "controlled_fixture",
+  };
+  const pending = transitionLane(accepted, { type: "ClockTick" }, now, "check");
+  assert.equal(pending.lane.completion?.status, "awaiting_authorization");
+  assert.equal(pending.effects[0].type, "payment.voucher_requested");
+  const authorized = transitionLane(
+    pending.lane,
+    { type: "VoucherVerified", cumulativeAmount: "10", digest: "digest" },
+    now,
+    "voucher",
+  );
+  assert.equal(authorized.lane.completion?.status, "awaiting_settlement");
+  assert.equal(authorized.effects[0].type, "payment.settlement_requested");
+  authorized.lane.completion!.cdr!.totalEnergyWh = "11";
+  const mismatch = transitionLane(
+    authorized.lane,
+    { type: "ClockTick" },
+    now,
+    "check-again",
+  );
+  assert.equal(mismatch.lane.completion?.status, "mismatch");
+  assert.equal(mismatch.effects.length, 0);
+});
+
+test("zero service still requires an independently verified final voucher", () => {
+  const now = "2026-01-01T00:00:01.000Z";
+  const ended = transitionLane(
+    {
+      ...lane(),
+      channelId: "channel",
+      confirmedDeposit: "200",
+      chainHealth: "fresh",
+      lastChainObservedAt: now,
+    },
+    { type: "ServiceEnded", source: "controlled_twin", endedAt: now },
+    now,
+    "end",
+  ).lane;
+  const accepted = transitionLane(
+    ended,
+    {
+      type: "EvidenceObserved",
+      final: true,
+      evidenceHash: "zero",
+      accepted: true,
+      observedAt: now,
+      sequence: 1,
+      cumulativeWh: "0",
+    },
+    now,
+    "reading",
+  ).lane;
+  accepted.completion!.cdr = {
+    id: "cdr",
+    contentHash: "hash",
+    totalEnergyWh: "0",
+    normalizedTotal: "0",
+    currency: "USD",
+    sourcePartyId: "cpo",
+    source: "controlled_fixture",
+  };
+  const pending = transitionLane(accepted, { type: "ClockTick" }, now, "check");
+  assert.equal(pending.effects[0].type, "payment.voucher_requested");
+  assert.equal(pending.effects[0].payload.amount, "0");
+  const verified = transitionLane(
+    pending.lane,
+    { type: "VoucherVerified", cumulativeAmount: "0", digest: "zero-digest" },
+    now,
+    "voucher",
+  );
+  assert.equal(verified.lane.completion?.status, "reconciled");
+  assert.equal(verified.lane.completion?.finalVoucherDigest, "zero-digest");
+});

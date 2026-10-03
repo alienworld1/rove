@@ -1,3 +1,6 @@
+import { completionCommandSchema } from "@rove/contracts";
+import { recoverCharging, recoverChargingLane } from "./recover-charging.js";
+import { createLocalLabPaymentAdapter } from "./lab-payment.js";
 import {
   createServer,
   type IncomingMessage,
@@ -41,6 +44,12 @@ const paymentEffects =
   store && proofPrerequisites().paymentConfigured
     ? createChargingEffectAdapter(store)
     : null;
+const initialRecovery = store
+  ? recoverCharging(store, paymentEffects).then(
+      () => true,
+      () => false,
+    )
+  : Promise.resolve(false);
 let activeStreams = 0;
 
 function send(response: ServerResponse, status: number, body: unknown) {
@@ -90,11 +99,15 @@ function authorized(request: IncomingMessage) {
 }
 
 async function readJson(request: IncomingMessage) {
-  let data = "";
+  const chunks: Buffer[] = [];
+  let size = 0;
   for await (const chunk of request) {
-    data += chunk.toString("utf8");
-    if (Buffer.byteLength(data) > 70_000) throw new StoreError("VALIDATION");
+    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += bytes.length;
+    if (size > 70_000) throw new StoreError("VALIDATION");
+    chunks.push(bytes);
   }
+  const data = Buffer.concat(chunks).toString("utf8");
   try {
     return JSON.parse(data) as unknown;
   } catch {
@@ -115,7 +128,12 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
         database = "unavailable";
       }
     }
-    const ready = database === "ready";
+    const recovered = await initialRecovery;
+    const gates = store ? [...store.recovery.values()] : [];
+    const ready =
+      database === "ready" &&
+      recovered &&
+      gates.every((gate) => gate.status === "ready");
     send(
       response,
       ready ? 200 : 503,
@@ -126,7 +144,14 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
         checkedAt: new Date().toISOString(),
         dependencies: {
           web: "not checked",
-          engine: ready ? "ready" : "database unavailable",
+          engine:
+            database !== "ready"
+              ? "database unavailable"
+              : !recovered
+                ? "Restoring session state"
+                : !ready
+                  ? "Checking payment state"
+                  : "ready",
         },
       }),
     );
@@ -269,6 +294,92 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
       };
       response.once("close", cleanup);
       return;
+    }
+    if (request.method === "POST" && !(await initialRecovery))
+      throw new Error("RECOVERY_UNAVAILABLE");
+    const completionMatch =
+      /^\/api\/lanes\/([^/]+)\/(completion|complete|check|close|cdr|accounting|end)$/.exec(
+        path,
+      );
+    if (completionMatch) {
+      const id = idSchema.parse(completionMatch[1]);
+      const action = completionMatch[2];
+      if (
+        request.method === "GET" &&
+        ["completion", "accounting"].includes(action)
+      ) {
+        send(
+          response,
+          200,
+          action === "completion"
+            ? await store.getCompletion(id)
+            : await store.getAccountingRecord(id),
+        );
+        return;
+      }
+      if (
+        request.method === "POST" &&
+        ["complete", "check", "close"].includes(action)
+      ) {
+        const input = completionCommandSchema.parse(await readJson(request));
+        if (input.laneId !== id) throw new StoreError("ACCESS_DENIED");
+        if (action === "complete") {
+          if (!corridorLab) throw new StoreError("VALIDATION");
+          send(response, 202, await corridorLab.finishLane(input));
+          return;
+        }
+        const context = await store.getPaymentContext(id);
+        const local = context.lane.tempoNetwork === "local-simulation";
+        const instant = local
+          ? (context.lane.completion?.serviceEndedAt ?? context.lane.updatedAt)
+          : new Date().toISOString();
+        const observation =
+          !local && action === "close" && paymentEffects
+            ? await paymentEffects.observe(id)
+            : undefined;
+        await store.advanceLane(
+          {
+            ...input,
+            now: observation?.observedAt ?? instant,
+            payload: {
+              type: action === "close" ? "CloseChannel" : "CheckCompletion",
+            },
+          },
+          action === "check" ? "engine-recovery" : "demo-session",
+          observation,
+        );
+        if (action === "check")
+          await recoverChargingLane(store, context.lane, paymentEffects);
+        if (local)
+          await processNextEffect(
+            store,
+            createLocalLabPaymentAdapter(store, instant),
+            new Date().toISOString(),
+            id,
+          );
+        send(response, 202, await store.getCompletion(id));
+        return;
+      }
+      if (request.method === "POST" && ["cdr", "end"].includes(action)) {
+        const input = laneCommandSchema.parse(await readJson(request));
+        if (
+          input.laneId !== id ||
+          (action === "cdr"
+            ? input.payload.type !== "ReceiveCDR"
+            : input.payload.type !== "CompleteLane" ||
+              input.payload.endSource !== "external_adapter")
+        )
+          throw new StoreError("ACCESS_DENIED");
+        send(
+          response,
+          202,
+          await store.advanceLane(
+            { ...input, now: undefined },
+            "external-adapter",
+          ),
+        );
+        return;
+      }
     }
     if (path.startsWith("/api/lab/")) {
       if (!corridorLab) throw new StoreError("VALIDATION");
@@ -420,7 +531,12 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
       ({ correlationId, commandId, laneId } = input);
       if (
         input.laneId !== commandMatch[1] ||
-        input.payload.type === "ObservePayment"
+        ![
+          "TickProtectionClock",
+          "RequirePause",
+          "BeginRecovery",
+          "PaymentUnavailable",
+        ].includes(input.payload.type)
       )
         throw new StoreError("ACCESS_DENIED");
       const outcome = await store.advanceLane(
@@ -498,11 +614,37 @@ if (store) {
     if (working) return;
     working = true;
     void (async () => {
+      if (!(await initialRecovery)) return;
       const now = new Date().toISOString();
+      for (const lane of await store.listRecoveryLanes()) {
+        if (store.recovery.get(lane.id)?.status !== "ready")
+          await recoverChargingLane(store, lane, paymentEffects);
+        if (store.recovery.get(lane.id)?.status !== "ready") continue;
+        if (lane.completion && lane.state !== "CLOSED") {
+          const local = lane.tempoNetwork === "local-simulation";
+          const adapter = local
+            ? createLocalLabPaymentAdapter(
+                store,
+                lane.completion.serviceEndedAt,
+              )
+            : paymentEffects;
+          if (adapter) await processNextEffect(store, adapter, now, lane.id);
+          if (!local && paymentEffects && lane.completion.status !== "closing")
+            await paymentEffects.refresh(lane.id).catch(() => undefined);
+        }
+      }
       if (paymentEffects)
-        await processNextEffect(store, paymentEffects, now, undefined, true);
+        for (const lane of await store.listActiveLanes()) {
+          if (
+            store.recovery.get(lane.id)?.status === "ready" &&
+            !(labStore && (await labStore.ownsLane(lane.id)))
+          )
+            await processNextEffect(store, paymentEffects, now, lane.id, true);
+        }
       const active = await store.listActiveLanes();
       for (const lane of active) {
+        if (store.recovery.get(lane.id)?.status !== "ready" || lane.completion)
+          continue;
         if (labStore && (await labStore.ownsLane(lane.id))) continue;
         if (!lane.serviceStarted) continue;
         const cadence = Math.max(

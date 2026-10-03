@@ -4,14 +4,11 @@ import { paymentEffectPayloadSchema } from "@rove/contracts";
 import { ChargingStore, type VerifiedVoucher } from "@rove/persistence";
 import {
   createTempoChannelAdapter,
+  type ClosureObservation,
   type ChannelDescriptor,
   type ChannelObservation,
 } from "@rove/tempo";
-import type {
-  EffectAdapter,
-  EffectLookup,
-  EffectReceipt,
-} from "./outbox-worker.js";
+import type { EffectLookup, EffectReceipt } from "./outbox-worker.js";
 
 const stableCommandId = (key: string) =>
   createHash("sha256").update(key).digest("hex");
@@ -37,9 +34,7 @@ export function createConfiguredTempoChannelAdapter(
   });
 }
 
-export function createChargingEffectAdapter(
-  store: ChargingStore,
-): EffectAdapter & { refresh: (laneId: string) => Promise<void> } {
+export function createChargingEffectAdapter(store: ChargingStore) {
   const settings = readPaymentConfig();
   const tempo = createConfiguredTempoChannelAdapter(settings);
 
@@ -93,11 +88,25 @@ export function createChargingEffectAdapter(
     }
     if (!request.channelId || !current.channel?.descriptor)
       return { status: "unknown", externalReference: reference };
+    if (type === "payment.close_requested") {
+      if (!reference && attemptCount === 1) return { status: "not_found" };
+      return tempo.reconcileClose(
+        request.channelId as `0x${string}`,
+        current.channel.descriptor as ChannelDescriptor,
+        BigInt(request.amount!),
+        BigInt(request.priorDeposit!),
+        reference as `0x${string}` | undefined,
+        effectCreatedAt,
+      );
+    }
+    if (!reference && attemptCount === 1) return { status: "not_found" };
     const result = await tempo.reconcileTransaction(
       type === "payment.top_up_requested" ? "top_up" : "settle",
       request.channelId as `0x${string}`,
       BigInt(request.amount!),
       reference as `0x${string}` | undefined,
+      effectCreatedAt,
+      request.priorDeposit ? BigInt(request.priorDeposit) : undefined,
     );
     if (result.status !== "completed") return result;
     if (
@@ -122,6 +131,8 @@ export function createChargingEffectAdapter(
     if (type === "pause.requested") return { status: "completed" };
     const { request, current } = await context(payload);
     if (!request.amount) throw new Error("PAYMENT_AMOUNT_INVALID");
+    if (current.lane.completion?.status === "mismatch")
+      throw new Error("CDR_SERVICE_MISMATCH");
     if (type === "payment.open_requested")
       return tempo.submitOpen(key, BigInt(request.amount));
     if (
@@ -152,13 +163,30 @@ export function createChargingEffectAdapter(
         descriptor,
         BigInt(request.amount),
       );
-    if (type === "payment.settlement_requested") {
+    if (
+      type === "payment.settlement_requested" ||
+      type === "payment.close_requested"
+    ) {
       if (
         !current.voucher ||
         current.voucher.cumulativeAmount !== request.amount ||
         !current.voucher.signature
       )
         throw new Error("PAYMENT_AUTHORIZATION_INVALID");
+      if (type === "payment.close_requested") {
+        if (
+          current.lane.completion?.status !== "closing" ||
+          current.lane.completion.comparison?.status !== "MATCH"
+        )
+          throw new Error("PAYMENT_CLOSURE_INVALID");
+        return tempo.submitClose(
+          request.channelId as `0x${string}`,
+          descriptor,
+          BigInt(request.amount),
+          BigInt(request.priorDeposit!),
+          current.voucher.signature as `0x${string}`,
+        );
+      }
       return tempo.submitSettlement(
         request.channelId as `0x${string}`,
         descriptor,
@@ -180,12 +208,21 @@ export function createChargingEffectAdapter(
       type === "payment.voucher_requested"
         ? (observation as VerifiedVoucher)
         : undefined;
-    const channel = voucher ? undefined : (observation as ChannelObservation);
+    const closure =
+      type === "payment.close_requested"
+        ? (observation as ClosureObservation)
+        : undefined;
+    const channel =
+      voucher || closure ? undefined : (observation as ChannelObservation);
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const projection = await store.getLane(laneId);
+      if (closure && projection.state === "CLOSED") return;
       if (
         voucher &&
-        BigInt(projection.authorizedValue) >= BigInt(voucher.cumulativeAmount)
+        (BigInt(voucher.cumulativeAmount) > 0n
+          ? BigInt(projection.authorizedValue) >=
+            BigInt(voucher.cumulativeAmount)
+          : projection.latestVoucherDigest === voucher.digest)
       )
         return;
       if (
@@ -202,28 +239,31 @@ export function createChargingEffectAdapter(
             correlationId: stableCommandId(key),
             laneId,
             expectedVersion: projection.version,
-            now: voucher ? new Date().toISOString() : channel!.observedAt,
+            now: voucher
+              ? new Date().toISOString()
+              : (closure?.observedAt ?? channel!.observedAt),
             payload: { type: "TickProtectionClock" },
           },
           "tempo-adapter",
-          voucher
-            ? {
-                type: "VoucherVerified",
-                cumulativeAmount: voucher.cumulativeAmount,
-                digest: voucher.digest,
-              }
-            : {
-                type: "PaymentObserved",
-                source: "tempo-adapter",
-                channelId: channel!.channelId,
-                network: channel!.network,
-                assetId: channel!.assetId,
-                observedAt: channel!.observedAt,
-                confirmedDeposit: channel!.confirmedDeposit,
-                settledValue: channel!.settledValue,
-                chainHeight: channel!.chainHeight,
-                transactionHash: channel!.transactionHash,
-              },
+          closure ??
+            (voucher
+              ? {
+                  type: "VoucherVerified",
+                  cumulativeAmount: voucher.cumulativeAmount,
+                  digest: voucher.digest,
+                }
+              : {
+                  type: "PaymentObserved",
+                  source: "tempo-adapter",
+                  channelId: channel!.channelId,
+                  network: channel!.network,
+                  assetId: channel!.assetId,
+                  observedAt: channel!.observedAt,
+                  confirmedDeposit: channel!.confirmedDeposit,
+                  settledValue: channel!.settledValue,
+                  chainHeight: channel!.chainHeight,
+                  transactionHash: channel!.transactionHash,
+                }),
           undefined,
           undefined,
           voucher,
@@ -243,14 +283,37 @@ export function createChargingEffectAdapter(
   async function refresh(laneId: string) {
     const current = await store.getPaymentContext(laneId);
     if (!current.channel || current.lane.confirmedDeposit === null) return;
+    if (current.lane.completion?.closure) {
+      const terminal = current.lane.completion.closure;
+      const projection = await store.getLane(laneId);
+      const closeReference =
+        terminal.transactionHash ??
+        projection.operations.find((operation) => operation.type === "close")
+          ?.transactionHash;
+      const result = await tempo.reconcileClose(
+        current.channel.channelId as `0x${string}`,
+        current.channel.descriptor as ChannelDescriptor,
+        BigInt(current.lane.completion.finalTrustedValue!),
+        BigInt(terminal.depositBeforeClose),
+        closeReference as `0x${string}` | undefined,
+        current.lane.completion.serviceEndedAt,
+      );
+      if (result.status === "completed") {
+        await confirm(
+          laneId,
+          "payment.close_requested",
+          result.observation,
+          `${laneId}:close`,
+        );
+        return;
+      }
+      if (result.status !== "failed" || current.lane.state === "CLOSED")
+        throw new Error("PAYMENT_REFUND_UNVERIFIED");
+    }
     const observation = await tempo.readChannel(
       current.channel.channelId as `0x${string}`,
     );
-    if (
-      observation.confirmedDeposit !== current.lane.confirmedDeposit ||
-      observation.settledValue !== current.lane.settledValue
-    )
-      return;
+
     const projection = await store.getLane(laneId);
     await store.advanceLane(
       {
@@ -307,5 +370,18 @@ export function createChargingEffectAdapter(
     );
   }
 
-  return { reconcile, submit, confirm, fail, refresh };
+  async function observe(laneId: string) {
+    const current = await store.getPaymentContext(laneId);
+    if (!current.channel?.descriptor)
+      throw new Error("PAYMENT_BINDING_INVALID");
+    const observation = await tempo.readChannel(
+      current.channel.channelId as `0x${string}`,
+    );
+    return {
+      type: "PaymentObserved" as const,
+      source: "tempo-adapter" as const,
+      ...observation,
+    };
+  }
+  return { reconcile, submit, confirm, fail, refresh, observe };
 }

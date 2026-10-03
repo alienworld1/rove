@@ -5,6 +5,7 @@ const names = {
   voucher: "Cumulative voucher",
   top_up: "Top-up",
   settle: "Settlement",
+  close: "Channel closure",
 };
 
 export function ChargingOperations({

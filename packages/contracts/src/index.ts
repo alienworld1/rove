@@ -20,3 +20,5 @@ export const integrationStatusSchema = z.object({
   paymentConfigured: z.boolean(),
   evidenceConfigured: z.boolean(),
 });
+
+export * from "./completion.ts";

@@ -117,6 +117,7 @@ export const lanes = pgTable(
     unprotectedExposureBound: amount("unprotected_exposure_bound").notNull(),
     reasonCodes: jsonb("reason_codes").notNull(),
     finalCdrId: text("final_cdr_id"),
+    completion: jsonb("completion"),
     createdAt: instant("created_at").notNull(),
     updatedAt: instant("updated_at").notNull(),
   },
@@ -226,7 +227,7 @@ export const paymentOperations = pgTable(
     index("payment_operation_lane_idx").on(table.laneId),
     check(
       "payment_operation_amount_positive",
-      sql`${table.requestedAmount} > 0`,
+      sql`${table.requestedAmount} > 0 or (${table.requestedAmount} = 0 and ${table.operation} in ('close', 'voucher'))`,
     ),
   ],
 );
@@ -313,11 +314,20 @@ export const cdrs = pgTable(
       .references(() => lanes.id),
     externalSessionId: text("external_session_id").notNull(),
     raw: jsonb("raw").notNull(),
+    rawText: text("raw_text"),
+    sourcePartyId: text("source_party_id"),
+    externalCdrId: text("external_cdr_id"),
+    contentHash: text("content_hash"),
+    normalization: jsonb("normalization"),
     receivedAt: instant("received_at").notNull(),
     normalizedTotal: amount("normalized_total"),
   },
   (table) => [
     index("cdr_lane_idx").on(table.laneId),
+    uniqueIndex("cdr_provider_identity_unique").on(
+      table.sourcePartyId,
+      table.externalCdrId,
+    ),
     check(
       "cdr_total_nonnegative",
       sql`${table.normalizedTotal} is null or ${table.normalizedTotal} >= 0`,
@@ -336,6 +346,7 @@ export const reconciliations = pgTable(
       .references(() => cdrs.id),
     status: text("status").notNull(),
     comparedTotal: amount("compared_total"),
+    comparison: jsonb("comparison"),
     reasonCode: text("reason_code"),
     checkedAt: instant("checked_at").notNull(),
   },

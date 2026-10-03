@@ -50,6 +50,20 @@
       "when": 1790678669652,
       "tag": "0006_stale_shaman",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791040178032,
+      "tag": "0007_session_completion",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791041637867,
+      "tag": "0008_terminal_amounts",
+      "breakpoints": true
     }
   ]
 }

@@ -1,3 +1,4 @@
+import { finishCompletionTransition } from "./completion.js";
 import type { Lane, TransitionResult, VerifiedObservation } from "@rove/domain";
 import {
   conservativeTariffBound,
@@ -34,6 +35,9 @@ export function transitionLane(
   const lane: Lane = {
     ...previous,
     reasonCodes: [...previous.reasonCodes],
+    completion: previous.completion
+      ? structuredClone(previous.completion)
+      : null,
     updatedAt: now,
   };
   const events: TransitionResult["events"] = [];
@@ -41,7 +45,87 @@ export function transitionLane(
   let evidenceRejection: string | undefined;
   let paymentFailure: string | undefined;
 
-  if (observation.type === "EvidenceObserved") {
+  if (observation.type === "ServiceEnded") {
+    if (
+      lane.completion ||
+      milliseconds(observation.endedAt) > currentTime ||
+      milliseconds(observation.endedAt) <
+        milliseconds(observation.startedAt ?? lane.createdAt)
+    )
+      throw new RangeError("SERVICE_END_INVALID");
+    lane.completion = {
+      status: "awaiting_end_evidence",
+      serviceStartedAt: observation.startedAt ?? lane.createdAt,
+      serviceEndedAt: observation.endedAt,
+      endSource: observation.source,
+      finalVoucherDigest: null,
+      finalEvidenceHash: null,
+      finalEvidenceSequence: null,
+      finalTrustedEnergyWh: null,
+      finalTrustedValue: null,
+      finalAuthorizedValue: null,
+      finalSettledValue: null,
+      cdr: null,
+      comparison: null,
+      closure: null,
+      reasonCodes: ["FINAL_EVIDENCE_MISSING"],
+    };
+    events.push(event("lane.service_ended"));
+  } else if (observation.type === "ChannelClosed") {
+    const completion = lane.completion;
+    const closure = completion?.closure;
+    if (
+      !completion ||
+      !closure ||
+      completion.status !== "closing" ||
+      completion.comparison?.status !== "MATCH" ||
+      observation.channelId !== lane.channelId ||
+      observation.network !== lane.tempoNetwork ||
+      observation.assetId !== lane.settlementAssetId ||
+      observation.finalSettledValue !== completion.finalTrustedValue ||
+      observation.depositBeforeClose !== closure.depositBeforeClose ||
+      observation.confirmedRefund !== closure.expectedRefund ||
+      !observation.transactionHash ||
+      !observation.closeEventReference ||
+      milliseconds(observation.observedAt) > currentTime
+    )
+      throw new RangeError("PAYMENT_CLOSURE_INVALID");
+    completion.status = "closed";
+    completion.finalSettledValue = observation.finalSettledValue;
+    completion.closure = {
+      ...closure,
+      confirmedRefund: observation.confirmedRefund,
+      transactionHash: observation.transactionHash,
+      receiptBlock: observation.receiptBlock,
+      closeEventReference: observation.closeEventReference,
+      refundEvidenceReference: observation.closeEventReference,
+      observedAt: observation.observedAt,
+    };
+    completion.reasonCodes = ["CHANNEL_CLOSED"];
+    lane.state = "CLOSED";
+    lane.reasonCodes = ["CHANNEL_CLOSED"];
+    lane.version = previous.version + 1;
+    lane.lastChainObservedAt = observation.observedAt;
+    events.push({
+      ...event("payment.channel_closed", undefined, {
+        confirmedRefund: observation.confirmedRefund,
+        finalSettledValue: observation.finalSettledValue,
+      }),
+      txHash: observation.transactionHash,
+      channelId: observation.channelId,
+    });
+    return { lane, events, effects };
+  } else if (previous.state === "CLOSED") {
+    if (observation.type !== "ClockTick")
+      throw new RangeError("SESSION_ALREADY_CLOSED");
+    lane.version = previous.version + 1;
+    return { lane, events: [event("lane.completion_checked")], effects };
+  } else if (observation.type === "EvidenceObserved") {
+    if (
+      lane.completion &&
+      (!observation.final || lane.completion.finalEvidenceHash)
+    )
+      throw new RangeError("FINAL_EVIDENCE_CONTEXT_REQUIRED");
     if (observation.evidenceHash === previous.lastEvidenceHash) {
       events.push(event("meter.evidence_rejected", "EVIDENCE_REPLAY"));
       lane.evidenceHealth = "untrusted";
@@ -79,6 +163,12 @@ export function transitionLane(
       lane.lastEvidenceHash = observation.evidenceHash;
       lane.lastEvidenceSequence = observation.sequence;
       lane.evidenceHealth = "fresh";
+      if (lane.completion && observation.final) {
+        lane.completion.finalEvidenceHash = observation.evidenceHash;
+        lane.completion.finalEvidenceSequence = observation.sequence;
+        lane.completion.finalTrustedEnergyWh = lane.trustedEnergyWh;
+        lane.completion.finalTrustedValue = lane.trustedDeliveredValue;
+      }
       events.push({
         ...event("meter.evidence_accepted", undefined, {
           cumulativeWh: lane.trustedEnergyWh,
@@ -129,12 +219,19 @@ export function transitionLane(
     if (
       !lane.channelId ||
       lane.confirmedDeposit === null ||
-      amount <= nonnegativeInteger(lane.authorizedValue) ||
+      (amount <= nonnegativeInteger(lane.authorizedValue) &&
+        !(
+          amount === 0n &&
+          lane.completion?.finalTrustedValue === "0" &&
+          !lane.completion.finalVoucherDigest
+        )) ||
       amount > nonnegativeInteger(lane.trustedDeliveredValue) ||
       amount > nonnegativeInteger(lane.confirmedDeposit)
     )
       throw new RangeError("PAYMENT_AUTHORIZATION_INVALID");
     lane.authorizedValue = amount.toString();
+    if (lane.completion)
+      lane.completion.finalVoucherDigest = observation.digest;
     lane.signerHealth = "ready";
     events.push({
       ...event("payment.voucher_verified", undefined, {
@@ -158,6 +255,7 @@ export function transitionLane(
     paymentFailure = observation.reasonCode;
     events.push(event("payment.operation_failed", observation.reasonCode));
   } else if (observation.type === "RecoveryBegun") {
+    if (lane.completion) throw new RangeError("SERVICE_ALREADY_ENDED");
     if (previous.state !== "PAUSE_REQUIRED" && previous.state !== "AT_RISK")
       throw new RangeError("RECOVERY_NOT_REQUIRED");
     lane.state = "RECOVERING";
@@ -183,6 +281,7 @@ export function transitionLane(
   )
     lane.chainHealth = "stale";
   if (
+    !lane.completion &&
     !lane.serviceStarted &&
     lane.evidenceHealth === "fresh" &&
     lane.chainHealth === "fresh" &&
@@ -220,7 +319,15 @@ export function transitionLane(
     lane.lastTrustedEvidenceAt
       ? conservativeTariffBound(
           lane.maxPowerWatts,
-          elapsedMs(currentTime, milliseconds(lane.lastTrustedEvidenceAt)),
+          elapsedMs(
+            lane.completion
+              ? Math.min(
+                  currentTime,
+                  milliseconds(lane.completion.serviceEndedAt),
+                )
+              : currentTime,
+            milliseconds(lane.lastTrustedEvidenceAt),
+          ),
           lane.tariff.perKwh,
           lane.tariff.tariffDecimals,
           lane.tariff.assetDecimals,
@@ -231,6 +338,9 @@ export function transitionLane(
   lane.unverifiedServiceBound = unverified.toString();
   lane.worstCaseDeliveredValue = worstCase.toString();
   lane.unprotectedExposureBound = exposure.toString();
+
+  if (lane.completion)
+    return finishCompletionTransition(lane, previous, observation, events, now);
 
   const reasons: string[] = [];
   if (!lane.serviceStarted) {

@@ -22,7 +22,9 @@
     "@rove/protection": "workspace:*",
     "drizzle-orm": "^0.45.3",
     "fast-json-stable-stringify": "^2.1.0",
-    "postgres": "^3.4.9"
+    "postgres": "^3.4.9",
+    "@rove/ocpi": "workspace:*",
+    "@rove/config": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",
