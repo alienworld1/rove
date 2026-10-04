@@ -1,0 +1,3058 @@
+{
+  "id": "543b1c7b-1e11-4656-85f1-5f854a49b90f",
+  "prevId": "a2bfb0a5-8e98-448c-8998-e116a4c92fe9",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.audit_projection": {
+      "name": "audit_projection",
+      "schema": "",
+      "columns": {
+        "event_id": {
+          "name": "event_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "lane_id": {
+          "name": "lane_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "corridor_id": {
+          "name": "corridor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "lane_version": {
+          "name": "lane_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason_codes": {
+          "name": "reason_codes",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "summary": {
+          "name": "summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "audit_lane_version_idx": {
+          "name": "audit_lane_version_idx",
+          "columns": [
+            {
+              "expression": "lane_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lane_version",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "audit_projection_event_id_domain_events_id_fk": {
+          "name": "audit_projection_event_id_domain_events_id_fk",
+          "tableFrom": "audit_projection",
+          "tableTo": "domain_events",
+          "columnsFrom": [
+            "event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "audit_projection_lane_id_lanes_id_fk": {
+          "name": "audit_projection_lane_id_lanes_id_fk",
+          "tableFrom": "audit_projection",
+          "tableTo": "lanes",
+          "columnsFrom": [
+            "lane_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "audit_projection_corridor_id_corridors_id_fk": {
+          "name": "audit_projection_corridor_id_corridors_id_fk",
+          "tableFrom": "audit_projection",
+          "tableTo": "corridors",
+          "columnsFrom": [
+            "corridor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.cdrs": {
+      "name": "cdrs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "lane_id": {
+          "name": "lane_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "external_session_id": {
+          "name": "external_session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "raw": {
+          "name": "raw",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "raw_text": {
+          "name": "raw_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_party_id": {
+          "name": "source_party_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "external_cdr_id": {
+          "name": "external_cdr_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "normalization": {
+          "name": "normalization",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "received_at": {
+          "name": "received_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "normalized_total": {
+          "name": "normalized_total",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "cdr_lane_idx": {
+          "name": "cdr_lane_idx",
+          "columns": [
+            {
+              "expression": "lane_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "cdr_provider_identity_unique": {
+          "name": "cdr_provider_identity_unique",
+          "columns": [
+            {
+              "expression": "source_party_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "external_cdr_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "cdrs_lane_id_lanes_id_fk": {
+          "name": "cdrs_lane_id_lanes_id_fk",
+          "tableFrom": "cdrs",
+          "tableTo": "lanes",
+          "columnsFrom": [
+            "lane_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "cdr_total_nonnegative": {
+          "name": "cdr_total_nonnegative",
+          "value": "\"cdrs\".\"normalized_total\" is null or \"cdrs\".\"normalized_total\" >= 0"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.corridors": {
+      "name": "corridors",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payer_emsp": {
+          "name": "payer_emsp",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payee_cpo": {
+          "name": "payee_cpo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "settlement_asset_id": {
+          "name": "settlement_asset_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tempo_network": {
+          "name": "tempo_network",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "asset_decimals": {
+          "name": "asset_decimals",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tariff_per_kwh": {
+          "name": "tariff_per_kwh",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tariff_decimals": {
+          "name": "tariff_decimals",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "protection_policy": {
+          "name": "protection_policy",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reserve_policy": {
+          "name": "reserve_policy",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "settlement_policy": {
+          "name": "settlement_policy",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "corridor_tariff_nonnegative": {
+          "name": "corridor_tariff_nonnegative",
+          "value": "tariff_per_kwh >= 0"
+        },
+        "corridor_identity_nonempty": {
+          "name": "corridor_identity_nonempty",
+          "value": "length(trim(\"corridors\".\"name\")) > 0 and length(trim(\"corridors\".\"payer_emsp\")) > 0 and length(trim(\"corridors\".\"payee_cpo\")) > 0"
+        },
+        "corridor_decimals_valid": {
+          "name": "corridor_decimals_valid",
+          "value": "\"corridors\".\"asset_decimals\" between 0 and 36 and \"corridors\".\"tariff_decimals\" between 0 and 36"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.domain_events": {
+      "name": "domain_events",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ordinal": {
+          "name": "ordinal",
+          "type": "bigserial",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "schema_version": {
+          "name": "schema_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "corridor_id": {
+          "name": "corridor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "lane_id": {
+          "name": "lane_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lane_version": {
+          "name": "lane_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trace_time": {
+          "name": "trace_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "causation_id": {
+          "name": "causation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "correlation_id": {
+          "name": "correlation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason_code": {
+          "name": "reason_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "evidence_hash": {
+          "name": "evidence_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "channel_id": {
+          "name": "channel_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tx_hash": {
+          "name": "tx_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cdr_id": {
+          "name": "cdr_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "event_ordinal_unique": {
+          "name": "event_ordinal_unique",
+          "columns": [
+            {
+              "expression": "ordinal",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_lane_order_idx": {
+          "name": "event_lane_order_idx",
+          "columns": [
+            {
+              "expression": "lane_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lane_version",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_corridor_idx": {
+          "name": "event_corridor_idx",
+          "columns": [
+            {
+              "expression": "corridor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "domain_events_corridor_id_corridors_id_fk": {
+          "name": "domain_events_corridor_id_corridors_id_fk",
+          "tableFrom": "domain_events",
+          "tableTo": "corridors",
+          "columnsFrom": [
+            "corridor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "domain_events_lane_id_lanes_id_fk": {
+          "name": "domain_events_lane_id_lanes_id_fk",
+          "tableFrom": "domain_events",
+          "tableTo": "lanes",
+          "columnsFrom": [
+            "lane_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.evidence_verifications": {
+      "name": "evidence_verifications",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "evidence_id": {
+          "name": "evidence_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verifier_version": {
+          "name": "verifier_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "accepted": {
+          "name": "accepted",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason_code": {
+          "name": "reason_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "checked_at": {
+          "name": "checked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "verification_evidence_unique": {
+          "name": "verification_evidence_unique",
+          "columns": [
+            {
+              "expression": "evidence_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "evidence_verifications_evidence_id_meter_evidence_id_fk": {
+          "name": "evidence_verifications_evidence_id_meter_evidence_id_fk",
+          "tableFrom": "evidence_verifications",
+          "tableTo": "meter_evidence",
+          "columnsFrom": [
+            "evidence_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.hosted_admissions": {
+      "name": "hosted_admissions",
+      "schema": "",
+      "columns": {
+        "last_activity_at": {
+          "name": "last_activity_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "run_id": {
+          "name": "run_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "invite_id": {
+          "name": "invite_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "compiled": {
+          "name": "compiled",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "funding_reserved": {
+          "name": "funding_reserved",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fees_reserved": {
+          "name": "fees_reserved",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "gas_limit": {
+          "name": "gas_limit",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "max_fee_per_gas": {
+          "name": "max_fee_per_gas",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "max_transactions": {
+          "name": "max_transactions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'queued'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "hosted_admission_workspace_idx": {
+          "name": "hosted_admission_workspace_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "hosted_admissions_invite_id_hosted_invites_id_fk": {
+          "name": "hosted_admissions_invite_id_hosted_invites_id_fk",
+          "tableFrom": "hosted_admissions",
+          "tableTo": "hosted_invites",
+          "columnsFrom": [
+            "invite_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.hosted_invites": {
+      "name": "hosted_invites",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "code_hash": {
+          "name": "code_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "revoked": {
+          "name": "revoked",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "max_redemptions": {
+          "name": "max_redemptions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "max_runs": {
+          "name": "max_runs",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "runs_per_workspace": {
+          "name": "runs_per_workspace",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "funding_budget": {
+          "name": "funding_budget",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fee_budget": {
+          "name": "fee_budget",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "hosted_invites_code_hash_unique": {
+          "name": "hosted_invites_code_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "code_hash"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.hosted_rate_limits": {
+      "name": "hosted_rate_limits",
+      "schema": "",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "window_start": {
+          "name": "window_start",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "count": {
+          "name": "count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.hosted_sessions": {
+      "name": "hosted_sessions",
+      "schema": "",
+      "columns": {
+        "token_hash": {
+          "name": "token_hash",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "capabilities": {
+          "name": "capabilities",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[\"inspect_owned\",\"execute_preset\",\"control_owned\"]'::jsonb"
+        },
+        "invite_id": {
+          "name": "invite_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "revoked": {
+          "name": "revoked",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        }
+      },
+      "indexes": {
+        "hosted_session_workspace_idx": {
+          "name": "hosted_session_workspace_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "hosted_sessions_invite_id_hosted_invites_id_fk": {
+          "name": "hosted_sessions_invite_id_hosted_invites_id_fk",
+          "tableFrom": "hosted_sessions",
+          "tableTo": "hosted_invites",
+          "columnsFrom": [
+            "invite_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.hosted_submissions": {
+      "name": "hosted_submissions",
+      "schema": "",
+      "columns": {
+        "effect_key": {
+          "name": "effect_key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "run_id": {
+          "name": "run_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "lane_id": {
+          "name": "lane_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "effect_type": {
+          "name": "effect_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "funding": {
+          "name": "funding",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fee": {
+          "name": "fee",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "hosted_submissions_run_id_hosted_admissions_run_id_fk": {
+          "name": "hosted_submissions_run_id_hosted_admissions_run_id_fk",
+          "tableFrom": "hosted_submissions",
+          "tableTo": "hosted_admissions",
+          "columnsFrom": [
+            "run_id"
+          ],
+          "columnsTo": [
+            "run_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.lab_run_events": {
+      "name": "lab_run_events",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "run_id": {
+          "name": "run_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sequence": {
+          "name": "sequence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trace_time": {
+          "name": "trace_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scenario_event_id": {
+          "name": "scenario_event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "lane_key": {
+          "name": "lane_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lane_id": {
+          "name": "lane_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trace_offset_ms": {
+          "name": "trace_offset_ms",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "command_id": {
+          "name": "command_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expected_lane_version": {
+          "name": "expected_lane_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reason_code": {
+          "name": "reason_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_until": {
+          "name": "lease_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "lab_run_sequence_unique": {
+          "name": "lab_run_sequence_unique",
+          "columns": [
+            {
+              "expression": "run_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "lab_run_event_identity_unique": {
+          "name": "lab_run_event_identity_unique",
+          "columns": [
+            {
+              "expression": "run_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "scenario_event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "lab_run_events_run_id_lab_runs_id_fk": {
+          "name": "lab_run_events_run_id_lab_runs_id_fk",
+          "tableFrom": "lab_run_events",
+          "tableTo": "lab_runs",
+          "columnsFrom": [
+            "run_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "lab_event_trace_nonnegative": {
+          "name": "lab_event_trace_nonnegative",
+          "value": "\"lab_run_events\".\"trace_offset_ms\" >= 0"
+        },
+        "lab_event_status_valid": {
+          "name": "lab_event_status_valid",
+          "value": "\"lab_run_events\".\"status\" in ('pending', 'dispatching', 'completed', 'rejected', 'blocked', 'awaiting_chain', 'failed')"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.lab_runs": {
+      "name": "lab_runs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "scenario_id": {
+          "name": "scenario_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cursor": {
+          "name": "cursor",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "trace_offset_ms": {
+          "name": "trace_offset_ms",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "speed": {
+          "name": "speed",
+          "type": "numeric(4, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'1'"
+        },
+        "scenario_digest": {
+          "name": "scenario_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "compiled_snapshot": {
+          "name": "compiled_snapshot",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "corridor_id": {
+          "name": "corridor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lane_bindings": {
+          "name": "lane_bindings",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "replay_of_run_id": {
+          "name": "replay_of_run_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "awaiting": {
+          "name": "awaiting",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failure_code": {
+          "name": "failure_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "lab_run_scenario_idx": {
+          "name": "lab_run_scenario_idx",
+          "columns": [
+            {
+              "expression": "scenario_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "lab_runs_scenario_id_lab_scenarios_id_fk": {
+          "name": "lab_runs_scenario_id_lab_scenarios_id_fk",
+          "tableFrom": "lab_runs",
+          "tableTo": "lab_scenarios",
+          "columnsFrom": [
+            "scenario_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "lab_run_cursor_nonnegative": {
+          "name": "lab_run_cursor_nonnegative",
+          "value": "\"lab_runs\".\"cursor\" >= 0"
+        },
+        "lab_run_version_nonnegative": {
+          "name": "lab_run_version_nonnegative",
+          "value": "\"lab_runs\".\"version\" >= 0"
+        },
+        "lab_run_trace_nonnegative": {
+          "name": "lab_run_trace_nonnegative",
+          "value": "\"lab_runs\".\"trace_offset_ms\" >= 0"
+        },
+        "lab_run_speed_valid": {
+          "name": "lab_run_speed_valid",
+          "value": "\"lab_runs\".\"speed\" in (0.25, 0.5, 1, 2, 4)"
+        },
+        "lab_run_status_valid": {
+          "name": "lab_run_status_valid",
+          "value": "\"lab_runs\".\"status\" in ('initializing', 'ready', 'running', 'paused', 'awaiting_chain', 'completed', 'failed')"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.lab_scenarios": {
+      "name": "lab_scenarios",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "definition": {
+          "name": "definition",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "schema_version": {
+          "name": "schema_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "compiler_version": {
+          "name": "compiler_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "digest": {
+          "name": "digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "validation_status": {
+          "name": "validation_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'valid'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.lanes": {
+      "name": "lanes",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "corridor_id": {
+          "name": "corridor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "external_session_id": {
+          "name": "external_session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "charger_id": {
+          "name": "charger_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "meter_id": {
+          "name": "meter_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "max_power_watts": {
+          "name": "max_power_watts",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expected_proof_interval_ms": {
+          "name": "expected_proof_interval_ms",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tariff_snapshot": {
+          "name": "tariff_snapshot",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "policy_snapshot": {
+          "name": "policy_snapshot",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reserve_policy_snapshot": {
+          "name": "reserve_policy_snapshot",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "settlement_policy_snapshot": {
+          "name": "settlement_policy_snapshot",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "settlement_asset_id": {
+          "name": "settlement_asset_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tempo_network": {
+          "name": "tempo_network",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "service_started": {
+          "name": "service_started",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "evidence_health": {
+          "name": "evidence_health",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "chain_health": {
+          "name": "chain_health",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "signer_health": {
+          "name": "signer_health",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trusted_energy_wh": {
+          "name": "trusted_energy_wh",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trusted_delivered_value": {
+          "name": "trusted_delivered_value",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "authorized_value": {
+          "name": "authorized_value",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "settled_value": {
+          "name": "settled_value",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "confirmed_deposit": {
+          "name": "confirmed_deposit",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "funded_headroom": {
+          "name": "funded_headroom",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_trusted_evidence_at": {
+          "name": "last_trusted_evidence_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_chain_observed_at": {
+          "name": "last_chain_observed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_evidence_hash": {
+          "name": "last_evidence_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_evidence_sequence": {
+          "name": "last_evidence_sequence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "channel_id": {
+          "name": "channel_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "unverified_service_bound": {
+          "name": "unverified_service_bound",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "worst_case_delivered_value": {
+          "name": "worst_case_delivered_value",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "protected_value": {
+          "name": "protected_value",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "protected_watermark": {
+          "name": "protected_watermark",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unprotected_exposure_bound": {
+          "name": "unprotected_exposure_bound",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason_codes": {
+          "name": "reason_codes",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "final_cdr_id": {
+          "name": "final_cdr_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "completion": {
+          "name": "completion",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "lane_external_session_unique": {
+          "name": "lane_external_session_unique",
+          "columns": [
+            {
+              "expression": "external_session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "lane_channel_unique": {
+          "name": "lane_channel_unique",
+          "columns": [
+            {
+              "expression": "channel_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "lane_corridor_idx": {
+          "name": "lane_corridor_idx",
+          "columns": [
+            {
+              "expression": "corridor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "lanes_corridor_id_corridors_id_fk": {
+          "name": "lanes_corridor_id_corridors_id_fk",
+          "tableFrom": "lanes",
+          "tableTo": "corridors",
+          "columnsFrom": [
+            "corridor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "lane_version_nonnegative": {
+          "name": "lane_version_nonnegative",
+          "value": "version >= 0"
+        },
+        "lane_values_nonnegative": {
+          "name": "lane_values_nonnegative",
+          "value": "\"lanes\".\"trusted_energy_wh\" >= 0 and \"lanes\".\"trusted_delivered_value\" >= 0 and \"lanes\".\"authorized_value\" >= 0 and \"lanes\".\"settled_value\" >= 0 and (\"lanes\".\"confirmed_deposit\" is null or \"lanes\".\"confirmed_deposit\" >= 0) and (\"lanes\".\"funded_headroom\" is null or \"lanes\".\"funded_headroom\" >= 0) and \"lanes\".\"unverified_service_bound\" >= 0 and \"lanes\".\"worst_case_delivered_value\" >= 0 and \"lanes\".\"protected_value\" >= 0 and \"lanes\".\"protected_watermark\" >= 0 and \"lanes\".\"unprotected_exposure_bound\" >= 0"
+        },
+        "lane_capacity_positive": {
+          "name": "lane_capacity_positive",
+          "value": "\"lanes\".\"max_power_watts\" > 0 and \"lanes\".\"expected_proof_interval_ms\" > 0"
+        },
+        "lane_value_order": {
+          "name": "lane_value_order",
+          "value": "\"lanes\".\"authorized_value\" <= \"lanes\".\"trusted_delivered_value\" and \"lanes\".\"settled_value\" <= \"lanes\".\"authorized_value\" and (\"lanes\".\"confirmed_deposit\" is null or \"lanes\".\"authorized_value\" <= \"lanes\".\"confirmed_deposit\") and \"lanes\".\"protected_value\" <= \"lanes\".\"authorized_value\" and \"lanes\".\"protected_value\" <= \"lanes\".\"trusted_delivered_value\""
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.meter_evidence": {
+      "name": "meter_evidence",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "lane_id": {
+          "name": "lane_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "raw": {
+          "name": "raw",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "evidence_hash": {
+          "name": "evidence_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "received_at": {
+          "name": "received_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trace_time": {
+          "name": "trace_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "meter_id": {
+          "name": "meter_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sequence": {
+          "name": "sequence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accepted_sequence": {
+          "name": "accepted_sequence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cumulative_wh": {
+          "name": "cumulative_wh",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cumulative_milli_wh": {
+          "name": "cumulative_milli_wh",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "evidence_lane_hash_unique": {
+          "name": "evidence_lane_hash_unique",
+          "columns": [
+            {
+              "expression": "lane_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "evidence_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "evidence_lane_time_idx": {
+          "name": "evidence_lane_time_idx",
+          "columns": [
+            {
+              "expression": "lane_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "received_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "evidence_accepted_sequence_unique": {
+          "name": "evidence_accepted_sequence_unique",
+          "columns": [
+            {
+              "expression": "lane_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "accepted_sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "meter_evidence_lane_id_lanes_id_fk": {
+          "name": "meter_evidence_lane_id_lanes_id_fk",
+          "tableFrom": "meter_evidence",
+          "tableTo": "lanes",
+          "columnsFrom": [
+            "lane_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "evidence_values_nonnegative": {
+          "name": "evidence_values_nonnegative",
+          "value": "(\"meter_evidence\".\"cumulative_wh\" is null or \"meter_evidence\".\"cumulative_wh\" >= 0) and (\"meter_evidence\".\"cumulative_milli_wh\" is null or \"meter_evidence\".\"cumulative_milli_wh\" >= 0)"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.meter_identities": {
+      "name": "meter_identities",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "corridor_id": {
+          "name": "corridor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "meter_id": {
+          "name": "meter_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cpo": {
+          "name": "cpo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "public_key_hex": {
+          "name": "public_key_hex",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "algorithm": {
+          "name": "algorithm",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fingerprint": {
+          "name": "fingerprint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "meter_corridor_identity": {
+          "name": "meter_corridor_identity",
+          "columns": [
+            {
+              "expression": "corridor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "meter_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "meter_corridor_idx": {
+          "name": "meter_corridor_idx",
+          "columns": [
+            {
+              "expression": "corridor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "meter_identities_corridor_id_corridors_id_fk": {
+          "name": "meter_identities_corridor_id_corridors_id_fk",
+          "tableFrom": "meter_identities",
+          "tableTo": "corridors",
+          "columnsFrom": [
+            "corridor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.outbox_jobs": {
+      "name": "outbox_jobs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "lane_id": {
+          "name": "lane_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "effect_type": {
+          "name": "effect_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "attempt_count": {
+          "name": "attempt_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "next_attempt_at": {
+          "name": "next_attempt_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "lease_until": {
+          "name": "lease_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_token": {
+          "name": "lease_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "external_reference": {
+          "name": "external_reference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "outbox_due_idx": {
+          "name": "outbox_due_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "next_attempt_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "outbox_lane_idx": {
+          "name": "outbox_lane_idx",
+          "columns": [
+            {
+              "expression": "lane_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "outbox_jobs_event_id_domain_events_id_fk": {
+          "name": "outbox_jobs_event_id_domain_events_id_fk",
+          "tableFrom": "outbox_jobs",
+          "tableTo": "domain_events",
+          "columnsFrom": [
+            "event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "outbox_jobs_lane_id_lanes_id_fk": {
+          "name": "outbox_jobs_lane_id_lanes_id_fk",
+          "tableFrom": "outbox_jobs",
+          "tableTo": "lanes",
+          "columnsFrom": [
+            "lane_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "outbox_jobs_idempotency_key_unique": {
+          "name": "outbox_jobs_idempotency_key_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "idempotency_key"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "outbox_attempts_nonnegative": {
+          "name": "outbox_attempts_nonnegative",
+          "value": "\"outbox_jobs\".\"attempt_count\" >= 0"
+        },
+        "outbox_status_valid": {
+          "name": "outbox_status_valid",
+          "value": "\"outbox_jobs\".\"status\" in ('pending', 'processing', 'submitted', 'completed', 'failed')"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.payment_operations": {
+      "name": "payment_operations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "lane_id": {
+          "name": "lane_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "channel_id": {
+          "name": "channel_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "operation": {
+          "name": "operation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "requested_amount": {
+          "name": "requested_amount",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tx_hash": {
+          "name": "tx_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "submitted_at": {
+          "name": "submitted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "confirmed_at": {
+          "name": "confirmed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_reason": {
+          "name": "last_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        }
+      },
+      "indexes": {
+        "payment_operation_key_unique": {
+          "name": "payment_operation_key_unique",
+          "columns": [
+            {
+              "expression": "idempotency_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payment_operation_hash_unique": {
+          "name": "payment_operation_hash_unique",
+          "columns": [
+            {
+              "expression": "tx_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payment_operation_lane_idx": {
+          "name": "payment_operation_lane_idx",
+          "columns": [
+            {
+              "expression": "lane_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "payment_operations_lane_id_lanes_id_fk": {
+          "name": "payment_operations_lane_id_lanes_id_fk",
+          "tableFrom": "payment_operations",
+          "tableTo": "lanes",
+          "columnsFrom": [
+            "lane_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "payment_operation_amount_positive": {
+          "name": "payment_operation_amount_positive",
+          "value": "\"payment_operations\".\"requested_amount\" > 0 or (\"payment_operations\".\"requested_amount\" = 0 and \"payment_operations\".\"operation\" in ('close', 'voucher'))"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.processed_commands": {
+      "name": "processed_commands",
+      "schema": "",
+      "columns": {
+        "command_id": {
+          "name": "command_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "aggregate_id": {
+          "name": "aggregate_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "request_hash": {
+          "name": "request_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "command_aggregate_idx": {
+          "name": "command_aggregate_idx",
+          "columns": [
+            {
+              "expression": "aggregate_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.published_runs": {
+      "name": "published_runs",
+      "schema": "",
+      "columns": {
+        "run_id": {
+          "name": "run_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payment": {
+          "name": "payment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "snapshot": {
+          "name": "snapshot",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "published_runs_read": {
+          "name": "published_runs_read",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "public"
+          ],
+          "using": "true"
+        }
+      },
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.reconciliations": {
+      "name": "reconciliations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "lane_id": {
+          "name": "lane_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cdr_id": {
+          "name": "cdr_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "compared_total": {
+          "name": "compared_total",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "comparison": {
+          "name": "comparison",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reason_code": {
+          "name": "reason_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "checked_at": {
+          "name": "checked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "reconciliation_lane_idx": {
+          "name": "reconciliation_lane_idx",
+          "columns": [
+            {
+              "expression": "lane_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "reconciliations_lane_id_lanes_id_fk": {
+          "name": "reconciliations_lane_id_lanes_id_fk",
+          "tableFrom": "reconciliations",
+          "tableTo": "lanes",
+          "columnsFrom": [
+            "lane_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "reconciliations_cdr_id_cdrs_id_fk": {
+          "name": "reconciliations_cdr_id_cdrs_id_fk",
+          "tableFrom": "reconciliations",
+          "tableTo": "cdrs",
+          "columnsFrom": [
+            "cdr_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.tempo_chain_snapshots": {
+      "name": "tempo_chain_snapshots",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "channel_id": {
+          "name": "channel_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "chain_height": {
+          "name": "chain_height",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "observed_at": {
+          "name": "observed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "confirmed_deposit": {
+          "name": "confirmed_deposit",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "settled_value": {
+          "name": "settled_value",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "channel_state": {
+          "name": "channel_state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "tempo_snapshot_channel_time_idx": {
+          "name": "tempo_snapshot_channel_time_idx",
+          "columns": [
+            {
+              "expression": "channel_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "observed_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "tempo_chain_snapshots_channel_id_tempo_channels_channel_id_fk": {
+          "name": "tempo_chain_snapshots_channel_id_tempo_channels_channel_id_fk",
+          "tableFrom": "tempo_chain_snapshots",
+          "tableTo": "tempo_channels",
+          "columnsFrom": [
+            "channel_id"
+          ],
+          "columnsTo": [
+            "channel_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "snapshot_values_nonnegative": {
+          "name": "snapshot_values_nonnegative",
+          "value": "\"tempo_chain_snapshots\".\"chain_height\" >= 0 and \"tempo_chain_snapshots\".\"confirmed_deposit\" >= 0 and \"tempo_chain_snapshots\".\"settled_value\" >= 0"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.tempo_channels": {
+      "name": "tempo_channels",
+      "schema": "",
+      "columns": {
+        "lane_id": {
+          "name": "lane_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "channel_id": {
+          "name": "channel_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "network": {
+          "name": "network",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "asset_id": {
+          "name": "asset_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "descriptor": {
+          "name": "descriptor",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "observed_at": {
+          "name": "observed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "tempo_channels_lane_id_lanes_id_fk": {
+          "name": "tempo_channels_lane_id_lanes_id_fk",
+          "tableFrom": "tempo_channels",
+          "tableTo": "lanes",
+          "columnsFrom": [
+            "lane_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "tempo_channels_channel_id_unique": {
+          "name": "tempo_channels_channel_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "channel_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.tempo_transactions": {
+      "name": "tempo_transactions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "channel_id": {
+          "name": "channel_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tx_hash": {
+          "name": "tx_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "operation": {
+          "name": "operation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "submitted_at": {
+          "name": "submitted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "confirmed_at": {
+          "name": "confirmed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "tempo_transaction_channel_idx": {
+          "name": "tempo_transaction_channel_idx",
+          "columns": [
+            {
+              "expression": "channel_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "tempo_transactions_channel_id_tempo_channels_channel_id_fk": {
+          "name": "tempo_transactions_channel_id_tempo_channels_channel_id_fk",
+          "tableFrom": "tempo_transactions",
+          "tableTo": "tempo_channels",
+          "columnsFrom": [
+            "channel_id"
+          ],
+          "columnsTo": [
+            "channel_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "tempo_transactions_tx_hash_unique": {
+          "name": "tempo_transactions_tx_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "tx_hash"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.tempo_vouchers": {
+      "name": "tempo_vouchers",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "channel_id": {
+          "name": "channel_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cumulative_amount": {
+          "name": "cumulative_amount",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "signer_ref": {
+          "name": "signer_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "domain_ref": {
+          "name": "domain_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "signature_ref": {
+          "name": "signature_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "digest": {
+          "name": "digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "signature": {
+          "name": "signature",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verified_at": {
+          "name": "verified_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verification_status": {
+          "name": "verification_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'unverified'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "tempo_voucher_channel_idx": {
+          "name": "tempo_voucher_channel_idx",
+          "columns": [
+            {
+              "expression": "channel_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "tempo_voucher_channel_amount_unique": {
+          "name": "tempo_voucher_channel_amount_unique",
+          "columns": [
+            {
+              "expression": "channel_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "cumulative_amount",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "tempo_voucher_digest_unique": {
+          "name": "tempo_voucher_digest_unique",
+          "columns": [
+            {
+              "expression": "digest",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "tempo_vouchers_channel_id_tempo_channels_channel_id_fk": {
+          "name": "tempo_vouchers_channel_id_tempo_channels_channel_id_fk",
+          "tableFrom": "tempo_vouchers",
+          "tableTo": "tempo_channels",
+          "columnsFrom": [
+            "channel_id"
+          ],
+          "columnsTo": [
+            "channel_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "verified_voucher_has_proof": {
+          "name": "verified_voucher_has_proof",
+          "value": "\"tempo_vouchers\".\"verification_status\" <> 'verified' or (\"tempo_vouchers\".\"digest\" is not null and \"tempo_vouchers\".\"signature\" is not null and \"tempo_vouchers\".\"verified_at\" is not null)"
+        },
+        "voucher_amount_nonnegative": {
+          "name": "voucher_amount_nonnegative",
+          "value": "cumulative_amount >= 0"
+        }
+      },
+      "isRLSEnabled": true
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

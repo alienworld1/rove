@@ -9,6 +9,7 @@ import {
   jsonb,
   numeric,
   pgTable,
+  pgPolicy,
   text,
   timestamp,
   uniqueIndex,
@@ -49,7 +50,7 @@ export const corridors = pgTable(
       sql`${table.assetDecimals} between 0 and 36 and ${table.tariffDecimals} between 0 and 36`,
     ),
   ],
-);
+).enableRLS();
 
 export const meterIdentities = pgTable(
   "meter_identities",
@@ -71,7 +72,7 @@ export const meterIdentities = pgTable(
     uniqueIndex("meter_corridor_identity").on(table.corridorId, table.meterId),
     index("meter_corridor_idx").on(table.corridorId),
   ],
-);
+).enableRLS();
 
 export const lanes = pgTable(
   "lanes",
@@ -139,7 +140,7 @@ export const lanes = pgTable(
       sql`${table.authorizedValue} <= ${table.trustedDeliveredValue} and ${table.settledValue} <= ${table.authorizedValue} and (${table.confirmedDeposit} is null or ${table.authorizedValue} <= ${table.confirmedDeposit}) and ${table.protectedValue} <= ${table.authorizedValue} and ${table.protectedValue} <= ${table.trustedDeliveredValue}`,
     ),
   ],
-);
+).enableRLS();
 
 export const meterEvidence = pgTable(
   "meter_evidence",
@@ -174,7 +175,7 @@ export const meterEvidence = pgTable(
       sql`(${table.cumulativeWh} is null or ${table.cumulativeWh} >= 0) and (${table.cumulativeMilliWh} is null or ${table.cumulativeMilliWh} >= 0)`,
     ),
   ],
-);
+).enableRLS();
 
 export const evidenceVerifications = pgTable(
   "evidence_verifications",
@@ -189,7 +190,7 @@ export const evidenceVerifications = pgTable(
     checkedAt: instant("checked_at").notNull(),
   },
   (table) => [uniqueIndex("verification_evidence_unique").on(table.evidenceId)],
-);
+).enableRLS();
 
 export const tempoChannels = pgTable("tempo_channels", {
   laneId: text("lane_id")
@@ -201,7 +202,7 @@ export const tempoChannels = pgTable("tempo_channels", {
   status: text("status").notNull(),
   descriptor: jsonb("descriptor"),
   observedAt: instant("observed_at"),
-});
+}).enableRLS();
 export const paymentOperations = pgTable(
   "payment_operations",
   {
@@ -230,7 +231,7 @@ export const paymentOperations = pgTable(
       sql`${table.requestedAmount} > 0 or (${table.requestedAmount} = 0 and ${table.operation} in ('close', 'voucher'))`,
     ),
   ],
-);
+).enableRLS();
 export const tempoTransactions = pgTable(
   "tempo_transactions",
   {
@@ -245,7 +246,7 @@ export const tempoTransactions = pgTable(
     confirmedAt: instant("confirmed_at"),
   },
   (table) => [index("tempo_transaction_channel_idx").on(table.channelId)],
-);
+).enableRLS();
 export const tempoVouchers = pgTable(
   "tempo_vouchers",
   {
@@ -278,7 +279,7 @@ export const tempoVouchers = pgTable(
     ),
     check("voucher_amount_nonnegative", nonnegative("cumulative_amount")),
   ],
-);
+).enableRLS();
 export const tempoChainSnapshots = pgTable(
   "tempo_chain_snapshots",
   {
@@ -303,7 +304,7 @@ export const tempoChainSnapshots = pgTable(
       sql`${table.chainHeight} >= 0 and ${table.confirmedDeposit} >= 0 and ${table.settledValue} >= 0`,
     ),
   ],
-);
+).enableRLS();
 
 export const cdrs = pgTable(
   "cdrs",
@@ -333,7 +334,7 @@ export const cdrs = pgTable(
       sql`${table.normalizedTotal} is null or ${table.normalizedTotal} >= 0`,
     ),
   ],
-);
+).enableRLS();
 export const reconciliations = pgTable(
   "reconciliations",
   {
@@ -351,7 +352,7 @@ export const reconciliations = pgTable(
     checkedAt: instant("checked_at").notNull(),
   },
   (table) => [index("reconciliation_lane_idx").on(table.laneId)],
-);
+).enableRLS();
 
 export const labScenarios = pgTable("lab_scenarios", {
   id: text("id").primaryKey(),
@@ -363,7 +364,7 @@ export const labScenarios = pgTable("lab_scenarios", {
   validationStatus: text("validation_status").notNull().default("valid"),
   createdAt: instant("created_at").notNull(),
   updatedAt: instant("updated_at").notNull().defaultNow(),
-});
+}).enableRLS();
 export const labRuns = pgTable(
   "lab_runs",
   {
@@ -399,7 +400,7 @@ export const labRuns = pgTable(
       sql`${table.status} in ('initializing', 'ready', 'running', 'paused', 'awaiting_chain', 'completed', 'failed')`,
     ),
   ],
-);
+).enableRLS();
 export const labRunEvents = pgTable(
   "lab_run_events",
   {
@@ -437,7 +438,7 @@ export const labRunEvents = pgTable(
       sql`${table.status} in ('pending', 'dispatching', 'completed', 'rejected', 'blocked', 'awaiting_chain', 'failed')`,
     ),
   ],
-);
+).enableRLS();
 
 export const domainEvents = pgTable(
   "domain_events",
@@ -467,7 +468,7 @@ export const domainEvents = pgTable(
     index("event_lane_order_idx").on(table.laneId, table.laneVersion),
     index("event_corridor_idx").on(table.corridorId),
   ],
-);
+).enableRLS();
 export const outboxJobs = pgTable(
   "outbox_jobs",
   {
@@ -498,7 +499,7 @@ export const outboxJobs = pgTable(
       sql`${table.status} in ('pending', 'processing', 'submitted', 'completed', 'failed')`,
     ),
   ],
-);
+).enableRLS();
 export const auditProjection = pgTable(
   "audit_projection",
   {
@@ -520,7 +521,7 @@ export const auditProjection = pgTable(
   (table) => [
     index("audit_lane_version_idx").on(table.laneId, table.laneVersion),
   ],
-);
+).enableRLS();
 export const processedCommands = pgTable(
   "processed_commands",
   {
@@ -531,4 +532,85 @@ export const processedCommands = pgTable(
     createdAt: instant("created_at").notNull(),
   },
   (table) => [index("command_aggregate_idx").on(table.aggregateId)],
-);
+).enableRLS();
+
+export const hostedInvites = pgTable("hosted_invites", {
+  id: text("id").primaryKey(),
+  codeHash: text("code_hash").notNull().unique(),
+  expiresAt: instant("expires_at").notNull(),
+  revoked: boolean("revoked").notNull().default(false),
+  maxRedemptions: integer("max_redemptions").notNull(),
+  maxRuns: integer("max_runs").notNull(),
+  runsPerWorkspace: integer("runs_per_workspace").notNull(),
+  fundingBudget: amount("funding_budget").notNull(),
+  feeBudget: amount("fee_budget").notNull(),
+}).enableRLS();
+export const hostedSessions = pgTable(
+  "hosted_sessions",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    capabilities: jsonb("capabilities")
+      .notNull()
+      .default(["inspect_owned", "execute_preset", "control_owned"]),
+    inviteId: text("invite_id")
+      .notNull()
+      .references(() => hostedInvites.id),
+    expiresAt: instant("expires_at").notNull(),
+    revoked: boolean("revoked").notNull().default(false),
+  },
+  (table) => [index("hosted_session_workspace_idx").on(table.workspaceId)],
+).enableRLS();
+export const hostedAdmissions = pgTable(
+  "hosted_admissions",
+  {
+    lastActivityAt: instant("last_activity_at").notNull().defaultNow(),
+    runId: text("run_id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    inviteId: text("invite_id")
+      .notNull()
+      .references(() => hostedInvites.id),
+    compiled: jsonb("compiled").notNull(),
+    fundingReserved: amount("funding_reserved").notNull(),
+    feesReserved: amount("fees_reserved").notNull(),
+    gasLimit: amount("gas_limit").notNull(),
+    maxFeePerGas: amount("max_fee_per_gas").notNull(),
+    maxTransactions: integer("max_transactions").notNull(),
+    status: text("status").notNull().default("queued"),
+    createdAt: instant("created_at").notNull(),
+  },
+  (table) => [index("hosted_admission_workspace_idx").on(table.workspaceId)],
+).enableRLS();
+export const hostedSubmissions = pgTable("hosted_submissions", {
+  effectKey: text("effect_key").primaryKey(),
+  runId: text("run_id")
+    .notNull()
+    .references(() => hostedAdmissions.runId),
+  laneId: text("lane_id").notNull(),
+  effectType: text("effect_type").notNull(),
+  funding: amount("funding").notNull(),
+  fee: amount("fee").notNull(),
+}).enableRLS();
+export const publishedRuns = pgTable(
+  "published_runs",
+  {
+    runId: text("run_id").primaryKey(),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    payment: text("payment").notNull(),
+    snapshot: jsonb("snapshot").notNull(),
+    publishedAt: instant("published_at").notNull(),
+  },
+  () => [
+    pgPolicy("published_runs_read", {
+      for: "select",
+      to: "public",
+      using: sql`true`,
+    }),
+  ],
+).enableRLS();
+export const hostedRateLimits = pgTable("hosted_rate_limits", {
+  key: text("key").primaryKey(),
+  windowStart: instant("window_start").notNull(),
+  count: integer("count").notNull(),
+}).enableRLS();

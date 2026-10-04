@@ -4,6 +4,7 @@ export * from "./corridor.ts";
 export * from "./corridor-copy.ts";
 export * from "./corridor-geometry.ts";
 export * from "./lab.ts";
+export * from "./hosted.ts";
 
 export const readinessSchema = z.object({
   status: z.enum(["checking", "ready", "blocked"]),

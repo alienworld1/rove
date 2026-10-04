@@ -1,0 +1,1 @@
+ALTER TABLE "hosted_admissions" ADD COLUMN "last_activity_at" timestamp with time zone DEFAULT now() NOT NULL;

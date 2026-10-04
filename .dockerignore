@@ -1,0 +1,13 @@
+.git
+**/node_modules
+**/.next
+**/.source
+**/*.tsbuildinfo
+.env*
+.agent*
+.codex
+AGENTS.md
+agent-docs
+coverage
+sample-output
+test-results

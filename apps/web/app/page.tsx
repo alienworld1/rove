@@ -1,3 +1,6 @@
+import { readBaseConfig } from "@rove/config";
+import { HostedEntry } from "./hosted-entry";
+import { HostedQueryProvider } from "./hosted-query-provider";
 import { idSchema } from "@rove/contracts";
 import { CorridorQueryProvider } from "./corridor/corridor-query-provider";
 import { CorridorWorkspace } from "./corridor/corridor-workspace";
@@ -14,6 +17,12 @@ export default async function Home({
       ? value
       : null;
   };
+  if (readBaseConfig().ACCESS_MODE === "hosted")
+    return (
+      <HostedQueryProvider>
+        <HostedEntry runId={selectedId("run")} />
+      </HostedQueryProvider>
+    );
   return (
     <CorridorQueryProvider
       controlledMode={process.env.NODE_ENV === "development"}

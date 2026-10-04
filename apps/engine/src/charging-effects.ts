@@ -1,7 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readPaymentConfig } from "@rove/config";
 import { paymentEffectPayloadSchema } from "@rove/contracts";
-import { ChargingStore, type VerifiedVoucher } from "@rove/persistence";
+import {
+  ChargingStore,
+  HostedStore,
+  type VerifiedVoucher,
+} from "@rove/persistence";
 import {
   createTempoChannelAdapter,
   type ClosureObservation,
@@ -16,7 +20,10 @@ const stableCommandId = (key: string) =>
 export function createConfiguredTempoChannelAdapter(
   settings = readPaymentConfig(),
 ) {
-  if (settings.TEMPO_SESSION_BACKEND !== "precompile")
+  if (
+    settings.TEMPO_SESSION_BACKEND !== "precompile" ||
+    settings.TEMPO_CHAIN_ID !== 42431
+  )
     throw new Error("PAYMENT_ENVIRONMENT_UNSUPPORTED");
   return createTempoChannelAdapter({
     rpcUrl: settings.TEMPO_RPC_URL,
@@ -34,7 +41,10 @@ export function createConfiguredTempoChannelAdapter(
   });
 }
 
-export function createChargingEffectAdapter(store: ChargingStore) {
+export function createChargingEffectAdapter(
+  store: ChargingStore,
+  hosted?: HostedStore,
+) {
   const settings = readPaymentConfig();
   const tempo = createConfiguredTempoChannelAdapter(settings);
 
@@ -133,8 +143,17 @@ export function createChargingEffectAdapter(store: ChargingStore) {
     if (!request.amount) throw new Error("PAYMENT_AMOUNT_INVALID");
     if (current.lane.completion?.status === "mismatch")
       throw new Error("CDR_SERVICE_MISMATCH");
+    const fees =
+      type !== "payment.voucher_requested" && hosted
+        ? await hosted.reserveSubmission(
+            request.laneId,
+            key,
+            type,
+            request.amount,
+          )
+        : undefined;
     if (type === "payment.open_requested")
-      return tempo.submitOpen(key, BigInt(request.amount));
+      return tempo.submitOpen(key, BigInt(request.amount), fees);
     if (
       !current.channel ||
       !request.channelId ||
@@ -162,6 +181,7 @@ export function createChargingEffectAdapter(store: ChargingStore) {
         request.channelId as `0x${string}`,
         descriptor,
         BigInt(request.amount),
+        fees,
       );
     if (
       type === "payment.settlement_requested" ||
@@ -185,6 +205,7 @@ export function createChargingEffectAdapter(store: ChargingStore) {
           BigInt(request.amount),
           BigInt(request.priorDeposit!),
           current.voucher.signature as `0x${string}`,
+          fees,
         );
       }
       return tempo.submitSettlement(
@@ -192,6 +213,7 @@ export function createChargingEffectAdapter(store: ChargingStore) {
         descriptor,
         BigInt(request.amount),
         current.voucher.signature as `0x${string}`,
+        fees,
       );
     }
     throw new Error("EFFECT_UNSUPPORTED");

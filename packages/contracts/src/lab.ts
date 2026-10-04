@@ -205,6 +205,7 @@ export const labScenarioDetailSchema = z
 
 export const labRunViewSchema = z
   .object({
+    recorded: z.boolean().optional(),
     run: z
       .object({
         id: idSchema,

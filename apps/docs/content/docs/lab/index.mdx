@@ -5,6 +5,14 @@ description: "Reproduce the protection loop with signed digital-twin inputs and 
 
 Rove Lab runs deterministic multi-Lane inputs through the normal evidence verifier, protection engine, persisted events, and effect path. The local GUI uses deterministic payment simulation. It never silently turns a GUI run into live Tempo funding.
 
+## Hosted experience
+
+Choose **Explore runs** to inspect explicitly published completed runs, including Lane evidence, payment receipts, protection history, and reconciliation. **Play recording** and the trace scrubber change only your presentation. Recorded runs use digital-twin charging equipment and disclose their actual payment source.
+
+Choose **Use an invite** to unlock your private workspace, then **Run on Tempo testnet** to execute the approved three-Lane scenario. Preparation and confirmation happen durably; refreshing resumes the same run. Execution has finite run and funding allowances, and capacity may be busy. Expired or exhausted access leaves published analysis available. Hosted access does not enable simulation execution or the scenario builder.
+
+The engine completes reconciliation and channel closure after the approved trace ends. Paused runs without interaction resume after 15 minutes while the engine is available, so their reserved work can finish. An outage retains pending work for recovery rather than presenting it as confirmed.
+
 ## Local workflow
 
 Use Node 22+, pnpm 11.19.0, PostgreSQL, and a matching random `DEMO_SESSION_TOKEN` of at least 48 hexadecimal characters in engine/web ignored settings. Set `DATABASE_URL` for the engine; keep secrets out of docs configuration.

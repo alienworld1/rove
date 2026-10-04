@@ -49,11 +49,15 @@ function traceEvent(
   event: LaneHistory[number],
   traceEpoch: string | null,
   precedingOffsetMs: number,
+  traceEndMs: number,
 ): LaneTraceEvent {
-  const traceOffsetMs =
+  const candidate =
     traceEpoch && event.traceTime
       ? Math.max(0, Date.parse(event.traceTime) - Date.parse(traceEpoch))
       : precedingOffsetMs;
+  // Chain receipt clocks remain real wall time. They inherit the preceding
+  // scenario position rather than moving a short recorded trace to its end.
+  const traceOffsetMs = candidate <= traceEndMs ? candidate : precedingOffsetMs;
   return {
     eventId: event.id,
     eventType: event.type,
@@ -74,6 +78,22 @@ function traceEvent(
       after: event.summary?.after ?? null,
     },
   };
+}
+
+export function projectLaneTrace(
+  history: LaneHistory,
+  traceEpoch: string | null,
+  traceEndMs: number,
+) {
+  return history.reduce<LaneTraceEvent[]>((trace, event) => {
+    const previousOffset = trace.at(-1)?.traceOffsetMs ?? 0;
+    const next = traceEvent(event, traceEpoch, previousOffset, traceEndMs);
+    trace.push({
+      ...next,
+      traceOffsetMs: Math.max(previousOffset, next.traceOffsetMs ?? 0),
+    });
+    return trace;
+  }, []);
 }
 
 export function summarizeCorridor(lanes: LaneProjection[]) {
@@ -221,18 +241,7 @@ async function composeCorridorOperatingViewOnce(
                 BigInt(projection.authorizedValue) +
                 BigInt(projection.fundedHeadroom)
               ).toString(),
-        trace: history.reduce<LaneTraceEvent[]>((trace, event) => {
-          const previousOffset = trace.at(-1)?.traceOffsetMs ?? 0;
-          const next = traceEvent(event, traceStart, previousOffset);
-          trace.push({
-            ...next,
-            traceOffsetMs: Math.max(
-              previousOffset,
-              Math.min(next.traceOffsetMs ?? 0, traceEndMs),
-            ),
-          });
-          return trace;
-        }, []),
+        trace: projectLaneTrace(history, traceStart, traceEndMs),
         scale: { valueDomainMax, traceStartMs: 0, traceEndMs },
       };
     }),
@@ -243,7 +252,9 @@ async function composeCorridorOperatingViewOnce(
       payment:
         ordered[0]?.projection.paymentSource === "local-simulation"
           ? "Local deterministic payment"
-          : "Tempo",
+          : corridor.tempoNetwork === "eip155:42431"
+            ? "Tempo testnet"
+            : "Tempo",
       settlement: "Partial settlement",
     },
     activeRun: runSummary(labView),

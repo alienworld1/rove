@@ -25,6 +25,7 @@ export class CorridorLab {
   constructor(
     private charging: ChargingStore,
     private lab: LabStore,
+    private hosted?: import("@rove/persistence").HostedStore,
   ) {}
 
   async finishLane(input: import("@rove/contracts").CompletionCommand) {
@@ -222,6 +223,7 @@ export class CorridorLab {
     digest: string,
     replayOfRunId?: string,
     requestedRunId?: string,
+    deferInitialization = false,
   ) {
     if (requestedRunId) {
       const existing = await this.lab.getRun(requestedRunId).catch((error) => {
@@ -252,7 +254,7 @@ export class CorridorLab {
       replayOfRunId,
       requestedRunId,
     );
-    if (run.created) await this.initialize(run.run.id);
+    if (run.created && !deferInitialization) await this.initialize(run.run.id);
     return this.view(run.run.id);
   }
 
@@ -304,7 +306,7 @@ export class CorridorLab {
       this.charging.recovery.get(laneId)?.status !== "ready"
     )
       return false;
-    const adapter = createChargingEffectAdapter(this.charging);
+    const adapter = createChargingEffectAdapter(this.charging, this.hosted);
     return processNextEffect(
       this.charging,
       adapter,
@@ -386,7 +388,9 @@ export class CorridorLab {
         payment:
           compiled.definition.corridor.tempoNetwork === "local-simulation"
             ? "Local deterministic payment"
-            : "Tempo",
+            : compiled.definition.corridor.tempoNetwork === "eip155:42431"
+              ? "Tempo testnet"
+              : "Tempo",
         settlement: "Cumulative settlement and channel completion",
       },
       lanes,

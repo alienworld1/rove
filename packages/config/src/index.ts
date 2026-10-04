@@ -13,6 +13,15 @@ const baseSchema = z.object({
   ENGINE_HOST: z.string().min(1).default("127.0.0.1"),
   ENGINE_PORT: z.coerce.number().int().min(1).max(65535).default(4100),
   DATABASE_URL: z.url().optional(),
+  ACCESS_MODE: z.enum(["local", "hosted", "disabled"]).default("local"),
+  APP_ORIGIN: localUrl.optional(),
+  ENGINE_SERVICE_TOKEN: z
+    .string()
+    .regex(/^[0-9a-fA-F]{64,}$/)
+    .optional(),
+  HOSTED_SESSION_HOURS: z.coerce.number().int().min(1).max(168).default(24),
+  HOSTED_MAX_STREAMS: z.coerce.number().int().min(1).max(200).default(32),
+  HOSTED_STREAMS_PER_SESSION: z.coerce.number().int().min(1).max(4).default(2),
   DEMO_SESSION_TOKEN: z.preprocess(
     (value) => (value === "" ? undefined : value),
     z
@@ -75,7 +84,35 @@ function parseSettings<T>(schema: z.ZodType<T>, env: NodeJS.ProcessEnv): T {
 }
 
 export function readBaseConfig(env: NodeJS.ProcessEnv = process.env) {
-  return parseSettings(baseSchema, env);
+  const config = parseSettings(baseSchema, env);
+  if (
+    config.ACCESS_MODE === "hosted" &&
+    (!config.ENGINE_SERVICE_TOKEN ||
+      !config.APP_ORIGIN ||
+      (config.NODE_ENV === "production" &&
+        (new URL(config.APP_ORIGIN).protocol !== "https:" ||
+          new URL(config.ENGINE_ORIGIN).protocol !== "https:")))
+  )
+    throw new Error(
+      "CONFIG_INVALID: Hosted access requires an internal credential and secure app and engine origins",
+    );
+  return config;
+}
+
+const hostedLimitsSchema = z.object({
+  HOSTED_FUNDING_BUDGET: z.string().regex(/^[1-9][0-9]*$/),
+  HOSTED_FEE_BUDGET: z.string().regex(/^[1-9][0-9]*$/),
+  HOSTED_GAS_LIMIT: z.string().regex(/^[1-9][0-9]*$/),
+  HOSTED_MAX_FEE_PER_GAS: z.string().regex(/^[1-9][0-9]*$/),
+  HOSTED_MAX_TRANSACTIONS_PER_RUN: z.coerce
+    .number()
+    .int()
+    .min(12)
+    .max(100)
+    .default(32),
+});
+export function readHostedLimits(env: NodeJS.ProcessEnv = process.env) {
+  return parseSettings(hostedLimitsSchema, env);
 }
 
 export function readPaymentConfig(env: NodeJS.ProcessEnv = process.env) {

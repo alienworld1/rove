@@ -1,3 +1,5 @@
+import { publishedDataResponse } from "../../published-data";
+import { engineHeaders, sameOrigin } from "../../hosted-proxy";
 import { readBaseConfig } from "@rove/config";
 import { hasDemoSession } from "../../demo-session";
 
@@ -33,11 +35,12 @@ async function proxy(
 ) {
   const config = readBaseConfig();
   if (
-    config.NODE_ENV !== "development" ||
-    !config.DEMO_SESSION_TOKEN ||
-    !hasDemoSession(request, config.DEMO_SESSION_TOKEN) ||
-    (method === "POST" &&
-      request.headers.get("origin") !== new URL(request.url).origin)
+    (config.ACCESS_MODE !== "hosted" &&
+      (config.ACCESS_MODE !== "local" ||
+        config.NODE_ENV !== "development" ||
+        !config.DEMO_SESSION_TOKEN ||
+        !hasDemoSession(request, config.DEMO_SESSION_TOKEN))) ||
+    (method === "POST" && !sameOrigin(request))
   )
     return Response.json(
       { message: "You don't have access to this Corridor Lab." },
@@ -45,6 +48,19 @@ async function proxy(
     );
   const { path } = await params;
   if (!allowed(path, method)) return new Response(null, { status: 404 });
+  if (method === "GET" && config.ACCESS_MODE === "hosted") {
+    try {
+      const published = await publishedDataResponse(
+        `/api/lab/${path.join("/")}`,
+      );
+      if (published) return published;
+    } catch {
+      return Response.json(
+        { message: "Published records are unavailable. Please try again." },
+        { status: 503 },
+      );
+    }
+  }
   const body = method === "POST" ? await request.text() : undefined;
   if (body && Buffer.byteLength(body) > 70_000)
     return Response.json(
@@ -59,7 +75,7 @@ async function proxy(
       {
         method,
         headers: {
-          authorization: `Bearer ${config.DEMO_SESSION_TOKEN}`,
+          ...engineHeaders(request),
           ...(body ? { "content-type": "application/json" } : {}),
         },
         body,

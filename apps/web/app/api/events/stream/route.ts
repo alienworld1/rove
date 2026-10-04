@@ -1,21 +1,27 @@
+import { engineHeaders, hostedSessionToken } from "../../hosted-proxy";
 import { readBaseConfig } from "@rove/config";
 import { idSchema, presentationCursorSchema } from "@rove/contracts";
 import { hasDemoSession } from "../../demo-session";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   const config = readBaseConfig();
   if (
-    config.NODE_ENV !== "development" ||
-    !config.DEMO_SESSION_TOKEN ||
-    !hasDemoSession(request, config.DEMO_SESSION_TOKEN)
+    config.ACCESS_MODE !== "hosted" &&
+    (config.ACCESS_MODE !== "local" ||
+      config.NODE_ENV !== "development" ||
+      !config.DEMO_SESSION_TOKEN ||
+      !hasDemoSession(request, config.DEMO_SESSION_TOKEN))
   )
     return Response.json(
       { message: "You don't have access to this Corridor." },
       { status: 403, headers: { "cache-control": "no-store" } },
     );
+  if (config.ACCESS_MODE === "hosted" && !hostedSessionToken(request))
+    return new Response(null, { status: 403 });
   const incoming = new URL(request.url);
   const corridor = incoming.searchParams.get("corridor");
   const run = incoming.searchParams.get("run");
@@ -36,7 +42,7 @@ export async function GET(request: Request) {
   try {
     const upstream = await fetch(upstreamUrl, {
       headers: {
-        authorization: `Bearer ${config.DEMO_SESSION_TOKEN}`,
+        ...engineHeaders(request),
         accept: "text/event-stream",
         ...(request.headers.get("last-event-id")
           ? { "last-event-id": request.headers.get("last-event-id")! }

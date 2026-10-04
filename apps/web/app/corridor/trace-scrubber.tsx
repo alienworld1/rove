@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDrag } from "@use-gesture/react";
 import type { CorridorOperatingView } from "@rove/contracts";
 
@@ -9,13 +9,16 @@ export function TraceScrubber({
   committedOffsets,
   selectedOffsetMs,
   onChange,
+  recorded = false,
 }: {
   run: NonNullable<CorridorOperatingView["activeRun"]>;
   committedOffsets: number[];
   selectedOffsetMs: number | null;
   onChange: (offsetMs: number | null) => void;
+  recorded?: boolean;
 }) {
   const track = useRef<HTMLDivElement>(null);
+  const [playing, setPlaying] = useState(false);
   const selected = selectedOffsetMs ?? run.traceOffsetMs;
   const points = [
     ...new Set([
@@ -29,6 +32,15 @@ export function TraceScrubber({
         Math.abs(point - offset) < Math.abs(best - offset) ? point : best,
       points[0],
     );
+  const nextOffset = points.find((point) => point > selected);
+  useEffect(() => {
+    if (!playing || !recorded) return;
+    const timer = window.setTimeout(() => {
+      if (nextOffset === undefined) setPlaying(false);
+      else onChange(nextOffset);
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [playing, recorded, nextOffset, onChange]);
   const commitFromPointer = (clientX: number) => {
     const bounds = track.current?.getBoundingClientRect();
     if (!bounds || run.traceEndMs <= 0) return;
@@ -36,6 +48,7 @@ export function TraceScrubber({
       1,
       Math.max(0, (clientX - bounds.left) / bounds.width),
     );
+    setPlaying(false);
     onChange(nearest(Math.round(ratio * run.traceEndMs)));
   };
   const bind = useDrag(({ xy: [clientX] }) => commitFromPointer(clientX), {
@@ -54,12 +67,25 @@ export function TraceScrubber({
             {new Date(selected).toISOString().slice(14, 23)}
           </span>
         </p>
+        {recorded ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (!playing && nextOffset === undefined) onChange(points[0]);
+              setPlaying(!playing);
+            }}
+            className="min-h-11 rounded-sm border border-line-strong px-3 py-1.5 text-xs text-ink focus-visible:outline-2 focus-visible:outline-info"
+          >
+            {playing ? "Pause recording" : "Play recording"}
+          </button>
+        ) : null}
         <button
           type="button"
-          onClick={() =>
-            run.faultTraceOffsetMs !== null &&
-            onChange(nearest(run.faultTraceOffsetMs))
-          }
+          onClick={() => {
+            setPlaying(false);
+            if (run.faultTraceOffsetMs !== null)
+              onChange(nearest(run.faultTraceOffsetMs));
+          }}
           disabled={
             run.faultTraceOffsetMs === null ||
             !points.includes(run.faultTraceOffsetMs)
@@ -70,10 +96,11 @@ export function TraceScrubber({
         </button>
         <button
           type="button"
-          onClick={() =>
-            run.recoveryTraceOffsetMs !== null &&
-            onChange(nearest(run.recoveryTraceOffsetMs))
-          }
+          onClick={() => {
+            setPlaying(false);
+            if (run.recoveryTraceOffsetMs !== null)
+              onChange(nearest(run.recoveryTraceOffsetMs));
+          }}
           disabled={
             run.recoveryTraceOffsetMs === null ||
             !points.includes(run.recoveryTraceOffsetMs)
@@ -85,10 +112,13 @@ export function TraceScrubber({
         {selectedOffsetMs !== null ? (
           <button
             type="button"
-            onClick={() => onChange(null)}
+            onClick={() => {
+              setPlaying(false);
+              onChange(null);
+            }}
             className="min-h-11 rounded-sm border border-line px-3 py-1.5 text-xs text-ink-secondary focus-visible:outline-2 focus-visible:outline-info"
           >
-            Return to live trace
+            {recorded ? "Show completed run" : "Return to live trace"}
           </button>
         ) : null}
       </div>
@@ -114,7 +144,10 @@ export function TraceScrubber({
         step={1}
         value={points.indexOf(nearest(selected))}
         aria-valuetext={`${selected / 1000} seconds into the recorded trace`}
-        onChange={(event) => onChange(points[Number(event.target.value)] ?? 0)}
+        onChange={(event) => {
+          setPlaying(false);
+          onChange(points[Number(event.target.value)] ?? 0);
+        }}
         className="sr-only focus:not-sr-only focus:mt-2 focus:w-full focus:accent-info"
       />
       <p className="text-[11px] text-ink-tertiary">

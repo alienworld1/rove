@@ -11,7 +11,12 @@ export class LabStore {
   private db: ReturnType<typeof drizzle>;
 
   constructor(url: string) {
-    this.client = postgres(url);
+    this.client = postgres(url, {
+      max: 3,
+      prepare: false,
+      connect_timeout: 10,
+      idle_timeout: 20,
+    });
     this.db = drizzle(this.client);
   }
 

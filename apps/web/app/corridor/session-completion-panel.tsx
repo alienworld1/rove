@@ -28,9 +28,11 @@ const labels = {
 export function SessionCompletionPanel({
   view,
   connected,
+  readOnly = false,
 }: {
   view: CorridorOperatingView;
   connected: boolean;
+  readOnly?: boolean;
 }) {
   const focusedLaneId = useCorridorSelection((state) => state.focusedLaneId);
   const trace = useCorridorSelection((state) => state.traceOffsetMs);
@@ -45,7 +47,7 @@ export function SessionCompletionPanel({
     queryKey: ["completion", focusedLaneId, lane?.projection.version],
     queryFn: ({ signal }) => readCompletion(focusedLaneId!, signal),
     enabled: Boolean(lane),
-    refetchInterval: connected && trace === null ? 3000 : false,
+    refetchInterval: !readOnly && connected && trace === null ? 3000 : false,
   });
   const mutation = useMutation({
     mutationFn: (action: "complete" | "check" | "close") => {
@@ -88,6 +90,7 @@ export function SessionCompletionPanel({
       ? "Unavailable"
       : `${formatOperationalValue(value, view.corridor.tariff.assetDecimals)} ${completion?.cdr?.currency ?? "asset units"}`;
   const disabled =
+    readOnly ||
     !connected ||
     trace !== null ||
     mutation.isPending ||
@@ -173,8 +176,9 @@ export function SessionCompletionPanel({
         <>
           {trace !== null ? (
             <p className="mt-3 text-info">
-              Current completion record, outside the historical trace. Actions
-              are unavailable during trace inspection.
+              {readOnly
+                ? "Final reconciliation record, separate from the selected historical snapshot."
+                : "Current completion record, outside the historical trace. Actions are unavailable during trace inspection."}
             </p>
           ) : null}
           <dl className="mt-4 divide-y divide-line">
@@ -250,7 +254,7 @@ export function SessionCompletionPanel({
         </p>
       ) : null}
       <div className="mt-4 flex flex-wrap gap-2">
-        {!completion ? (
+        {!readOnly && !completion ? (
           <button
             type="button"
             disabled={
@@ -268,7 +272,7 @@ export function SessionCompletionPanel({
             Finish session
           </button>
         ) : null}
-        {completion?.status === "reconciled" ? (
+        {!readOnly && completion?.status === "reconciled" ? (
           <button
             type="button"
             disabled={disabled || !summary.data?.canClose}
@@ -286,7 +290,9 @@ export function SessionCompletionPanel({
           type="button"
           disabled={mutation.isPending || !connected || trace !== null}
           onClick={() =>
-            summary.data ? mutation.mutate("check") : void summary.refetch()
+            summary.data && !readOnly
+              ? mutation.mutate("check")
+              : void summary.refetch()
           }
           className="min-h-11 rounded-sm border border-line px-3 py-2 text-xs focus-visible:outline-2 focus-visible:outline-info disabled:opacity-40"
         >
@@ -314,7 +320,7 @@ export function SessionCompletionPanel({
           </button>
         ) : null}
       </div>
-      {trace !== null ? (
+      {trace !== null && !readOnly ? (
         <p className="mt-2 text-xs text-ink-secondary">
           Return to the live view to continue.
         </p>

@@ -1,3 +1,7 @@
+import { PresentationPoller } from "./presentation-poller.js";
+import { HostedStore, HostedAccessError } from "@rove/persistence";
+import { HostedRuntime } from "./hosted-runtime.js";
+import { handleHostedHttp } from "./hosted-http.js";
 import { completionCommandSchema } from "@rove/contracts";
 import { recoverCharging, recoverChargingLane } from "./recover-charging.js";
 import { createLocalLabPaymentAdapter } from "./lab-payment.js";
@@ -35,14 +39,23 @@ const store = config.DATABASE_URL
   ? new ChargingStore(config.DATABASE_URL)
   : null;
 const labStore = config.DATABASE_URL ? new LabStore(config.DATABASE_URL) : null;
-const corridorLab = store && labStore ? new CorridorLab(store, labStore) : null;
+const hostedStore =
+  config.ACCESS_MODE === "hosted" && config.DATABASE_URL
+    ? new HostedStore(config.DATABASE_URL)
+    : undefined;
+const corridorLab =
+  store && labStore ? new CorridorLab(store, labStore, hostedStore) : null;
+const hostedRuntime =
+  hostedStore && corridorLab
+    ? new HostedRuntime(hostedStore, corridorLab, store!)
+    : null;
 const seedLab = corridorLab?.seed().then(
   () => true,
   () => false,
 );
 const paymentEffects =
   store && proofPrerequisites().paymentConfigured
-    ? createChargingEffectAdapter(store)
+    ? createChargingEffectAdapter(store, hostedStore)
     : null;
 const initialRecovery = store
   ? recoverCharging(store, paymentEffects).then(
@@ -51,6 +64,13 @@ const initialRecovery = store
     )
   : Promise.resolve(false);
 let activeStreams = 0;
+const streamsBySession = new Map<string, number>();
+const presentationPoller = store
+  ? new PresentationPoller(
+      (id, cursor) => store.getPresentationEvents(id, cursor),
+      async (id) => corridorLab?.runVersion(id),
+    )
+  : null;
 
 function send(response: ServerResponse, status: number, body: unknown) {
   response.writeHead(status, {
@@ -90,11 +110,16 @@ function logDecision(
 }
 
 function authorized(request: IncomingMessage) {
-  if (!config.DEMO_SESSION_TOKEN || config.NODE_ENV !== "development")
-    return false;
+  const token =
+    config.ACCESS_MODE === "hosted"
+      ? config.ENGINE_SERVICE_TOKEN
+      : config.ACCESS_MODE === "local" && config.NODE_ENV === "development"
+        ? config.DEMO_SESSION_TOKEN
+        : undefined;
+  if (!token) return false;
   const supplied = request.headers.authorization?.replace(/^Bearer /, "") ?? "";
   const actual = Buffer.from(supplied);
-  const expected = Buffer.from(config.DEMO_SESSION_TOKEN);
+  const expected = Buffer.from(token);
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
@@ -173,8 +198,26 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
   let laneId: string | undefined;
   let commandId: string | undefined;
   try {
+    if (
+      hostedStore &&
+      hostedRuntime &&
+      (await handleHostedHttp({
+        request,
+        response,
+        access: hostedStore,
+        runtime: hostedRuntime,
+        sessionHours: config.HOSTED_SESSION_HOURS,
+        readJson,
+      }))
+    )
+      return;
     if (path === "/api/events/stream" && request.method === "GET") {
-      if (activeStreams >= 4) {
+      const sessionKey = String(request.headers["x-rove-session"] ?? "local");
+      if (
+        activeStreams >= config.HOSTED_MAX_STREAMS ||
+        (streamsBySession.get(sessionKey) ?? 0) >=
+          config.HOSTED_STREAMS_PER_SESSION
+      ) {
         send(response, 429, { message: "Too many live connections." });
         return;
       }
@@ -207,6 +250,10 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
       });
       response.flushHeaders();
       activeStreams += 1;
+      streamsBySession.set(
+        sessionKey,
+        (streamsBySession.get(sessionKey) ?? 0) + 1,
+      );
       let cursor = requestedCursor;
       let closed = false;
       let checking = false;
@@ -229,11 +276,12 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
       const timer = setInterval(() => {
         if (closed || checking) return;
         checking = true;
-        void Promise.all([
-          store.getPresentationEvents(corridorId, cursor),
-          runId ? corridorLab?.runVersion(runId) : Promise.resolve(null),
-        ])
-          .then(([events, nextRunVersion]) => {
+        void (async () => {
+          if (hostedStore && heartbeat === 0)
+            await hostedStore.identity(sessionKey);
+          return presentationPoller!.read(corridorId, cursor, runId);
+        })()
+          .then(({ events, runVersion: nextRunVersion }) => {
             for (const event of events) {
               if (Number(event.id) <= cursor) continue;
               if (!response.write(encodePresentationEvent(event))) {
@@ -277,7 +325,11 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
               heartbeat = 0;
             }
           })
-          .catch(() => {
+          .catch((error) => {
+            if (error instanceof HostedAccessError) {
+              cleanup();
+              return;
+            }
             if (!closed) response.write(": source unavailable\n\n");
           })
           .finally(() => {
@@ -289,9 +341,15 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
         if (closed) return;
         closed = true;
         clearInterval(timer);
+        clearTimeout(lifetime);
         activeStreams = Math.max(0, activeStreams - 1);
+        const remaining = (streamsBySession.get(sessionKey) ?? 1) - 1;
+        if (remaining > 0) streamsBySession.set(sessionKey, remaining);
+        else streamsBySession.delete(sessionKey);
         if (!response.writableEnded) response.end();
       };
+      const lifetime = setTimeout(cleanup, 55_000);
+      lifetime.unref();
       response.once("close", cleanup);
       return;
     }
@@ -554,6 +612,10 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
     }
     send(response, 404, { message: "We couldn't find that charging session." });
   } catch (error) {
+    if (error instanceof HostedAccessError) {
+      send(response, error.status, { message: error.message });
+      return;
+    }
     if (error instanceof LabValidationError) {
       send(response, 400, {
         message: "Review the highlighted settings.",
@@ -620,6 +682,7 @@ if (store) {
     working = true;
     void (async () => {
       if (!(await initialRecovery)) return;
+      if (hostedRuntime) await hostedRuntime.prepareQueued();
       const now = new Date().toISOString();
       for (const lane of await store.listRecoveryLanes()) {
         if (store.recovery.get(lane.id)?.status !== "ready")
@@ -714,6 +777,7 @@ if (store) {
         }
       }
       if (corridorLab) await corridorLab.schedule();
+      if (hostedRuntime) await hostedRuntime.maintain();
     })()
       .catch(() => {
         process.stderr.write(

@@ -2,12 +2,14 @@ import { timingSafeEqual } from "node:crypto";
 import { readBaseConfig, proofPrerequisites } from "@rove/config";
 import { integrationStatusSchema } from "@rove/contracts";
 import { hasDemoSession } from "../demo-session";
+import { sameOrigin } from "../hosted-proxy";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   const config = readBaseConfig();
   if (
+    config.ACCESS_MODE !== "local" ||
     config.NODE_ENV !== "development" ||
     !config.DEMO_SESSION_TOKEN ||
     !hasDemoSession(request, config.DEMO_SESSION_TOKEN)
@@ -28,7 +30,12 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const config = readBaseConfig();
-  if (config.NODE_ENV !== "development" || !config.DEMO_SESSION_TOKEN)
+  if (
+    config.ACCESS_MODE !== "local" ||
+    config.NODE_ENV !== "development" ||
+    !config.DEMO_SESSION_TOKEN ||
+    !sameOrigin(request)
+  )
     return new Response(null, { status: 403 });
   const body = await request.json().catch(() => null);
   const supplied =

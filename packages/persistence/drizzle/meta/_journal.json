@@ -64,6 +64,41 @@
       "when": 1791041637867,
       "tag": "0008_terminal_amounts",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791121697311,
+      "tag": "0009_hosted_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791122747977,
+      "tag": "0010_hosted_run_activity",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791122934490,
+      "tag": "0011_hosted_data_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791122935230,
+      "tag": "0012_published_api_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791125309896,
+      "tag": "0013_hosted_capabilities_and_retained_proof",
+      "breakpoints": true
     }
   ]
 }

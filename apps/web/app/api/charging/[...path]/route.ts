@@ -1,3 +1,5 @@
+import { publishedDataResponse } from "../../published-data";
+import { engineHeaders, sameOrigin } from "../../hosted-proxy";
 import { readBaseConfig } from "@rove/config";
 import {
   causalInspectorTraceSchema,
@@ -17,9 +19,11 @@ export async function GET(
 ) {
   const config = readBaseConfig();
   if (
-    config.NODE_ENV !== "development" ||
-    !config.DEMO_SESSION_TOKEN ||
-    !hasDemoSession(request, config.DEMO_SESSION_TOKEN)
+    config.ACCESS_MODE !== "hosted" &&
+    (config.ACCESS_MODE !== "local" ||
+      config.NODE_ENV !== "development" ||
+      !config.DEMO_SESSION_TOKEN ||
+      !hasDemoSession(request, config.DEMO_SESSION_TOKEN))
   )
     return Response.json(
       { message: "You don't have access to this charging session." },
@@ -64,11 +68,18 @@ export async function GET(
       { status: 400, headers: { "cache-control": "no-store" } },
     );
   try {
+    if (config.ACCESS_MODE === "hosted") {
+      const published = await publishedDataResponse(
+        `/api/${path.join("/")}`,
+        new URL(request.url).searchParams,
+      );
+      if (published) return published;
+    }
     const upstreamUrl = new URL(`/api/${path.join("/")}`, config.ENGINE_ORIGIN);
     if (event) upstreamUrl.searchParams.set("event", event);
     if (trace !== null) upstreamUrl.searchParams.set("trace", trace);
     const upstream = await fetch(upstreamUrl, {
-      headers: { authorization: `Bearer ${config.DEMO_SESSION_TOKEN}` },
+      headers: engineHeaders(request),
       cache: "no-store",
       signal: AbortSignal.timeout(5_000),
     });
@@ -103,10 +114,12 @@ export async function POST(
   const config = readBaseConfig();
   const headers = { "cache-control": "no-store" };
   if (
-    config.NODE_ENV !== "development" ||
-    !config.DEMO_SESSION_TOKEN ||
-    !hasDemoSession(request, config.DEMO_SESSION_TOKEN) ||
-    request.headers.get("origin") !== new URL(request.url).origin
+    (config.ACCESS_MODE !== "hosted" &&
+      (config.ACCESS_MODE !== "local" ||
+        config.NODE_ENV !== "development" ||
+        !config.DEMO_SESSION_TOKEN ||
+        !hasDemoSession(request, config.DEMO_SESSION_TOKEN))) ||
+    !sameOrigin(request)
   )
     return Response.json(
       { message: "You don't have access to this charging session." },
@@ -151,7 +164,7 @@ export async function POST(
       {
         method: "POST",
         headers: {
-          authorization: `Bearer ${config.DEMO_SESSION_TOKEN}`,
+          ...engineHeaders(request),
           "content-type": "application/json",
         },
         body: JSON.stringify(body),

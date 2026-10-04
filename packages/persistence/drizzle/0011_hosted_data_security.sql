@@ -1,0 +1,26 @@
+ALTER TABLE "audit_projection" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "cdrs" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "corridors" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "domain_events" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "evidence_verifications" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "hosted_admissions" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "hosted_invites" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "hosted_rate_limits" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "hosted_sessions" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "hosted_submissions" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "lab_run_events" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "lab_runs" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "lab_scenarios" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "lanes" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "meter_evidence" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "meter_identities" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "outbox_jobs" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "payment_operations" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "processed_commands" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "published_runs" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "reconciliations" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "tempo_chain_snapshots" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "tempo_channels" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "tempo_transactions" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "tempo_vouchers" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE POLICY "published_runs_read" ON "published_runs" AS PERMISSIVE FOR SELECT TO public USING (true);

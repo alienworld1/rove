@@ -40,9 +40,11 @@ function replaceSelectionUrl(
 export function CorridorViewport({
   view: liveView,
   current,
+  recorded = false,
 }: {
   view: CorridorOperatingView;
   current: boolean;
+  recorded?: boolean;
 }) {
   const selection = useCorridorSelection();
   const historical = useQuery({
@@ -246,6 +248,7 @@ export function CorridorViewport({
         </p>
       </div>
       <CorridorAggregateBand
+        assetDecimals={view.corridor.tariff.assetDecimals}
         aggregate={view.aggregate}
         attentionLaneLabels={view.lanes
           .filter((lane) =>
@@ -267,7 +270,9 @@ export function CorridorViewport({
             ? "Loading the recorded snapshot. Current values remain visible."
             : historical.isError
               ? "That recorded snapshot couldn't be loaded. Current values remain visible."
-              : "Recorded snapshot · Lane values and totals reflect committed history. Playback stays at its current position."}
+              : recorded
+                ? "Recorded snapshot · Lane values and totals reflect committed history."
+                : "Recorded snapshot · Lane values and totals reflect committed history. Playback stays at its current position."}
           {historical.isError ? (
             <button
               className="ml-2 underline"
@@ -280,6 +285,7 @@ export function CorridorViewport({
       ) : null}
       {view.activeRun ? (
         <TraceScrubber
+          recorded={recorded}
           run={view.activeRun}
           committedOffsets={[
             ...new Set(

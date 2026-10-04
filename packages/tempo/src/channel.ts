@@ -31,6 +31,11 @@ export type TempoChannelConfig = Omit<
   | "firstVoucherAmount"
   | "secondVoucherAmount"
 >;
+export type TransactionFeeLimits = {
+  gas: bigint;
+  maxFeePerGas: bigint;
+  maxPriorityFeePerGas: bigint;
+};
 export type ChannelDescriptor = {
   payer: Address;
   payee: Address;
@@ -338,8 +343,13 @@ export function createTempoChannelAdapter(config: TempoChannelConfig) {
     }
   }
 
-  async function submitOpen(key: string, amount: bigint) {
+  async function submitOpen(
+    key: string,
+    amount: bigint,
+    feeLimits?: TransactionFeeLimits,
+  ) {
     const hash = await payerClient.writeContract({
+      ...feeLimits,
       address: reserveAddress,
       abi: channelAbi,
       functionName: "open",
@@ -406,9 +416,11 @@ export function createTempoChannelAdapter(config: TempoChannelConfig) {
     channelId: Hash,
     descriptor: ChannelDescriptor,
     amount: bigint,
+    feeLimits?: TransactionFeeLimits,
   ) {
     await assertDescriptor(channelId, descriptor);
     const hash = await payerClient.writeContract({
+      ...feeLimits,
       address: reserveAddress,
       abi: channelAbi,
       functionName: "topUp",
@@ -422,9 +434,11 @@ export function createTempoChannelAdapter(config: TempoChannelConfig) {
     descriptor: ChannelDescriptor,
     amount: bigint,
     signature: Hex,
+    feeLimits?: TransactionFeeLimits,
   ) {
     await assertDescriptor(channelId, descriptor);
     const hash = await payeeClient.writeContract({
+      ...feeLimits,
       address: reserveAddress,
       abi: channelAbi,
       functionName: "settle",
@@ -517,6 +531,7 @@ export function createTempoChannelAdapter(config: TempoChannelConfig) {
     amount: bigint,
     deposit: bigint,
     signature: Hex,
+    feeLimits?: TransactionFeeLimits,
   ) {
     await assertDescriptor(channelId, descriptor);
     const current = await readChannel(channelId);
@@ -526,6 +541,7 @@ export function createTempoChannelAdapter(config: TempoChannelConfig) {
     )
       throw new Error("PAYMENT_CLOSURE_INVALID");
     const hash = await payeeClient.writeContract({
+      ...feeLimits,
       address: reserveAddress,
       abi: channelAbi,
       functionName: "close",

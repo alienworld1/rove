@@ -2,6 +2,12 @@
 
 Rove checks the service and integration boundaries needed for trusted charging evidence and payment protection.
 
+## Hosted access
+
+The hosted product offers public **Explore runs** analysis and **Invite access** to a private workspace. An invite enables **Run on Tempo testnet** for the approved three-Lane digital-twin preset. Published records include evidence, payments, protection history, and final reconciliation; recording playback never starts financial work.
+
+Set `ACCESS_MODE=hosted` explicitly. Invitations, opaque sessions, ownership, spending reservations, and pending work persist in PostgreSQL. Public records are published only through an operator command after verifying the real lifecycle. See [hosted deployment](docs/hosted-deployment.md) for Vercel web/docs, Supabase PostgreSQL, and a single persistent engine, including a Koyeb free-preview option and its sleep limitation.
+
 ## Run locally
 
 Use Node.js 22 and pnpm 11.19.0. Prepare the ignored environment file and PostgreSQL described below before starting the services. From the repository root:
@@ -27,7 +33,7 @@ The Corridor requires PostgreSQL but the local deterministic payment scenario ne
 
 For local session completion, set `CDR_CURRENCY=USD`, `CDR_SETTLEMENT_ASSET_ID=TEST_ASSET`, and `CDR_SOURCE_PARTY_ID=controlled-cpo`. When switching to Tempo, set the accounting asset to the configured Tempo asset and restart the engine. A different asset is an accounting mismatch, not permission to correct the record automatically.
 
-Protected APIs are available only in the controlled development environment. A successful production build does not enable hosted access. Public documentation remains available independently; deployment and a production access model require separate setup.
+The local access-key flow requires controlled development mode. Hosted access uses separate explicit deployment configuration; a production build alone does not enable it. Public documentation remains available independently.
 
 During an outage, the Corridor and selected event retain their last checked records. Their values and bounds describe that checked state. Commands remain unavailable until current reads succeed. **Check again** refreshes or reconciles existing work; it does not establish that an uncertain payment failed. If session access expires, protected caches and streams are cleared; enter the local access key again to restore validated URL context.
 

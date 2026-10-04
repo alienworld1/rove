@@ -2,8 +2,9 @@ import { DocsLink } from "../docs-link";
 import type { ConnectionState } from "./use-corridor-stream";
 import { MotionPreferenceToggle } from "./motion-preference-toggle";
 
-const connectionCopy: Record<ConnectionState | "idle", string> = {
+const connectionCopy: Record<ConnectionState | "idle" | "recorded", string> = {
   idle: "Ready",
+  recorded: "Recorded",
   connecting: "Connecting",
   live: "Live",
   reconnecting: "Reconnecting",
@@ -14,7 +15,7 @@ export function AppShell({
   connection,
   checkedAt,
 }: {
-  connection: ConnectionState | "idle";
+  connection: ConnectionState | "idle" | "recorded";
   checkedAt: string | null;
 }) {
   return (

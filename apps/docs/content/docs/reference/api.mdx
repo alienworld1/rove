@@ -3,13 +3,23 @@ title: "API Reference"
 description: "Read actual engine routes and browser proxy boundaries with current schema contracts."
 ---
 
-The engine defaults to port 4100. The operating web app defaults to port 3000. These APIs are controlled-development interfaces, not a production partner SDK. The docs-only `GET /api/search` reads the public corpus and has no engine authority.
+The engine defaults to port 4100. The operating web app defaults to port 3000. The hosted visitor interface is narrower than the local integration interface below. The docs-only `GET /api/search` reads the public corpus and has no engine authority.
+
+## Hosted visitor interface
+
+`ACCESS_MODE=hosted` enables public published-run inspection and invite-only execution independently of `NODE_ENV`. Browser `GET /api/published-runs` lists only explicitly published completed records. Existing run, Corridor, Lane, trace, Inspector, and accounting reads expose frozen published snapshots without an invite; active and unpublished records require ownership.
+
+`GET /api/access/session` returns typed access status and owned run identities. `POST /api/access/invite` accepts only `{ "code": "<invite-code>" }`, exchanges it for an opaque host-only Secure HttpOnly cookie, and returns session status. `POST /api/access/end` ends the session. `POST /api/access/runs` accepts only `{ "runId": "<uuid>" }`; retain this identity when retrying an uncertain response. Admission returns 202 and initializes the fixed server-approved Tempo testnet preset in durable background processing.
+
+All browser mutations require the exact configured same-origin Origin. The web server holds the internal engine credential; the engine resolves hashed sessions, capabilities, expiry, invite revocation, and resource ownership from PostgreSQL. Owned runs allow play/pause/step/speed/check and controlled completion/check/close. Hosted visitor access denies arbitrary scenarios, reset, financial commands, external evidence, and CDR submission. Each new admitted run consumes finite execution/funding/fee allowances; refunds and refreshes do not replenish them. Public records and unresolved financial work survive session expiry.
+
+Public historical analysis opens no live stream and never mutates engine work. Private live SSE retains reconnect and checked-state fallback. Authentication status does not claim payment or integration readiness.
 
 ## Authentication and errors
 
-Engine `/health` is public. Operational routes require `NODE_ENV=development`, a configured `DEMO_SESSION_TOKEN`, and `Authorization: Bearer <local-access-key>`. Browser proxies use the existing HttpOnly controlled-session cookie and forward the secret server-side. Completion mutations additionally require the browser request Origin to match the web origin. Docs neither accepts nor transfers this key.
+Engine `/health` is public. Local operational routes require `ACCESS_MODE=local`, `NODE_ENV=development`, a configured `DEMO_SESSION_TOKEN`, and `Authorization: Bearer <local-access-key>`. Browser proxies use the existing HttpOnly controlled-session cookie and forward the secret server-side. Completion mutations additionally require the browser request Origin to match the web origin. Docs neither accepts nor transfers this key.
 
-Strict Zod schemas validate shape/units and identity; Lane body ID must match path. Engine JSON intake is capped at 70000 bytes; browser completion at 2000 bytes, Lab proxy at 70000 bytes. Do not generalize the completion Origin check into a claim that every existing proxy has identical CSRF behavior.
+Strict Zod schemas validate shape/units and identity; Lane body ID must match path. Engine JSON intake is capped at 70000 bytes; browser completion at 2000 bytes, Lab proxy at 70000 bytes. All current browser mutation proxies validate Origin.
 
 Engine errors: malformed contracts/validation 400; access denial 403; unknown record 404; command/version conflict 409 (current version when supplied); unavailable storage/recovery or unhandled source failure 503. SSE limits excess concurrent connections to 429. Engine errors contain safe code/message/currentVersion; internal secrets/stacks are not public responses.
 

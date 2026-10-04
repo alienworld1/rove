@@ -42,6 +42,12 @@ import {
   tempoVouchers,
 } from "./schema.js";
 export { LabStore } from "./lab-store.js";
+export {
+  HostedStore,
+  HostedAccessError,
+  hashAccessToken,
+} from "./hosted-store.js";
+export type { PublishedSnapshot, RunReservation } from "./hosted-store.js";
 
 export class StoreError extends Error {
   constructor(
@@ -435,9 +441,10 @@ export class ChargingStore {
 
   constructor(databaseUrl: string) {
     this.client = postgres(databaseUrl, {
-      max: 10,
-      connect_timeout: 5,
-      idle_timeout: 10,
+      max: 3,
+      prepare: false,
+      connect_timeout: 10,
+      idle_timeout: 20,
     });
     this.db = drizzle(this.client);
   }
