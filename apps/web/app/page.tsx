@@ -4,6 +4,7 @@ import { HostedQueryProvider } from "./hosted-query-provider";
 import { idSchema } from "@rove/contracts";
 import { CorridorQueryProvider } from "./corridor/corridor-query-provider";
 import { LocalEntry } from "./local-entry";
+import { LandingPage } from "./landing/landing-page";
 
 export default async function Home({
   searchParams,
@@ -20,7 +21,9 @@ export default async function Home({
   if (readBaseConfig().ACCESS_MODE === "hosted")
     return (
       <HostedQueryProvider>
-        <HostedEntry runId={selectedId("run")} />
+        <HostedEntry>
+          <LandingPage />
+        </HostedEntry>
       </HostedQueryProvider>
     );
   return (

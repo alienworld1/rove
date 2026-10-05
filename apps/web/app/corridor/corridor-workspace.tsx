@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { idSchema } from "@rove/contracts";
 import { SessionCompletionPanel } from "./session-completion-panel";
@@ -42,6 +43,7 @@ export function CorridorWorkspace({
   initialCorridorId: string | null;
 }) {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
   const replaceSelection = useCorridorSelection((state) => state.replace);
   const [runId, setRunId] = useState(initialRunId);
   const [scenarioId, setScenarioId] = useState(initialScenarioId ?? "");
@@ -196,7 +198,7 @@ export function CorridorWorkspace({
     syncSelection();
     window.addEventListener("popstate", syncSelection);
     return () => window.removeEventListener("popstate", syncSelection);
-  }, [replaceSelection]);
+  }, [replaceSelection, searchParams]);
 
   const denied = [
     summaries.error,

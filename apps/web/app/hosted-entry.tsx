@@ -1,28 +1,30 @@
 "use client";
+
 import dynamic from "next/dynamic";
+import { useEffect, useRef, type ReactNode } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLabNavigation } from "./lab/lab-navigation";
-import { useLabDraft } from "./lab/lab-draft-store";
-import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { clearPrivateWorkspace } from "./workspace-access-state";
 import { readHostedSession, readPublishedRuns } from "./hosted-api";
 import { AppShell } from "./corridor/app-shell";
-import { DocsLink } from "./docs-link";
-import { PublishedRunList } from "./published-run-list";
-import { InviteAccessForm } from "./invite-access-form";
 import { PrivateRunWorkspace } from "./private-run-workspace";
-import { HostedRunViewer } from "./hosted-run-viewer";
-import { newestTempoRecording } from "./published-recording";
+import { WorkspaceAccessPrompt } from "./workspace-access-prompt";
+
 const LabWorkspace = dynamic(() =>
   import("./lab/lab-workspace").then((module) => module.LabWorkspace),
 );
-export function HostedEntry({ runId }: { runId: string | null }) {
+const HostedRunViewer = dynamic(() =>
+  import("./hosted-run-viewer").then((module) => module.HostedRunViewer),
+);
+
+export function HostedEntry({ children }: { children: ReactNode }) {
   const navigation = useLabNavigation();
-  const selectedRunId = navigation.runId ?? runId;
+  const selectedRunId = navigation.runId;
   const client = useQueryClient();
   const published = useQuery({
     queryKey: ["published-runs"],
     queryFn: readPublishedRuns,
+    enabled: Boolean(selectedRunId),
   });
   const session = useQuery({
     queryKey: ["hosted-session"],
@@ -31,7 +33,6 @@ export function HostedEntry({ runId }: { runId: string | null }) {
   });
   const wasAuthenticated = useRef(false);
   const expiresAt = session.data?.expiresAt;
-  const featured = newestTempoRecording(published.data ?? []);
   useEffect(() => {
     if (!expiresAt) return;
     const timer = window.setTimeout(
@@ -55,43 +56,48 @@ export function HostedEntry({ runId }: { runId: string | null }) {
     }
     if (session.data?.authenticated === false && wasAuthenticated.current) {
       wasAuthenticated.current = false;
-      useLabDraft.getState().clear();
-      for (const key of [
-        "scenario",
-        "scenarios",
-        "run",
-        "corridor",
-        "corridor-trace",
-        "inspector",
-        "completion",
-      ])
-        void client.resetQueries({ queryKey: [key] });
+      clearPrivateWorkspace(client);
     }
   }, [session.data?.authenticated, client]);
+
+  const authenticated = session.data?.authenticated === true;
+  const isPublic = published.data?.some((run) => run.id === selectedRunId);
   const owned = Boolean(
-    session.data?.authenticated &&
-    session.data.runs.some((run) => run.id === selectedRunId) &&
-    !published.data?.some((run) => run.id === selectedRunId),
+    authenticated &&
+    session.data?.runs.some((run) => run.id === selectedRunId) &&
+    !isPublic,
   );
+  const accessPrompt = (
+    <WorkspaceAccessPrompt
+      scenarioBuilder={navigation.view === "lab"}
+      loading={session.isPending}
+      error={session.error}
+      retry={() => void session.refetch()}
+    />
+  );
+
+  if (navigation.view === "corridor" && !selectedRunId) return children;
   return (
     <main className="mx-auto w-full max-w-[1720px] px-5 py-5 sm:px-8 lg:px-12">
       {navigation.view === "lab" ? (
         <>
-          <AppShell connection="idle" checkedAt={null} />
-          {session.data?.authenticated ? (
-            <LabWorkspace hosted remainingRuns={session.data.remainingRuns} />
+          <AppShell hosted connection="idle" checkedAt={null} />
+          {authenticated ? (
+            <LabWorkspace hosted remainingRuns={session.data!.remainingRuns} />
           ) : (
-            <section className="py-12">
-              <h1 className="text-3xl font-semibold">Your Lab workspace</h1>
-              <p className="mt-3 text-sm text-ink-secondary">
-                Use an invite to build private scenarios and run them on Tempo
-                testnet.
-              </p>
-              <InviteAccessForm />
-            </section>
+            accessPrompt
           )}
         </>
-      ) : selectedRunId ? (
+      ) : navigation.view === "workspace" ? (
+        <>
+          <AppShell hosted connection="idle" checkedAt={null} />
+          {authenticated ? (
+            <PrivateRunWorkspace session={session.data!} />
+          ) : (
+            accessPrompt
+          )}
+        </>
+      ) : selectedRunId && (authenticated || isPublic) ? (
         <HostedRunViewer
           key={`${selectedRunId}:${owned}`}
           runId={selectedRunId}
@@ -99,64 +105,14 @@ export function HostedEntry({ runId }: { runId: string | null }) {
         />
       ) : (
         <>
-          <AppShell connection="idle" checkedAt={null} />
-          <section className="py-12 sm:py-16">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-tertiary">
-              Meter-backed payment protection
+          <AppShell hosted connection="idle" checkedAt={null} />
+          {published.isPending || session.isPending ? (
+            <p role="status" className="mt-6 text-sm text-ink-secondary">
+              Checking recorded example…
             </p>
-            <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-ink sm:text-5xl">
-              Keep charging service within a funded protection boundary.
-            </h1>
-            <p className="mt-5 max-w-2xl text-base leading-relaxed text-ink-secondary">
-              Rove connects verified meter readings to rolling payment
-              protection between charging networks. Follow three charging Lanes
-              to see protection advance, uncertainty grow, and control intervene
-              before exposure crosses its limit.
-            </p>
-            <nav className="mt-7 flex flex-wrap items-center gap-5 text-sm">
-              <a
-                href={
-                  featured
-                    ? `/?run=${encodeURIComponent(featured.id)}&recorded=1`
-                    : "#published-runs"
-                }
-                className="min-h-11 rounded-sm bg-ink px-5 py-3 font-semibold text-pure"
-              >
-                {featured ? "Explore Tempo run" : "Explore runs"}
-              </a>
-              <a
-                href="#invite-access"
-                className="min-h-11 py-3 text-ink underline"
-              >
-                Use an invite
-              </a>
-              <DocsLink>Docs</DocsLink>
-            </nav>
-          </section>
-          {published.isPending ? (
-            <p role="status" className="py-8 text-sm text-ink-secondary">
-              Loading published runs…
-            </p>
-          ) : published.error ? (
-            <div
-              role="alert"
-              className="border-t border-line py-8 text-sm text-ink-secondary"
-            >
-              <p>Published runs are unavailable right now.</p>
-              <button
-                onClick={() => void published.refetch()}
-                className="mt-3 min-h-11 underline"
-              >
-                Try again
-              </button>
-            </div>
           ) : (
-            <PublishedRunList runs={published.data ?? []} />
+            accessPrompt
           )}
-          {session.data?.authenticated ? (
-            <PrivateRunWorkspace session={session.data} />
-          ) : null}
-          <InviteAccessForm />
         </>
       )}
     </main>

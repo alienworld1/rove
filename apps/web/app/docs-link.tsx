@@ -28,7 +28,7 @@ export function DocsLink({
       href={`${docsOrigin}${path}`}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex rounded-sm text-xs text-info underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-info"
+      className="inline-flex min-h-11 items-center rounded-sm text-sm text-info underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-info"
     >
       {children}
       <span className="sr-only"> (opens documentation in a new tab)</span>

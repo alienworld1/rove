@@ -3,14 +3,12 @@ import { navigateLab } from "./lab/lab-navigation";
 import Link from "next/link";
 import { useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 import type { HostedSession } from "@rove/contracts";
-import { hostedJson, startHostedRun } from "./hosted-api";
+import { startHostedRun } from "./hosted-api";
 import { CorridorApiError } from "./corridor/api";
 export function PrivateRunWorkspace({ session }: { session: HostedSession }) {
   const intent = useRef<string | null>(null);
   const client = useQueryClient();
-  const router = useRouter();
   const start = useMutation({
     mutationFn: () => {
       intent.current ??= crypto.randomUUID();
@@ -20,7 +18,7 @@ export function PrivateRunWorkspace({ session }: { session: HostedSession }) {
       intent.current = null;
       client.setQueryData(["run", run.run.id], run);
       void client.invalidateQueries({ queryKey: ["hosted-session"] });
-      router.push(`/?run=${encodeURIComponent(run.run.id)}`);
+      navigateLab("corridor", { run: run.run.id });
     },
     onError: (error) => {
       if (
@@ -35,34 +33,23 @@ export function PrivateRunWorkspace({ session }: { session: HostedSession }) {
       void client.invalidateQueries({ queryKey: ["hosted-session"] });
     },
   });
-  const end = useMutation({
-    mutationFn: () => hostedJson("/api/access/end", {}),
-    onSuccess: () => {
-      client.clear();
-      router.push("/");
-    },
-  });
   return (
     <section
       className="border-t border-line-strong py-8"
       aria-labelledby="workspace-title"
     >
       <div className="flex flex-wrap justify-between gap-3">
-        <h2 id="workspace-title" className="text-xl font-semibold text-ink">
-          Your workspace
-        </h2>
-        <button
-          onClick={() => end.mutate()}
-          disabled={end.isPending}
-          className="min-h-11 text-sm text-ink-secondary underline"
+        <h1
+          id="workspace-title"
+          className="text-3xl font-semibold tracking-tight text-ink"
         >
-          End access
-        </button>
+          Your workspace
+        </h1>
       </div>
       <p className="mt-2 max-w-2xl text-sm text-ink-secondary">
-        Run three independent charging Lanes with signed digital-twin readings
-        and real Tempo testnet payments. The approved scenario shows an invalid
-        reading, a protection pause, and recovery.
+        Run three independent simulated charging sessions with signed meter
+        readings and real Tempo testnet payments. The approved scenario shows an
+        invalid reading, a protection pause, and recovery.
       </p>
       <div className="mt-5 flex flex-wrap items-center gap-4">
         <button
@@ -83,6 +70,12 @@ export function PrivateRunWorkspace({ session }: { session: HostedSession }) {
           remaining · Each new run uses your allowance.
         </p>
       </div>
+      {!session.canRun ? (
+        <p role="status" className="mt-4 text-sm text-ink-secondary">
+          You can still inspect your existing examples. Starting another
+          scenario requires available run allowance and funded test assets.
+        </p>
+      ) : null}
       {start.error ? (
         <p role="alert" className="mt-3 text-sm text-critical">
           {start.error.message}
@@ -90,11 +83,6 @@ export function PrivateRunWorkspace({ session }: { session: HostedSession }) {
           start.error.status >= 500
             ? " Retry to check the same request safely."
             : ""}
-        </p>
-      ) : null}
-      {end.error ? (
-        <p role="alert" className="mt-3 text-sm text-critical">
-          {end.error.message}
         </p>
       ) : null}
       <ul className="mt-6 divide-y divide-line">
@@ -107,7 +95,7 @@ export function PrivateRunWorkspace({ session }: { session: HostedSession }) {
               href={`/?run=${encodeURIComponent(run.id)}`}
               className="text-ink underline"
             >
-              Open run · {new Date(run.createdAt).toLocaleString()}
+              Open scenario · {new Date(run.createdAt).toLocaleString()}
             </Link>
             <span className="text-ink-secondary">
               {run.status.replaceAll("_", " ")}

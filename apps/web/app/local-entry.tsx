@@ -18,7 +18,9 @@ export function LocalEntry(props: Parameters<typeof CorridorWorkspace>[0]) {
   return (
     <CorridorWorkspace
       {...props}
-      initialRunId={navigation.runId ?? props.initialRunId}
+      initialRunId={navigation.runId}
+      initialScenarioId={navigation.scenarioId}
+      initialCorridorId={navigation.corridorId}
     />
   );
 }

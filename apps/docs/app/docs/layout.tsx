@@ -13,7 +13,7 @@ export default function DocumentationLayout({
       tree={source.pageTree}
       nav={{ title: "Rove Docs", url: "/docs" }}
       themeSwitch={{ enabled: false }}
-      links={[{ text: "Open Corridor", url: appOrigin, external: true }]}
+      links={[{ text: "Rove home", url: appOrigin, external: true }]}
     >
       <NavigationKeyboardRecovery />
       {children}

@@ -2,6 +2,7 @@
 import { useState, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CorridorApiError } from "./corridor/api";
+import { InviteCodeProvider } from "./invite-code-provider";
 export function HostedQueryProvider({ children }: { children: ReactNode }) {
   const [client] = useState(
     () =>
@@ -19,5 +20,9 @@ export function HostedQueryProvider({ children }: { children: ReactNode }) {
         },
       }),
   );
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <InviteCodeProvider>{children}</InviteCodeProvider>
+    </QueryClientProvider>
+  );
 }

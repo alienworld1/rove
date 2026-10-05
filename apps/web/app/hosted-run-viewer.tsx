@@ -60,26 +60,30 @@ export function HostedRunViewer({
   return (
     <>
       <AppShell
+        hosted
         connection={
           live ? stream.connection : recorded ? "recorded" : "connecting"
         }
         checkedAt={corridor.data?.checkedAt ?? null}
       />
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-        <Link href="/" className="min-h-11 text-sm text-ink underline">
-          Explore runs and workspace
+        <Link
+          href="/#published-runs"
+          className="inline-flex min-h-11 items-center text-sm text-ink underline focus-visible:outline-2 focus-visible:outline-info"
+        >
+          Recorded examples
         </Link>
         <button
           className="min-h-11 border border-line-strong px-4 text-sm font-semibold"
           onClick={() => navigateLab("lab", { copy: runId })}
         >
-          Edit a copy in Lab
+          Build your own scenario
         </button>
         <p className="text-sm text-ink-secondary">
           {live
             ? "Private workspace · Tempo testnet"
             : recorded
-              ? "Recorded run · Read-only analysis"
+              ? "Recorded example · Read-only analysis · Viewing never starts a payment"
               : "Checking workspace access"}
         </p>
       </div>
@@ -103,15 +107,15 @@ export function HostedRunViewer({
           </button>
           <p className="mt-2">
             <Link href="/" className="underline">
-              Return to published runs or use an invite
+              Return to recorded examples or use an invite
             </Link>
           </p>
         </div>
       ) : null}
       {run.data && !corridorId ? (
         <p role="status" className="py-12 text-sm text-ink-secondary">
-          Preparing your Corridor. You can leave this page and resume the same
-          run from your workspace.
+          Preparing your charging sessions. You can leave this page and resume
+          the same scenario from your workspace.
         </p>
       ) : null}
       {corridor.data ? (
@@ -141,9 +145,9 @@ export function HostedRunViewer({
           ) : null}
           {recorded ? (
             <p className="mt-5 text-sm text-ink-secondary">
-              Select a Lane or event to inspect its evidence and payment record.
-              Use the trace timeline to analyze committed states; the original
-              run remains unchanged.
+              Each Lane is one charging session. Select a session or event to
+              inspect its evidence and payment record. The timeline changes your
+              view of recorded states; the original example remains unchanged.
             </p>
           ) : null}
         </>

@@ -1,26 +1,34 @@
 "use client";
-import { useEffect, useState, type FormEvent } from "react";
+import { useContext, useEffect, useRef, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { redeemInvite } from "./hosted-api";
+import { inviteDestination } from "./lab/navigation-url";
+import { InviteCodeContext } from "./invite-code-context";
+import { clearPrivateWorkspace } from "./workspace-access-state";
 export function InviteAccessForm() {
   const [code, setCode] = useState("");
   const client = useQueryClient();
+  const router = useRouter();
+  const input = useRef<HTMLInputElement>(null);
+  const inviteContext = useContext(InviteCodeContext);
+  const invite = inviteContext?.code;
   useEffect(() => {
-    const url = new URL(window.location.href);
-    const invite = new URLSearchParams(url.hash.slice(1)).get("invite");
     if (invite) {
-      url.hash = "";
-      window.history.replaceState(null, "", url);
-      queueMicrotask(() => setCode(invite));
+      queueMicrotask(() => {
+        setCode(invite);
+        input.current?.focus();
+      });
     }
-  }, []);
+  }, [invite]);
   const redemption = useMutation({
     mutationFn: redeemInvite,
     onSuccess: (session) => {
       setCode("");
-      client.removeQueries({ queryKey: ["run"] });
-      client.removeQueries({ queryKey: ["corridor"] });
+      inviteContext?.clear();
+      clearPrivateWorkspace(client);
       client.setQueryData(["hosted-session"], session);
+      router.replace(inviteDestination(window.location.href));
     },
   });
   function submit(event: FormEvent) {
@@ -30,26 +38,31 @@ export function InviteAccessForm() {
   return (
     <section
       id="invite-access"
-      className="border-t border-line-strong py-8"
+      className="scroll-mt-6 border-t border-line-strong py-12 sm:py-16"
       aria-labelledby="invite-title"
     >
-      <h2 id="invite-title" className="text-xl font-semibold text-ink">
-        Invite access
+      <h2
+        id="invite-title"
+        className="text-3xl font-semibold tracking-tight text-ink"
+      >
+        Have an invite?
       </h2>
       <p className="mt-2 max-w-xl text-sm text-ink-secondary">
-        An invite opens a private workspace for running Rove on Tempo testnet.
-        Rove supplies the test assets; no wallet connection is needed.
+        Open your private workspace to build charging scenarios and run them on
+        Tempo testnet. Rove supplies the test funds; you don’t need to connect a
+        wallet.
       </p>
       <form
         onSubmit={submit}
         className="mt-5 flex max-w-xl flex-wrap items-end gap-3"
       >
         <label
-          className="min-w-60 flex-1 text-sm font-medium text-ink"
+          className="min-w-0 basis-60 flex-1 text-sm font-medium text-ink"
           htmlFor="invite-code"
         >
           Invite code
           <input
+            ref={input}
             id="invite-code"
             type="password"
             autoComplete="off"
