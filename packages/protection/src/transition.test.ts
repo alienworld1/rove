@@ -70,6 +70,74 @@ test("unstarted clock cannot invent funding, energy or risk", () => {
   assert.equal(result.lane.unverifiedServiceBound, "0");
 });
 
+test("Lab physical time stays frozen during chain waits without relaxing receipt checks", () => {
+  const traceTime = "2026-01-01T00:00:00.000Z";
+  const wallTime = "2026-01-01T01:00:00.000Z";
+  const previous = {
+    ...lane(),
+    state: "PROTECTED" as const,
+    serviceStarted: true,
+    evidenceHealth: "fresh" as const,
+    lastTrustedEvidenceAt: traceTime,
+    channelId: "channel",
+    confirmedDeposit: "200",
+    authorizedValue: "10",
+    trustedDeliveredValue: "10",
+    protectedValue: "10",
+    settledValue: "0",
+  };
+  const receipt = {
+    type: "PaymentObserved" as const,
+    source: "tempo-adapter" as const,
+    channelId: "channel",
+    network: "network",
+    assetId: "asset",
+    observedAt: wallTime,
+    confirmedDeposit: "200",
+    settledValue: "0",
+    chainHeight: "1",
+  };
+  const confirmed = transitionLane(
+    previous,
+    receipt,
+    wallTime,
+    "payment",
+    traceTime,
+  ).lane;
+  assert.equal(confirmed.evidenceHealth, "fresh");
+  assert.equal(confirmed.unverifiedServiceBound, "0");
+  assert.equal(confirmed.lastChainObservedAt, wallTime);
+  assert.throws(
+    () =>
+      transitionLane(
+        previous,
+        { ...receipt, observedAt: "2026-01-01T02:00:00.000Z" },
+        wallTime,
+        "future",
+        traceTime,
+      ),
+    /PAYMENT_CHAIN_STATE_STALE/,
+  );
+  const outage = transitionLane(
+    confirmed,
+    { type: "ClockTick" },
+    traceTime,
+    "outage",
+    traceTime,
+    "2026-01-01T01:00:02.000Z",
+  ).lane;
+  assert.equal(outage.chainHealth, "stale");
+  const advancing = transitionLane(
+    confirmed,
+    { type: "ClockTick" },
+    wallTime,
+    "trace",
+    "2026-01-01T00:00:02.000Z",
+  ).lane;
+  assert.equal(advancing.evidenceHealth, "stale");
+  assert.ok(BigInt(advancing.unverifiedServiceBound) > 0n);
+});
+
 test("exact exposure equality requests pause once and preserves financial invariants", () => {
   const initial = lane();
   const now = "2026-01-01T00:00:00.000Z";

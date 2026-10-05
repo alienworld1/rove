@@ -85,9 +85,27 @@ export function projectLaneTrace(
   traceEpoch: string | null,
   traceEndMs: number,
 ) {
+  // Payment confirmations can occur within the trace's duration on a long run.
+  // Their entire transition shares a version, including resulting state events.
+  const paymentVersions = new Set(
+    history
+      .filter((event) =>
+        [
+          "payment.chain_observed",
+          "payment.voucher_verified",
+          "payment.channel_closed",
+        ].includes(event.type),
+      )
+      .map((event) => event.version),
+  );
   return history.reduce<LaneTraceEvent[]>((trace, event) => {
     const previousOffset = trace.at(-1)?.traceOffsetMs ?? 0;
-    const next = traceEvent(event, traceEpoch, previousOffset, traceEndMs);
+    const next = traceEvent(
+      event,
+      paymentVersions.has(event.version) ? null : traceEpoch,
+      previousOffset,
+      traceEndMs,
+    );
     trace.push({
       ...next,
       traceOffsetMs: Math.max(previousOffset, next.traceOffsetMs ?? 0),

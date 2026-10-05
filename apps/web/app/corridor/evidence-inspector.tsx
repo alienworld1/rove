@@ -8,9 +8,11 @@ import {
 export function EvidenceInspector({
   trace,
   assetDecimals,
+  assetUnit,
 }: {
   trace: CausalInspectorTrace;
   assetDecimals: number;
+  assetUnit: string;
 }) {
   const evidence = trace.evidence;
   return (
@@ -103,7 +105,7 @@ export function EvidenceInspector({
       )}
       <div className="mt-4 border-t border-line pt-3">
         <p className="text-xs font-semibold text-ink-secondary">
-          Value consequence
+          Value consequence · {assetUnit}
         </p>
         {trace.calculation ? (
           <p className="mt-2 text-xs text-ink-tertiary">
@@ -112,8 +114,7 @@ export function EvidenceInspector({
               trace.calculation.tariffPerKwh,
               trace.calculation.tariffDecimals,
             )}{" "}
-            / kWh · exact values recorded in {trace.calculation.assetDecimals}
-            -decimal units
+            {assetUnit}/kWh
           </p>
         ) : null}
         <div className="mt-2 grid grid-cols-3 gap-3 text-xs tabular-nums">
@@ -158,7 +159,7 @@ export function EvidenceInspector({
           {evidence?.accepted === false
             ? "This reading did not create a new payment authorization."
             : trace.voucher
-              ? `Cumulative authorization ${formatOperationalValue(trace.voucher.cumulativeAmount, assetDecimals)} was recorded.`
+              ? `Offchain authorization of ${formatOperationalValue(trace.voucher.cumulativeAmount, assetDecimals)} ${assetUnit} was recorded.`
               : "No new payment authorization is linked to this reading."}
         </p>
       </div>

@@ -110,3 +110,36 @@ test("closed sessions retain totals without active attention or unused reserve",
   assert.equal(aggregate.settledValue, "1");
   assert.equal(aggregate.unusedFundedHeadroom, "0");
 });
+
+test("payment receipt transitions inside a long trace retain preceding service position", () => {
+  const epoch = "2026-10-05T00:00:00.000Z";
+  const history = laneHistorySchema.parse(
+    [
+      ["meter.evidence_accepted", 1, 40000],
+      ["payment.chain_observed", 2, 65000],
+      ["lane.protected", 2, 65000],
+      ["meter.evidence_rejected", 3, 50000],
+      ["lane.pause_required", 4, 58368],
+      ["lane.protection_restored", 5, 60001],
+      ["payment.operation_failed", 6, 70000],
+    ].map(([type, version, offset], index) => ({
+      id: `event-${index}`,
+      type,
+      version,
+      occurredAt: new Date(Date.parse(epoch) + 70000 + index).toISOString(),
+      traceTime: new Date(Date.parse(epoch) + Number(offset)).toISOString(),
+      reasonCode: null,
+      evidenceHash: null,
+      channelId: null,
+      transactionHash: null,
+      summary: null,
+      detail: null,
+    })),
+  );
+  assert.deepEqual(
+    projectLaneTrace(history, epoch, 120000).map(
+      (event) => event.traceOffsetMs,
+    ),
+    [40000, 40000, 40000, 50000, 58368, 60001, 70000],
+  );
+});

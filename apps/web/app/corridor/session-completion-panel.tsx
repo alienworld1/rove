@@ -9,7 +9,13 @@ import {
   retainCompletionIntent,
   type CompletionIntent,
 } from "./completion-intent";
-import { formatOperationalValue } from "./format-operational-value";
+import {
+  formatOperationalValue,
+  formatOperationalDelta,
+  formatEnergy,
+} from "./format-operational-value";
+import { paymentAssetLabel } from "../payment-asset";
+import { TempoTransactionLink } from "../tempo-transaction-link";
 import { useCorridorSelection } from "./corridor-selection";
 import { CompletionConfirmation } from "./completion-confirmation";
 import { AccountingRecordDialog } from "./accounting-record-dialog";
@@ -84,11 +90,15 @@ export function SessionCompletionPanel({
   });
   if (!lane) return null;
   const completion = summary.data?.completion;
+  const assetUnit = paymentAssetLabel(
+    view.corridor.tempoNetwork,
+    view.corridor.settlementAssetId,
+  );
   const recovery = summary.data?.recovery;
   const amount = (value: string | null | undefined) =>
     value === null || value === undefined
       ? "Unavailable"
-      : `${formatOperationalValue(value, view.corridor.tariff.assetDecimals)} ${completion?.cdr?.currency ?? "asset units"}`;
+      : `${formatOperationalValue(value, view.corridor.tariff.assetDecimals)} ${assetUnit}`;
   const disabled =
     readOnly ||
     !connected ||
@@ -199,11 +209,15 @@ export function SessionCompletionPanel({
           <p className="mt-3 text-xs text-ink-secondary">
             Accepted energy:{" "}
             <span className="font-mono">
-              {completion.finalTrustedEnergyWh ?? "Unavailable"} Wh
+              {completion.finalTrustedEnergyWh === null
+                ? "Unavailable"
+                : formatEnergy(completion.finalTrustedEnergyWh)}
             </span>{" "}
             · Accounting energy:{" "}
             <span className="font-mono">
-              {completion.cdr?.totalEnergyWh ?? "Unavailable"} Wh
+              {completion.cdr
+                ? formatEnergy(completion.cdr.totalEnergyWh)
+                : "Unavailable"}
             </span>
           </p>
           {completion.comparison?.status === "MISMATCH" ? (
@@ -227,14 +241,28 @@ export function SessionCompletionPanel({
                         difference
                       </dt>
                       <dd className="font-mono">
-                        {BigInt(delta) > BigInt(0) ? "+" : ""}
-                        {delta} {key === "energyWh" ? "Wh" : "base units"}
+                        {formatOperationalDelta(
+                          delta,
+                          key === "energyWh"
+                            ? 0
+                            : view.corridor.tariff.assetDecimals,
+                        )}{" "}
+                        {key === "energyWh" ? "Wh" : assetUnit}
                       </dd>
                     </div>
                   ),
                 )}
               </dl>
             </div>
+          ) : null}
+          {completion.closure?.confirmedRefund !== null &&
+          completion.closure?.confirmedRefund !== undefined &&
+          summary.data?.paymentSource === "tempo-adapter" ? (
+            <TempoTransactionLink
+              network={view.corridor.tempoNetwork}
+              hash={completion.closure.transactionHash}
+              operation="reserve return"
+            />
           ) : null}
           {completion.closure?.confirmedRefund !== null &&
           completion.closure?.confirmedRefund !== undefined ? (
@@ -299,7 +327,12 @@ export function SessionCompletionPanel({
           Check again
         </button>
         {completion?.cdr ? (
-          <AccountingRecordDialog laneId={lane.projection.id} />
+          <AccountingRecordDialog
+            laneId={lane.projection.id}
+            assetUnit={assetUnit}
+            assetDecimals={view.corridor.tariff.assetDecimals}
+            normalizedTotal={completion.cdr.normalizedTotal}
+          />
         ) : null}
         {summary.data?.evidenceEventId ? (
           <button

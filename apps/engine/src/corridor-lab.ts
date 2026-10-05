@@ -47,11 +47,9 @@ export class CorridorLab {
     const local = current.lane.tempoNetwork === "local-simulation";
     const instant =
       current.lane.completion?.serviceEndedAt ??
-      (local
-        ? new Date(
-            Date.parse(view.scenario.traceEpoch) + view.run.traceOffsetMs + 1,
-          ).toISOString()
-        : new Date().toISOString());
+      new Date(
+        Date.parse(view.scenario.traceEpoch) + view.run.traceOffsetMs + 1,
+      ).toISOString();
     await this.charging.advanceLane(
       {
         ...input,

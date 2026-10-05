@@ -30,8 +30,12 @@ export function transitionLane(
   observation: VerifiedObservation,
   now: string,
   effectKey: string,
+  physicalNow: string = now,
+  chainNow: string = now,
 ): TransitionResult {
   const currentTime = milliseconds(now);
+  const physicalTime = milliseconds(physicalNow);
+  const chainTime = milliseconds(chainNow);
   const lane: Lane = {
     ...previous,
     reasonCodes: [...previous.reasonCodes],
@@ -87,7 +91,7 @@ export function transitionLane(
       observation.confirmedRefund !== closure.expectedRefund ||
       !observation.transactionHash ||
       !observation.closeEventReference ||
-      milliseconds(observation.observedAt) > currentTime
+      milliseconds(observation.observedAt) > chainTime
     )
       throw new RangeError("PAYMENT_CLOSURE_INVALID");
     completion.status = "closed";
@@ -188,8 +192,8 @@ export function transitionLane(
       throw new RangeError("PAYMENT_BINDING_INVALID");
     const observedAt = milliseconds(observation.observedAt);
     if (
-      observedAt > currentTime ||
-      elapsedMs(currentTime, observedAt) > BigInt(lane.policy.chainMaxAgeMs)
+      observedAt > chainTime ||
+      elapsedMs(chainTime, observedAt) > BigInt(lane.policy.chainMaxAgeMs)
     )
       throw new RangeError("PAYMENT_CHAIN_STATE_STALE");
     const deposit = nonnegativeInteger(observation.confirmedDeposit);
@@ -268,14 +272,14 @@ export function transitionLane(
 
   if (
     lane.lastTrustedEvidenceAt &&
-    elapsedMs(currentTime, milliseconds(lane.lastTrustedEvidenceAt)) >
+    elapsedMs(physicalTime, milliseconds(lane.lastTrustedEvidenceAt)) >
       BigInt(lane.policy.evidenceMaxAgeMs) &&
     lane.evidenceHealth === "fresh"
   )
     lane.evidenceHealth = "stale";
   if (
     lane.lastChainObservedAt &&
-    elapsedMs(currentTime, milliseconds(lane.lastChainObservedAt)) >
+    elapsedMs(chainTime, milliseconds(lane.lastChainObservedAt)) >
       BigInt(lane.policy.chainMaxAgeMs) &&
     lane.chainHealth === "fresh"
   )
@@ -322,10 +326,10 @@ export function transitionLane(
           elapsedMs(
             lane.completion
               ? Math.min(
-                  currentTime,
+                  physicalTime,
                   milliseconds(lane.completion.serviceEndedAt),
                 )
-              : currentTime,
+              : physicalTime,
             milliseconds(lane.lastTrustedEvidenceAt),
           ),
           lane.tariff.perKwh,

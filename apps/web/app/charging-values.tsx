@@ -1,8 +1,12 @@
 import type { ChargingView } from "./charging-view";
+import { paymentAssetLabel } from "./payment-asset";
+import { formatOperationalValue } from "./corridor/format-operational-value";
+import { paymentBalances } from "./corridor/payment-balances";
 
 export function ChargingValues({ view }: { view: ChargingView }) {
   const { lane, assetId } = view;
-  const unit = `${assetId} base units`;
+  const unit = paymentAssetLabel(view.network, assetId);
+  const balances = paymentBalances(lane);
   const primary = [
     ["Trusted delivered value", lane.trustedDeliveredValue],
     ["Protected value", lane.protectedValue],
@@ -24,10 +28,11 @@ export function ChargingValues({ view }: { view: ChargingView }) {
       lane.paymentSource === "local-simulation"
         ? "Simulated headroom"
         : "Funded headroom",
-      lane.fundedHeadroom,
+      balances.headroom,
       unit,
     ],
     ["Unverified service bound", lane.unverifiedServiceBound, unit],
+    ["Escrow balance", balances.escrow, unit],
   ] as const;
   return (
     <div className="space-y-6">
@@ -36,7 +41,7 @@ export function ChargingValues({ view }: { view: ChargingView }) {
           <div key={label}>
             <dt className="text-xs text-ink-secondary">{label}</dt>
             <dd className="mt-1 break-all font-mono text-xl tabular-nums text-ink">
-              {value}
+              {formatOperationalValue(value, view.assetDecimals)}
             </dd>
             <p className="mt-1 break-all text-xs text-ink-tertiary">{unit}</p>
           </div>
@@ -50,7 +55,9 @@ export function ChargingValues({ view }: { view: ChargingView }) {
           >
             <dt className="text-sm text-ink-secondary">{label}</dt>
             <dd className="break-all text-right font-mono text-xs tabular-nums text-ink">
-              {value === null ? "Awaiting confirmation" : `${value} ${suffix}`}
+              {value === null
+                ? "Awaiting confirmation"
+                : `${suffix === "Wh" ? value : formatOperationalValue(value, view.assetDecimals)} ${suffix}`}
             </dd>
           </div>
         ))}
@@ -58,7 +65,11 @@ export function ChargingValues({ view }: { view: ChargingView }) {
       <p className="text-xs text-ink-secondary">
         Exposure limit:{" "}
         <span className="font-mono tabular-nums">
-          {lane.maxUnprotectedExposure} {unit}
+          {formatOperationalValue(
+            lane.maxUnprotectedExposure,
+            view.assetDecimals,
+          )}{" "}
+          {unit}
         </span>
       </p>
     </div>

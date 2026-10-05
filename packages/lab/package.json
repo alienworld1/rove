@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./scenarios/northstar-voltway": "./scenarios/northstar-voltway.ts"
+    "./scenarios/northstar-voltway": "./scenarios/northstar-voltway.ts",
+    "./scenarios/northstar-voltway-presentation": "./scenarios/northstar-voltway-presentation.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

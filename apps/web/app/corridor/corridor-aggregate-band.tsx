@@ -6,13 +6,16 @@ export function CorridorAggregateBand({
   aggregate,
   attentionLaneLabels,
   assetDecimals,
+  assetUnit,
 }: {
   aggregate: CorridorOperatingView["aggregate"];
   attentionLaneLabels: string[];
   assetDecimals: number;
+  assetUnit: string;
 }) {
   return (
     <div className="border-y border-line-strong py-3">
+      <p className="mb-2 text-xs text-ink-tertiary">Amounts in {assetUnit}</p>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-5">
         <OperationalValue
           label="Trusted value"

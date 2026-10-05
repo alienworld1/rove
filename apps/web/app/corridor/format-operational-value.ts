@@ -1,10 +1,17 @@
-export function formatOperationalValue(value: string | null, decimals: number) {
+import { displayLabDecimal } from "@rove/contracts";
+
+export function formatOperationalValue(
+  value: string | null,
+  decimals: number,
+): string {
   if (value === null) return "Unknown";
-  const padded = value.padStart(decimals + 1, "0");
-  if (decimals === 0) return padded;
-  const whole = padded.slice(0, -decimals);
-  const fraction = padded.slice(-decimals).replace(/0+$/, "");
-  return fraction ? `${whole}.${fraction}` : whole;
+  if (value.startsWith("-"))
+    return `-${displayLabDecimal(value.slice(1), decimals)}`;
+  return displayLabDecimal(value, decimals);
+}
+
+export function formatOperationalDelta(value: string, decimals: number) {
+  return `${BigInt(value) > BigInt(0) ? "+" : ""}${formatOperationalValue(value, decimals)}`;
 }
 
 export function formatEnergy(value: string) {

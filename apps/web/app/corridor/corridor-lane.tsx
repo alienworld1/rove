@@ -20,6 +20,7 @@ import { CommittedEventMark } from "./committed-event-mark";
 import { LaneEventPicker } from "./lane-event-picker";
 import { CausalTraceHighlight } from "./causal-trace-highlight";
 import { useLaneGeometryMotion } from "./use-lane-geometry-motion";
+import { paymentBalances } from "./payment-balances";
 
 const stateCopy = {
   INITIALIZING: "Preparing protection",
@@ -47,6 +48,7 @@ function markerX(event: LaneTraceEvent, traceEndMs: number) {
 export function CorridorLane({
   lane,
   assetDecimals,
+  assetUnit,
   tariff,
   focused,
   selectedEventId,
@@ -59,6 +61,7 @@ export function CorridorLane({
 }: {
   lane: CorridorOperatingView["lanes"][number];
   assetDecimals: number;
+  assetUnit: string;
   tariff: CorridorOperatingView["corridor"]["tariff"];
   focused: boolean;
   selectedEventId: string | null;
@@ -356,10 +359,20 @@ export function CorridorLane({
           </div>
         ) : null}
         <p id={summaryId} className="sr-only">
-          Trusted value {projection.trustedDeliveredValue}. Protected value{" "}
-          {projection.protectedValue}. Exposure bound{" "}
-          {projection.unprotectedExposureBound}. Remaining protection capacity{" "}
-          {projection.exposureRemaining}.
+          Amounts in {assetUnit}. Trusted value{" "}
+          {formatOperationalValue(
+            projection.trustedDeliveredValue,
+            assetDecimals,
+          )}
+          . Protected value{" "}
+          {formatOperationalValue(projection.protectedValue, assetDecimals)}.
+          Exposure bound{" "}
+          {formatOperationalValue(
+            projection.unprotectedExposureBound,
+            assetDecimals,
+          )}
+          . Remaining protection capacity{" "}
+          {formatOperationalValue(projection.exposureRemaining, assetDecimals)}.
         </p>
         <dl className="pointer-events-none absolute bottom-1.5 left-3 right-3 grid grid-cols-4 gap-2 text-[10px] leading-3 text-ink-tertiary">
           <div>
@@ -423,7 +436,7 @@ export function CorridorLane({
               <dt>Headroom</dt>
               <dd className="tabular-nums text-ink">
                 {formatOperationalValue(
-                  projection.fundedHeadroom,
+                  paymentBalances(projection).headroom,
                   assetDecimals,
                 )}
               </dd>
@@ -440,7 +453,9 @@ export function CorridorLane({
             </div>
           </dl>
         ) : null}
-        {focused ? <LaneFocusDetails lane={lane} tariff={tariff} /> : null}
+        {focused ? (
+          <LaneFocusDetails lane={lane} tariff={tariff} assetUnit={assetUnit} />
+        ) : null}
         {focused ? (
           <LaneEventPicker
             label={lane.label}

@@ -29,7 +29,7 @@ export function AppShell({
           Charging assurance
         </p>
       </div>
-      <div className="flex items-center gap-3 text-xs text-ink-secondary">
+      <div className="flex min-w-0 flex-wrap items-center gap-3 text-xs text-ink-secondary">
         <nav
           aria-label="Main navigation"
           className="flex items-center gap-3 text-sm"
@@ -52,13 +52,16 @@ export function AppShell({
         </nav>
         <MotionPreferenceToggle />
         <span
-          className="h-2 w-2 rounded-full bg-current"
+          className="h-2 w-2 shrink-0 rounded-full bg-current"
           data-state={connection}
           aria-hidden="true"
         />
         <span>{connectionCopy[connection]}</span>
         {checkedAt ? (
-          <time dateTime={checkedAt} className="tabular-nums text-ink-tertiary">
+          <time
+            dateTime={checkedAt}
+            className="whitespace-nowrap tabular-nums text-ink-tertiary"
+          >
             Checked{" "}
             {new Date(checkedAt).toLocaleTimeString([], {
               hour: "2-digit",

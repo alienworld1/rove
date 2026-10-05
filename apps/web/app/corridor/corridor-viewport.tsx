@@ -18,6 +18,8 @@ import { CounterpartyAnchor } from "./counterparty-anchor";
 import { TraceScrubber } from "./trace-scrubber";
 import { useCorridorSelection } from "./corridor-selection";
 import { validateSelection } from "./selection-validation";
+import { paymentAssetLabel, paymentNetworkLabel } from "../payment-asset";
+import { LanePaymentHistory } from "./lane-payment-history";
 
 function replaceSelectionUrl(
   corridorId: string,
@@ -61,6 +63,13 @@ export function CorridorViewport({
   });
   const view =
     selection.traceOffsetMs === null ? liveView : (historical.data ?? liveView);
+  const assetUnit = paymentAssetLabel(
+    view.corridor.tempoNetwork,
+    view.corridor.settlementAssetId,
+  );
+  const focusedLane = view.lanes.find(
+    (lane) => lane.projection.id === selection.focusedLaneId,
+  );
   const [selectionMessage, setSelectionMessage] = useState("");
   const previousStates = useRef(new Map<string, string>());
   const eventTrigger = useRef<Element | null>(null);
@@ -248,6 +257,7 @@ export function CorridorViewport({
         </p>
       </div>
       <CorridorAggregateBand
+        assetUnit={assetUnit}
         assetDecimals={view.corridor.tariff.assetDecimals}
         aggregate={view.aggregate}
         attentionLaneLabels={view.lanes
@@ -256,6 +266,10 @@ export function CorridorViewport({
           )
           .map((lane) => lane.label)}
       />
+      <p className="mt-2 text-xs text-ink-secondary">
+        {paymentNetworkLabel(view.corridor.tempoNetwork)} · {assetUnit}
+        {recorded ? " · Recorded" : ""}
+      </p>
       {!current ? (
         <p className="mt-2 text-sm text-ink-secondary">
           Values and exposure bounds reflect the last checked state.
@@ -333,6 +347,7 @@ export function CorridorViewport({
                     key={lane.projection.id}
                     lane={lane}
                     assetDecimals={view.corridor.tariff.assetDecimals}
+                    assetUnit={assetUnit}
                     tariff={view.corridor.tariff}
                     focused={selection.focusedLaneId === lane.projection.id}
                     selectedEventId={selection.focusedEventId}
@@ -363,6 +378,7 @@ export function CorridorViewport({
               inspector.error instanceof Error ? inspector.error.message : null
             }
             assetDecimals={view.corridor.tariff.assetDecimals}
+            assetUnit={assetUnit}
             floatingRef={refs.setFloating}
             floatingStyle={floatingStyles}
             docked={middlewareData.avoidOperatingSurface?.dock !== false}
@@ -372,6 +388,9 @@ export function CorridorViewport({
           />
         ) : null}
       </div>
+      {focusedLane ? (
+        <LanePaymentHistory lane={focusedLane} corridor={view.corridor} />
+      ) : null}
       <div
         className="mt-3 text-sm text-ink-secondary"
         role="status"

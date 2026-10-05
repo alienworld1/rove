@@ -40,6 +40,7 @@ import {
   tempoChannels,
   tempoTransactions,
   tempoVouchers,
+  labRuns,
 } from "./schema.js";
 export { LabStore } from "./lab-store.js";
 export {
@@ -1651,11 +1652,37 @@ export class ChargingStore {
               : "external_adapter",
         };
       }
+      // Only persisted Lab membership supplies a virtual physical clock.
+      // Receipt timestamps and chain freshness continue to use the real clock.
+      const labClock =
+        lane.tempoNetwork !== "local-simulation" ||
+        (override && input.payload.type === "TickProtectionClock")
+          ? (
+              await tx
+                .select({
+                  traceEpoch: sql<string>`${labRuns.compiledSnapshot}->'definition'->>'traceEpoch'`,
+                  offset: labRuns.traceOffsetMs,
+                })
+                .from(labRuns)
+                .where(eq(labRuns.corridorId, lane.corridorId))
+                .limit(1)
+            )[0]
+          : undefined;
+      const physicalNow =
+        labClock && override && input.payload.type === "TickProtectionClock"
+          ? new Date(
+              Date.parse(labClock.traceEpoch) + labClock.offset,
+            ).toISOString()
+          : now;
       const result = transitionLane(
         lane,
         observation,
         now,
         `${input.commandId}:pause`,
+        physicalNow,
+        labClock && lane.tempoNetwork !== "local-simulation"
+          ? new Date().toISOString()
+          : now,
       );
       const completion = result.lane.completion;
       if (

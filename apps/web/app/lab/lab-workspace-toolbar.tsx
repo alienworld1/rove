@@ -1,5 +1,6 @@
 "use client";
-import { displayLabDecimal } from "@rove/contracts";
+import { formatOperationalValue } from "../corridor/format-operational-value";
+import { paymentAssetLabel } from "../payment-asset";
 import { DocsLink } from "../docs-link";
 import { navigateLab } from "./lab-navigation";
 import type { LoadedLabModel } from "./use-lab-workspace-model";
@@ -153,8 +154,9 @@ export function LabWorkspaceToolbar({
             <p className="text-sm font-semibold">Ready for Tempo testnet</p>
             <p className="mt-1 text-sm">
               Reserve up to{" "}
-              {displayLabDecimal(quote.funding, quote.assetDecimals)} asset
-              units · Fee allowance {quote.fees} wei · {quote.maxTransactions}{" "}
+              {formatOperationalValue(quote.funding, quote.assetDecimals)}{" "}
+              {paymentAssetLabel(draft.corridor.tempoNetwork, quote.asset)} ·
+              Fee allowance {quote.fees} wei · {quote.maxTransactions}{" "}
               transactions maximum
             </p>
             <p className="mt-1 text-xs text-ink-secondary">

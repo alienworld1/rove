@@ -17,6 +17,7 @@ export function AttachedInspector({
   loading,
   error,
   assetDecimals,
+  assetUnit,
   floatingRef,
   floatingStyle,
   docked,
@@ -28,6 +29,7 @@ export function AttachedInspector({
   loading: boolean;
   error: string | null;
   assetDecimals: number;
+  assetUnit: string;
   floatingRef: Ref<HTMLDivElement>;
   floatingStyle: CSSProperties;
   docked: boolean;
@@ -96,9 +98,17 @@ export function AttachedInspector({
       ) : trace ? (
         <>
           {trace.eventType.startsWith("payment.") ? (
-            <PaymentInspector trace={trace} assetDecimals={assetDecimals} />
+            <PaymentInspector
+              trace={trace}
+              assetDecimals={assetDecimals}
+              assetUnit={assetUnit}
+            />
           ) : (
-            <EvidenceInspector trace={trace} assetDecimals={assetDecimals} />
+            <EvidenceInspector
+              trace={trace}
+              assetDecimals={assetDecimals}
+              assetUnit={assetUnit}
+            />
           )}
           <ol
             className="mt-4 flex flex-wrap gap-2 border-t border-line pt-3 text-[11px]"

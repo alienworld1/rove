@@ -33,7 +33,7 @@ Create a Koyeb Web Service from the repository with Dockerfile `deployment/engin
 - The verified `TEMPO_*` and `CDR_*` settings from `.env.example`, with funded test-only payer/payee/signing accounts. Hosted execution requires Moderato chain 42431 and the precompile; the live RPC, asset decimals, and voucher domain are probed before admission.
 - Finite `HOSTED_FUNDING_BUDGET`, `HOSTED_FEE_BUDGET`, `HOSTED_GAS_LIMIT`, and `HOSTED_MAX_FEE_PER_GAS`. Configure `HOSTED_MAX_TRANSACTIONS_PER_RUN` (default 32), session hours (default 24), and stream limits as needed.
 
-Funding limits are gross asset base units, never net of refunds. The current preset reserves 1,800 asset base units: three initial deposits of 500 and a maximum 300 top-up. Fee reservation is `gasLimit × maxFeePerGas × maxTransactions`; Tempo gas prices use [18-decimal USD units](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1010.md). Read current gas prices and choose a finite cap with enough margin for the actual calls. Both payer and payee need fee assets. The worker enforces the admitted gas cap and funding again before each transaction. Missing limits disable admission while analysis remains available.
+Funding limits are gross asset base units, never net of refunds. The two-minute preset reserves at most 10.5 asset units: three initial deposits of 2 units, one 1.5-unit top-up on Lane B, and two 1.5-unit top-ups on Lane C. For six-decimal PathUSD, configure at least 10,500,000 base units per admitted run. Its tariff is 0.42 PathUSD/kWh; final service totals are 0.252, 1.764, and 3.78 PathUSD. These are testnet presentation settings, not production policy. Fee reservation is `gasLimit × maxFeePerGas × maxTransactions`; Tempo gas prices use [18-decimal USD units](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1010.md). Read current gas prices and choose a finite cap with enough margin for the actual calls. Both payer and payee need fee assets. The worker enforces the admitted gas cap and funding again before each transaction. Missing limits disable admission while analysis remains available.
 
 Budgets persist cumulatively in PostgreSQL. Deleting sessions, reusing an invite, refunds, redeployment, reset, or playback cannot replenish them. Each new run is new financial work. One unfinished admission occupies global capacity until all three channels are confirmed closed. Do not delete admission/submission rows to unblock pending transactions. Inspect existing outbox references, reconciliation, and chain receipts first; uncertain reserved submissions are not automatically rebroadcast. Retain unresolved work independently of invitation/session expiry.
 
@@ -64,7 +64,7 @@ Run these operator-only commands in a trusted environment with engine settings. 
 ```sh
 pnpm --filter @rove/engine hosted:admin invite \
   --expires 2026-10-11T00:00:00Z --redemptions 10 --runs 10 \
-  --runs-per-workspace 1 --funding 18000 --fees <finite-fee-budget>
+  --runs-per-workspace 1 --funding 105000000 --fees <finite-fee-budget>
 pnpm --filter @rove/engine hosted:admin seed
 pnpm --filter @rove/engine hosted:admin revoke <invite-id>
 pnpm --filter @rove/engine hosted:admin publish <completed-run-id>
@@ -72,7 +72,7 @@ pnpm --filter @rove/engine hosted:admin publish <completed-run-id>
 
 The invite command emits the raw code once. Store/share it privately. Reloading or redeeming again with the same retained session rotates the identifier and preserves the workspace allowance. A new browser consumes another redemption; ending access revokes the session. Invitations grant owned preset execution and completion controls, never arbitrary evidence, CDR, financial commands, or integration authority.
 
-`hosted:admin seed` imports the included checksum-verified real Moderato recording into the release database without opening channels or submitting transactions. Its three channels were closed on 2026-10-04; the seed artifact retains receipt references, final totals, rejected evidence, pause/recovery, and recorded snapshots. New live runs remain private until explicitly published.
+`hosted:admin seed` imports the included checksum-verified real Moderato recording into the release database without opening channels or submitting transactions. The presentation artifact `deployment/published-runs/tempo-rolling-protection.json` has three channels closed on 2026-10-05 and 5.796 PathUSD settled; the seed artifact retains receipt references, final totals, rejected evidence, pause/recovery, and recorded snapshots. The original boundary recording remains in `deployment/published-runs/tempo-three-lane.json` with its original amounts. New live runs remain private until explicitly published.
 
 Publication verifies real testnet funding, rejected evidence, pause/recovery, top-up, settlement, matching final accounting, closed channels, and confirmed reserve refund. It captures frozen run/projection/trace/Inspector/accounting records. Publication has no visitor HTTP endpoint. Complete and publish a verified real run **before** release; no sample or simulation is automatically advertised as real payment proof.
 

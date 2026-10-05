@@ -5,9 +5,11 @@ import { formatOperationalValue } from "./format-operational-value";
 export function LaneFocusDetails({
   lane,
   tariff,
+  assetUnit,
 }: {
   lane: CorridorOperatingView["lanes"][number];
   tariff: CorridorOperatingView["corridor"]["tariff"];
+  assetUnit: string;
 }) {
   const projection = lane.projection;
   const details = [
@@ -16,7 +18,7 @@ export function LaneFocusDetails({
     ["Power", lane.powerClass],
     [
       "Tariff",
-      `${formatOperationalValue(tariff.perKwh, tariff.tariffDecimals)} / kWh`,
+      `${formatOperationalValue(tariff.perKwh, tariff.tariffDecimals)} ${assetUnit}/kWh`,
     ],
     [
       "Limit",

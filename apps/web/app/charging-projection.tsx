@@ -68,6 +68,8 @@ async function loadView(selectedLaneId?: string): Promise<ViewState> {
             payerEmsp: string;
             payeeCpo: string;
             settlementAssetId: string;
+            tempoNetwork: string;
+            tariff: { assetDecimals: number };
           };
           laneIds: string[];
         }
@@ -100,6 +102,8 @@ async function loadView(selectedLaneId?: string): Promise<ViewState> {
         payerEmsp: detail.corridor.payerEmsp,
         payeeCpo: detail.corridor.payeeCpo,
         assetId: detail.corridor.settlementAssetId,
+        network: detail.corridor.tempoNetwork,
+        assetDecimals: detail.corridor.tariff.assetDecimals,
         lane,
         history: laneHistorySchema.parse(historyRaw),
       },
@@ -204,9 +208,7 @@ export function ChargingProjection() {
               <div className="space-y-1 border-l-2 border-info pl-3 text-sm text-ink-secondary">
                 {lane.meterSource === "controlled-fixture" ||
                 lane.paymentSource === "local-simulation" ? (
-                  <p>
-                    Local simulation: meter input is from a controlled fixture.
-                  </p>
+                  <p>Meter input is from a controlled charging fixture.</p>
                 ) : null}
                 {lane.paymentSource === "local-simulation" ? (
                   <p>
@@ -267,6 +269,9 @@ export function ChargingProjection() {
             <ChargingOperations
               operations={lane.operations}
               paymentSource={lane.paymentSource}
+              network={view.network}
+              assetId={view.assetId}
+              assetDecimals={view.assetDecimals}
             />
             <ChargingHistory history={view.history} />
           </div>

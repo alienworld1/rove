@@ -57,6 +57,7 @@ async function execute(lab: CorridorLab, initial: LabRunView, live = false) {
       exposure: lane?.projection?.unprotectedExposureBound,
     };
   });
+  if (live) view = await waitForChain(lab, view);
   if (view.scenario.schemaVersion === 1) {
     const corrupt = outcomes.find((item) => item.event === "reading-c-corrupt");
     const before = outcomes.find((item) => item.event === "risk-c-before");

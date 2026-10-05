@@ -3,7 +3,7 @@ import dynamic from "next/dynamic";
 import { useLabNavigation } from "./lab/lab-navigation";
 import { useLabDraft } from "./lab/lab-draft-store";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { readHostedSession, readPublishedRuns } from "./hosted-api";
 import { AppShell } from "./corridor/app-shell";
@@ -12,6 +12,7 @@ import { PublishedRunList } from "./published-run-list";
 import { InviteAccessForm } from "./invite-access-form";
 import { PrivateRunWorkspace } from "./private-run-workspace";
 import { HostedRunViewer } from "./hosted-run-viewer";
+import { newestTempoRecording } from "./published-recording";
 const LabWorkspace = dynamic(() =>
   import("./lab/lab-workspace").then((module) => module.LabWorkspace),
 );
@@ -28,7 +29,9 @@ export function HostedEntry({ runId }: { runId: string | null }) {
     queryFn: readHostedSession,
     refetchInterval: 15_000,
   });
+  const wasAuthenticated = useRef(false);
   const expiresAt = session.data?.expiresAt;
+  const featured = newestTempoRecording(published.data ?? []);
   useEffect(() => {
     if (!expiresAt) return;
     const timer = window.setTimeout(
@@ -46,7 +49,12 @@ export function HostedEntry({ runId }: { runId: string | null }) {
     return () => window.clearTimeout(timer);
   }, [expiresAt, client]);
   useEffect(() => {
-    if (session.data?.authenticated === false) {
+    if (session.data?.authenticated === true) {
+      wasAuthenticated.current = true;
+      return;
+    }
+    if (session.data?.authenticated === false && wasAuthenticated.current) {
+      wasAuthenticated.current = false;
       useLabDraft.getState().clear();
       for (const key of [
         "scenario",
@@ -57,7 +65,7 @@ export function HostedEntry({ runId }: { runId: string | null }) {
         "inspector",
         "completion",
       ])
-        client.removeQueries({ queryKey: [key] });
+        void client.resetQueries({ queryKey: [key] });
     }
   }, [session.data?.authenticated, client]);
   const owned = Boolean(
@@ -107,10 +115,14 @@ export function HostedEntry({ runId }: { runId: string | null }) {
             </p>
             <nav className="mt-7 flex flex-wrap items-center gap-5 text-sm">
               <a
-                href="#published-runs"
+                href={
+                  featured
+                    ? `/?run=${encodeURIComponent(featured.id)}&recorded=1`
+                    : "#published-runs"
+                }
                 className="min-h-11 rounded-sm bg-ink px-5 py-3 font-semibold text-pure"
               >
-                Explore runs
+                {featured ? "Explore Tempo run" : "Explore runs"}
               </a>
               <a
                 href="#invite-access"

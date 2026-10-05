@@ -2,8 +2,19 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useQuery } from "@tanstack/react-query";
 import { readAccountingRecord } from "./api";
+import { formatOperationalValue } from "./format-operational-value";
 
-export function AccountingRecordDialog({ laneId }: { laneId: string }) {
+export function AccountingRecordDialog({
+  laneId,
+  assetUnit,
+  assetDecimals,
+  normalizedTotal,
+}: {
+  laneId: string;
+  assetUnit: string;
+  assetDecimals: number;
+  normalizedTotal: string;
+}) {
   const record = useQuery({
     queryKey: ["accounting-record", laneId],
     queryFn: () => readAccountingRecord(laneId),
@@ -26,6 +37,10 @@ export function AccountingRecordDialog({ laneId }: { laneId: string }) {
           <Dialog.Description className="mt-2 text-sm text-ink-secondary">
             The original concluded-session record and its exact normalization.
           </Dialog.Description>
+          <p className="mt-3 text-sm tabular-nums">
+            Normalized settlement total:{" "}
+            {formatOperationalValue(normalizedTotal, assetDecimals)} {assetUnit}
+          </p>
           {record.isFetching ? (
             <p className="mt-4">Loading accounting record…</p>
           ) : record.error ? (

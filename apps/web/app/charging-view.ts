@@ -5,6 +5,8 @@ export type ChargingView = {
   payerEmsp: string;
   payeeCpo: string;
   assetId: string;
+  network: string;
+  assetDecimals: number;
   lane: LaneProjection;
   history: LaneHistory;
 };
