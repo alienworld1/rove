@@ -23,3 +23,5 @@ export const integrationStatusSchema = z.object({
 });
 
 export * from "./completion.ts";
+
+export * from "./lab-authoring.ts";

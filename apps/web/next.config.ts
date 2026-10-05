@@ -9,6 +9,8 @@ publicOrigin(
   process.env.NODE_ENV === "development",
 );
 
-const nextConfig: NextConfig = {};
+const nextConfig: NextConfig = {
+  distDir: process.env.ROVE_BUILD_DIRECTORY ?? ".next",
+};
 
 export default nextConfig;

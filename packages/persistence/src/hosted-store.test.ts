@@ -57,6 +57,25 @@ test(
         id: `access-${randomUUID()}`,
       };
       const compiled = compileLabScenario(scenario, controlledMeterProfiles);
+      const privateScenario = compileLabScenario(
+        { ...scenario, id: `scenario-${randomUUID()}` },
+        controlledMeterProfiles,
+      );
+      await access.saveScenario(rotated.token, privateScenario);
+      assert.equal(
+        (await access.scenario(rotated.token, privateScenario.definition.id))
+          .digest,
+        privateScenario.digest,
+      );
+      assert.equal((await access.listScenarios(second.token)).length, 0);
+      await assert.rejects(
+        access.scenario(second.token, privateScenario.definition.id),
+        (error) => error instanceof HostedAccessError && error.status === 404,
+      );
+      await assert.rejects(
+        access.saveScenario(second.token, privateScenario),
+        (error) => error instanceof HostedAccessError && error.status === 404,
+      );
       const reservation = {
         compiled,
         funding: "1800",
@@ -222,6 +241,7 @@ test(
       );
     } finally {
       for (const id of ids) {
+        await sql`delete from hosted_scenarios where workspace_id in (select workspace_id from hosted_sessions where invite_id = ${id})`;
         await sql`delete from hosted_submissions where run_id in (select run_id from hosted_admissions where invite_id = ${id})`;
         await sql`delete from hosted_admissions where invite_id = ${id}`;
         await sql`delete from hosted_sessions where invite_id = ${id}`;

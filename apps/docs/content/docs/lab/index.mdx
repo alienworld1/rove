@@ -9,9 +9,9 @@ Rove Lab runs deterministic multi-Lane inputs through the normal evidence verifi
 
 Choose **Explore runs** to inspect explicitly published completed runs, including Lane evidence, payment receipts, protection history, and reconciliation. **Play recording** and the trace scrubber change only your presentation. Recorded runs use digital-twin charging equipment and disclose their actual payment source.
 
-Choose **Use an invite** to unlock your private workspace, then **Run on Tempo testnet** to execute the approved three-Lane scenario. Preparation and confirmation happen durably; refreshing resumes the same run. Execution has finite run and funding allowances, and capacity may be busy. Expired or exhausted access leaves published analysis available. Hosted access does not enable simulation execution or the scenario builder.
+Choose **Use an invite** to unlock your private workspace, then **Run on Tempo testnet** to execute the approved three-Lane scenario. Preparation and confirmation happen durably; refreshing resumes the same run. Execution has finite run and funding allowances, and capacity may be busy. Expired or exhausted access leaves published analysis available. Choose **Lab** or **Build a custom scenario** to author private scenarios. Your saved scenarios are visible only in your invite workspace. The hosted Lab uses the configured Tempo testnet asset; it cannot select simulation or a different financial environment.
 
-The engine completes reconciliation and channel closure after the approved trace ends. Paused runs without interaction resume after 15 minutes while the engine is available, so their reserved work can finish. An outage retains pending work for recovery rather than presenting it as confirmed.
+The engine submits final accounting after the trace ends and closes Lanes whose totals reconcile. A custom CDR mismatch remains unresolved and retains its reserve; it does not authorize an automatic payment correction. Paused runs without interaction resume after 15 minutes while the engine is available, so their reserved work can finish. An outage retains pending work for recovery rather than presenting it as confirmed.
 
 ## Local workflow
 
@@ -28,7 +28,25 @@ In separate terminals start `pnpm dev:web` and `pnpm dev:docs`. Open the app roo
 
 ## Scenario builder
 
-Open **Scenario builder**, edit parties, tariff, policies, Lane identities/power and fault events, or the structured definition. Changing the built-in scenario creates an editable copy. Choose **Validate scenario**, resolve field/path issues, then save/start the validated definition. A saved scenario has a compiler-backed digest; selecting a stale digest cannot silently run changed content.
+Choose **Lab** from the persistent navigation. Start with **New scenario · Protection demo** or **New scenario · Healthy trace**. Configure each Lane in the attached inspector; **Corridor policy** exposes the shared tariff, rolling reserve, exposure thresholds, evidence freshness, and partial-settlement settings.
+
+The timeline and its event list edit the same inputs. Select a reading or fault, enter an exact trace time, or drag its marker. You can edit, duplicate, and remove events. Temporary faults show an unavailable interval and a compiler-generated restoration marker; select the marker to edit its parent. Signed **Evidence recovery** is a separate event placed after the fault or gap.
+
+Changing proof cadence updates the expected-evidence policy. It does **not** silently move existing readings. Open **Generate readings**, choose constant delivery power and trace duration, preview the replacement, then apply it. Generation retains fault times and creates conservative, physically bounded readings around recovery. The runtime still honors `PAUSE_REQUIRED`.
+
+Choose **Matching CDR** or supply **Custom totals** in each Lane's final accounting settings. Custom totals are accounting inputs, not payment instructions. After the run, the normal completion path verifies final evidence and compares the CDR with protected and settled value. A mismatch blocks automatic closure and may hold the hosted execution capacity until resolved.
+
+Choose **Save scenario** to validate and persist the canonical definition. Field errors link back to the relevant Lane or event. **Save and run** uses that saved digest. In hosted mode, review the server quote and choose **Start quoted run**; admission rechecks private ownership, the digest, and available funding/run/fee allowances atomically. A scenario that could exceed the transaction allowance must be shortened or use larger funding/settlement increments.
+
+From an active or completed run choose **Edit a copy in Lab**. The copy comes from the immutable run snapshot and has a new identity. **Return to run** preserves the original execution; switching views does not pause it. Unsaved drafts survive in-app navigation and prompt before being replaced or leaving the page.
+
+**Advanced · JSON import and export** provides an optional representation. Import loads text for review; **Apply JSON** checks its shape before replacing the structured draft. Saving performs the full compiler checks. Export your saved draft to reproduce it headlessly:
+
+```sh
+pnpm --filter @rove/engine lab:run --scenario-file /absolute/path/to/scenario.json --compare
+```
+
+Use the JSON file's disclosed environment. Add `--live` only when intentionally executing an exported Tempo scenario with your configured funded test accounts.
 
 Use [the complete scenario and schema](/docs/lab/scenario-schema) and [fault inputs](/docs/lab/fault-library). Do not confuse a playback pause with `PAUSE_REQUIRED`: the former controls trace playback; the latter is a protection/control result.
 

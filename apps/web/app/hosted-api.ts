@@ -18,6 +18,7 @@ export async function hostedJson(path: string, body?: unknown) {
     throw new CorridorApiError(
       value.message ?? "Rove couldn't load. Please try again.",
       response.status,
+      value.issues,
     );
   return value;
 }
@@ -34,8 +35,11 @@ export async function redeemInvite(code: string) {
     await hostedJson("/api/access/invite", { code }),
   );
 }
-export async function startHostedRun(runId: string) {
+export async function startHostedRun(
+  runId: string,
+  scenario?: { scenarioId: string; scenarioDigest: string },
+) {
   return labRunViewSchema.parse(
-    await hostedJson("/api/access/runs", { runId }),
+    await hostedJson("/api/access/runs", { runId, scenario }),
   );
 }

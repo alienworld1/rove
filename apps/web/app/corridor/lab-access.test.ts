@@ -56,3 +56,44 @@ test("Lab mutations require authenticated same-origin requests before forwarding
     else process.env.DEMO_SESSION_TOKEN = previousToken;
   }
 });
+
+test("Lab scenario uploads are bounded before forwarding", async (context) => {
+  const env: Record<string, string | undefined> = process.env;
+  const previous = {
+    mode: env.NODE_ENV,
+    access: env.ACCESS_MODE,
+    token: env.DEMO_SESSION_TOKEN,
+  };
+  env.NODE_ENV = "development";
+  env.ACCESS_MODE = "local";
+  env.DEMO_SESSION_TOKEN = "a".repeat(48);
+  let forwards = 0;
+  context.mock.method(globalThis, "fetch", async () => {
+    forwards++;
+    return Response.json({});
+  });
+  try {
+    const response = await POST(
+      new Request("http://localhost:3000/api/lab/scenarios", {
+        method: "POST",
+        headers: {
+          origin: "http://localhost:3000",
+          cookie: `rove_demo=${env.DEMO_SESSION_TOKEN}`,
+        },
+        body: "x".repeat(70001),
+      }),
+      { params: Promise.resolve({ path: ["scenarios"] }) },
+    );
+    assert.equal(response.status, 413);
+    assert.equal(forwards, 0);
+  } finally {
+    for (const [key, value] of [
+      ["NODE_ENV", previous.mode],
+      ["ACCESS_MODE", previous.access],
+      ["DEMO_SESSION_TOKEN", previous.token],
+    ] as const) {
+      if (value === undefined) delete env[key];
+      else env[key] = value;
+    }
+  }
+});

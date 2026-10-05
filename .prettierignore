@@ -6,3 +6,5 @@ AGENTS.md
 packages/persistence/drizzle/meta/**
 # Generated, checksum-verified immutable release proof.
 deployment/published-runs/*.json
+
+**/.next-lab-*/**

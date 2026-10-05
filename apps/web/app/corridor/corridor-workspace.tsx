@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { idSchema, labScenarioSchema } from "@rove/contracts";
+import { idSchema } from "@rove/contracts";
 import { SessionCompletionPanel } from "./session-completion-panel";
 import { AppShell } from "./app-shell";
 import {
@@ -12,7 +12,6 @@ import {
   readRun,
   readScenario,
   readScenarios,
-  saveScenario,
   startRun,
 } from "./api";
 import { CorridorSkeleton } from "./corridor-skeleton";
@@ -25,7 +24,7 @@ import { useCorridorStream } from "./use-corridor-stream";
 import { reconcileCorridorView } from "./reconcile-view";
 import { useCorridorSelection } from "./corridor-selection";
 import { LabPlaybackControls } from "../lab-playback-controls";
-import { LabScenarioBuilder } from "../lab-scenario-builder";
+import { navigateLab } from "../lab/lab-navigation";
 
 function validId(value: string | null) {
   return value && idSchema.safeParse(value).success ? value : null;
@@ -48,9 +47,6 @@ export function CorridorWorkspace({
   const [scenarioId, setScenarioId] = useState(initialScenarioId ?? "");
   const [urlCorridorId, setUrlCorridorId] = useState(initialCorridorId);
   const [message, setMessage] = useState("");
-  const [draftOverride, setDraftOverride] = useState<string | null>(null);
-  const [issues, setIssues] = useState<{ path: string; message: string }[]>([]);
-  const [savedDigest, setSavedDigest] = useState<string | null>(null);
   const summaries = useQuery({
     queryKey: ["scenarios"],
     queryFn: readScenarios,
@@ -61,9 +57,6 @@ export function CorridorWorkspace({
     queryFn: ({ signal }) => readScenario(effectiveScenarioId, signal),
     enabled: effectiveScenarioId.length > 0 && runId === null,
   });
-  const draft =
-    draftOverride ??
-    (scenario.data ? JSON.stringify(scenario.data.definition, null, 2) : "");
   const run = useQuery({
     queryKey: ["run", runId],
     queryFn: ({ signal }) => readRun(runId!, signal),
@@ -90,9 +83,7 @@ export function CorridorWorkspace({
   );
   const start = useMutation({
     mutationFn: () => {
-      const definition = savedDigest
-        ? labScenarioSchema.parse(JSON.parse(draft) as unknown)
-        : scenario.data!.definition;
+      const definition = scenario.data!.definition;
       const requestedRunId = crypto.randomUUID();
       const url = new URL(window.location.href);
       url.searchParams.set("run", requestedRunId);
@@ -100,11 +91,7 @@ export function CorridorWorkspace({
       for (const key of ["corridor", "lane", "event", "trace"])
         url.searchParams.delete(key);
       window.history.pushState(null, "", url);
-      return startRun(
-        definition,
-        savedDigest ?? scenario.data!.digest,
-        requestedRunId,
-      );
+      return startRun(definition, scenario.data!.digest, requestedRunId);
     },
     onSuccess: (next) => {
       queryClient.setQueryData(["run", next.run.id], next);
@@ -136,32 +123,6 @@ export function CorridorWorkspace({
       setMessage(
         "The run's start could not be checked. Check its saved state before starting another run.",
       );
-    },
-  });
-  const validate = useMutation({
-    mutationFn: () => saveScenario(JSON.parse(draft) as unknown),
-    onSuccess: async (saved) => {
-      setSavedDigest(saved.digest);
-      setIssues([]);
-      setMessage("Scenario ready");
-      await queryClient.invalidateQueries({ queryKey: ["scenarios"] });
-    },
-    onError: (error) => {
-      const detail = error as Error & {
-        issues?: { path: string; message: string }[];
-      };
-      setIssues(
-        detail.issues ?? [
-          {
-            path: "definition",
-            message:
-              error instanceof SyntaxError
-                ? "Check the scenario format."
-                : detail.message,
-          },
-        ],
-      );
-      setMessage("Review the scenario settings.");
     },
   });
   const transport = useMutation({
@@ -282,31 +243,20 @@ export function CorridorWorkspace({
               busy={start.isPending}
               onSelect={(id) => {
                 setScenarioId(id);
-                setDraftOverride(null);
-                setSavedDigest(null);
-                setIssues([]);
                 const url = new URL(window.location.href);
                 url.searchParams.set("scenario", id);
                 window.history.replaceState(null, "", url);
               }}
               onStart={() => {
-                if (draftOverride !== null && savedDigest === null) {
-                  setMessage("Validate your changes before starting the run.");
-                  return;
-                }
                 start.mutate();
               }}
             />
-            <LabScenarioBuilder
-              draft={draft}
-              onChange={(value) => {
-                setDraftOverride(value);
-                setSavedDigest(null);
-              }}
-              onValidate={() => validate.mutate()}
-              busy={validate.isPending}
-              issues={issues}
-            />
+            <button
+              className="min-h-11 border border-line-strong bg-pure px-4 py-2 text-sm font-semibold"
+              onClick={() => navigateLab("lab")}
+            >
+              Build a scenario in Lab
+            </button>
           </>
         ) : (
           <p className="py-20 text-center text-sm text-ink-secondary">
@@ -327,6 +277,14 @@ export function CorridorWorkspace({
         />
       ) : corridor.data ? (
         <>
+          <div className="mt-4 flex justify-end">
+            <button
+              className="min-h-11 border border-line-strong px-4 text-sm font-semibold"
+              onClick={() => navigateLab("lab", { copy: runId })}
+            >
+              Edit a copy in Lab
+            </button>
+          </div>
           <SourceDisclosure environment={corridor.data.environment} />
           {stale || corridor.error || run.error ? (
             <div
@@ -382,7 +340,7 @@ export function CorridorWorkspace({
         {realtime.restored
           ? "Live updates restored"
           : run.data?.run.status === "completed"
-            ? "Scenario completed through recovery."
+            ? "Scenario trace completed."
             : message}
       </p>
     </main>

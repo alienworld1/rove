@@ -3,7 +3,7 @@ import { HostedEntry } from "./hosted-entry";
 import { HostedQueryProvider } from "./hosted-query-provider";
 import { idSchema } from "@rove/contracts";
 import { CorridorQueryProvider } from "./corridor/corridor-query-provider";
-import { CorridorWorkspace } from "./corridor/corridor-workspace";
+import { LocalEntry } from "./local-entry";
 
 export default async function Home({
   searchParams,
@@ -27,7 +27,7 @@ export default async function Home({
     <CorridorQueryProvider
       controlledMode={process.env.NODE_ENV === "development"}
     >
-      <CorridorWorkspace
+      <LocalEntry
         controlledMode={process.env.NODE_ENV === "development"}
         initialRunId={selectedId("run")}
         initialScenarioId={selectedId("scenario")}

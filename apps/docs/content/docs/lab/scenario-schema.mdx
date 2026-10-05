@@ -7,11 +7,22 @@ description: "Use the current strict schema, deterministic compiler, and complet
 
 ## Fields and units
 
-`schemaVersion` is exactly 1. Required top-level fields are `id`, `name`, `description`, `traceEpoch`, `corridor`, `lanes`, `events`, and `terminalCondition: "after_recovery"`. All objects are strict. There are 1–3 Lanes and 1–200 input events. Lane `maxPowerWatts` and `initialEnergyWh` are decimal integer strings; event readings use `cumulativeMilliWh`, not money or decimal kWh numbers.
+`schemaVersion` is 1 for legacy definitions or 2 for new authored scenarios. Required top-level fields are `id`, `name`, `description`, `traceEpoch`, `corridor`, `lanes`, `events`, and `terminalCondition` (version 1 requires `"after_recovery"`). All objects are strict. There are 1–3 Lanes and 1–200 input events. Lane `maxPowerWatts` and `initialEnergyWh` are decimal integer strings; event readings use `cumulativeMilliWh`, not money or decimal kWh numbers.
 
 Each event has `id`, `laneKey`, `traceOffsetMs` (0–3600000), unique `sequence` (0–10000), `type`, `parameters`, and nullable `durationMs`. Events order by offset, sequence, then ID; Lane order is normalized before hashing. The digest binds normalized definition and compiler version. Wall-clock playback speed does not change trace timestamps or the compiled digest.
 
 The compiler checks approved meter profiles, unique Lane/session/meter/charger identities, valid Lane references, a preceding session start, nonregressing energy within each power/time bound, appropriate fault durations/restore events, and recovery after a fault. A shape-valid JSON object may still fail these checks.
+
+## Version 2 authoring
+
+Version 1 definitions and digests remain supported. New editable copies use `schemaVersion: 2` and the same Corridor, Lane, and event fields.
+
+- `terminalCondition: "after_recovery"` requires signed recovery after evidence faults; `"after_trace"` supports a healthy trace without a fault.
+- Optional `accountingByLane` maps Lane keys to `{ "mode": "matching" }` or `{ "mode": "custom", "totalEnergyWh": "99", "totalCost": "999" }`. Energy uses integer Wh; cost uses the asset's integer base units. These totals enter the normal CDR verifier and reconciliation engine.
+- Every Lane needs one session start before its other inputs and at least one valid/recovery reading. Recovery must follow the fault and occur after an evidence gap ends. Unavailable intervals of the same type cannot overlap.
+- The complete trace, including generated restoration events, is limited to 200 events. Compiler errors identify the original event even when timeline sorting changes its position.
+
+The GUI shows kW, kWh, seconds, and decimal asset amounts, converting them exactly to the schema's integer units. It preserves incomplete input until corrected rather than silently rounding or using zero.
 
 ## Complete controlled fixture
 
@@ -292,1116 +303,2281 @@ Current structural JSON Schema; semantic source checks still apply.
 ```json
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "type": "object",
-  "properties": {
-    "schemaVersion": {
-      "type": "number",
-      "const": 1
-    },
-    "id": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 128,
-      "pattern": "^[A-Za-z0-9._:-]+$"
-    },
-    "name": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 160
-    },
-    "description": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 500
-    },
-    "traceEpoch": {
-      "type": "string",
-      "format": "date-time",
-      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
-    },
-    "corridor": {
+  "oneOf": [
+    {
       "type": "object",
       "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._:-]+$"
+        },
         "name": {
           "type": "string",
           "minLength": 1,
           "maxLength": 160
         },
-        "payerEmsp": {
+        "description": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 160
+          "maxLength": 500
         },
-        "payeeCpo": {
+        "traceEpoch": {
           "type": "string",
-          "minLength": 1,
-          "maxLength": 160
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
         },
-        "settlementAssetId": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128,
-          "pattern": "^[A-Za-z0-9._:-]+$"
-        },
-        "tempoNetwork": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128,
-          "pattern": "^[A-Za-z0-9._:-]+$"
-        },
-        "tariff": {
+        "corridor": {
           "type": "object",
           "properties": {
-            "perKwh": {
+            "name": {
               "type": "string",
-              "pattern": "^(0|[1-9][0-9]*)$"
+              "minLength": 1,
+              "maxLength": 160
             },
-            "tariffDecimals": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 36
-            },
-            "assetDecimals": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 36
-            }
-          },
-          "required": ["perKwh", "tariffDecimals", "assetDecimals"],
-          "additionalProperties": false
-        },
-        "protectionPolicy": {
-          "type": "object",
-          "properties": {
-            "warningThreshold": {
+            "payerEmsp": {
               "type": "string",
-              "pattern": "^(0|[1-9][0-9]*)$"
+              "minLength": 1,
+              "maxLength": 160
             },
-            "riskThreshold": {
+            "payeeCpo": {
               "type": "string",
-              "pattern": "^(0|[1-9][0-9]*)$"
+              "minLength": 1,
+              "maxLength": 160
             },
-            "maxUnprotectedExposure": {
+            "settlementAssetId": {
               "type": "string",
-              "pattern": "^(0|[1-9][0-9]*)$"
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
             },
-            "evidenceMaxAgeMs": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "maximum": 9007199254740991
-            },
-            "chainMaxAgeMs": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "maximum": 9007199254740991
-            },
-            "zeroGrace": {
-              "type": "boolean"
-            },
-            "lowHeadroomThreshold": {
+            "tempoNetwork": {
               "type": "string",
-              "pattern": "^(0|[1-9][0-9]*)$"
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            },
+            "tariff": {
+              "type": "object",
+              "properties": {
+                "perKwh": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "tariffDecimals": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 36
+                },
+                "assetDecimals": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 36
+                }
+              },
+              "required": ["perKwh", "tariffDecimals", "assetDecimals"],
+              "additionalProperties": false
+            },
+            "protectionPolicy": {
+              "type": "object",
+              "properties": {
+                "warningThreshold": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "riskThreshold": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "maxUnprotectedExposure": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "evidenceMaxAgeMs": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "chainMaxAgeMs": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "zeroGrace": {
+                  "type": "boolean"
+                },
+                "lowHeadroomThreshold": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                }
+              },
+              "required": [
+                "warningThreshold",
+                "riskThreshold",
+                "maxUnprotectedExposure",
+                "evidenceMaxAgeMs",
+                "chainMaxAgeMs",
+                "zeroGrace",
+                "lowHeadroomThreshold"
+              ],
+              "additionalProperties": false
+            },
+            "reservePolicy": {
+              "type": "object",
+              "properties": {
+                "initialDeposit": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "topUpIncrement": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                }
+              },
+              "required": ["initialDeposit", "topUpIncrement"],
+              "additionalProperties": false
+            },
+            "settlementPolicy": {
+              "type": "object",
+              "properties": {
+                "minimumIntervalMs": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "minimumUnsettledProtectedValue": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                }
+              },
+              "required": [
+                "minimumIntervalMs",
+                "minimumUnsettledProtectedValue"
+              ],
+              "additionalProperties": false
             }
           },
           "required": [
-            "warningThreshold",
-            "riskThreshold",
-            "maxUnprotectedExposure",
-            "evidenceMaxAgeMs",
-            "chainMaxAgeMs",
-            "zeroGrace",
-            "lowHeadroomThreshold"
+            "name",
+            "payerEmsp",
+            "payeeCpo",
+            "settlementAssetId",
+            "tempoNetwork",
+            "tariff",
+            "protectionPolicy",
+            "reservePolicy",
+            "settlementPolicy"
           ],
           "additionalProperties": false
         },
-        "reservePolicy": {
-          "type": "object",
-          "properties": {
-            "initialDeposit": {
-              "type": "string",
-              "pattern": "^(0|[1-9][0-9]*)$"
+        "lanes": {
+          "minItems": 1,
+          "maxItems": 3,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9._:-]+$"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "powerClass": {
+                "type": "string",
+                "enum": ["AC", "DC", "HPC"]
+              },
+              "maxPowerWatts": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "meterProfileId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9._:-]+$"
+              },
+              "meterId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9._:-]+$"
+              },
+              "chargerId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9._:-]+$"
+              },
+              "sessionId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9._:-]+$"
+              },
+              "expectedProofIntervalMs": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 3600000
+              },
+              "initialEnergyWh": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              }
             },
-            "topUpIncrement": {
-              "type": "string",
-              "pattern": "^(0|[1-9][0-9]*)$"
-            }
-          },
-          "required": ["initialDeposit", "topUpIncrement"],
-          "additionalProperties": false
+            "required": [
+              "key",
+              "label",
+              "powerClass",
+              "maxPowerWatts",
+              "meterProfileId",
+              "meterId",
+              "chargerId",
+              "sessionId",
+              "expectedProofIntervalMs",
+              "initialEnergyWh"
+            ],
+            "additionalProperties": false
+          }
         },
-        "settlementPolicy": {
-          "type": "object",
-          "properties": {
-            "minimumIntervalMs": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "maximum": 9007199254740991
-            },
-            "minimumUnsettledProtectedValue": {
-              "type": "string",
-              "pattern": "^(0|[1-9][0-9]*)$"
-            }
-          },
-          "required": ["minimumIntervalMs", "minimumUnsettledProtectedValue"],
-          "additionalProperties": false
+        "events": {
+          "minItems": 1,
+          "maxItems": 200,
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600000
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "session_start"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600000
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "valid_reading"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "cumulativeMilliWh": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)$"
+                      }
+                    },
+                    "required": ["cumulativeMilliWh"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600000
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "recovery_reading"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "cumulativeMilliWh": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)$"
+                      }
+                    },
+                    "required": ["cumulativeMilliWh"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600000
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "corrupt_signature"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "cumulativeMilliWh": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)$"
+                      }
+                    },
+                    "required": ["cumulativeMilliWh"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600000
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "wrong_meter"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "cumulativeMilliWh": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)$"
+                      }
+                    },
+                    "required": ["cumulativeMilliWh"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600000
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "replay_reading"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600000
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "sequence_break"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "cumulativeMilliWh": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)$"
+                      }
+                    },
+                    "required": ["cumulativeMilliWh"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600000
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "evidence_gap"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600000
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "signer_unavailable"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600000
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "signer_restored"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600000
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "top_up_failure"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600000
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "tempo_unavailable"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600000
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "tempo_restored"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600000
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "protection_tick"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "terminalCondition": {
+          "type": "string",
+          "const": "after_recovery"
         }
       },
       "required": [
+        "schemaVersion",
+        "id",
         "name",
-        "payerEmsp",
-        "payeeCpo",
-        "settlementAssetId",
-        "tempoNetwork",
-        "tariff",
-        "protectionPolicy",
-        "reservePolicy",
-        "settlementPolicy"
+        "description",
+        "traceEpoch",
+        "corridor",
+        "lanes",
+        "events",
+        "terminalCondition"
       ],
       "additionalProperties": false
     },
-    "lanes": {
-      "minItems": 1,
-      "maxItems": 3,
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 128,
-            "pattern": "^[A-Za-z0-9._:-]+$"
+    {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 2
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._:-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "traceEpoch": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        },
+        "corridor": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "payerEmsp": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "payeeCpo": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "settlementAssetId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            },
+            "tempoNetwork": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            },
+            "tariff": {
+              "type": "object",
+              "properties": {
+                "perKwh": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "tariffDecimals": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 36
+                },
+                "assetDecimals": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 36
+                }
+              },
+              "required": ["perKwh", "tariffDecimals", "assetDecimals"],
+              "additionalProperties": false
+            },
+            "protectionPolicy": {
+              "type": "object",
+              "properties": {
+                "warningThreshold": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "riskThreshold": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "maxUnprotectedExposure": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "evidenceMaxAgeMs": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "chainMaxAgeMs": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "zeroGrace": {
+                  "type": "boolean"
+                },
+                "lowHeadroomThreshold": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                }
+              },
+              "required": [
+                "warningThreshold",
+                "riskThreshold",
+                "maxUnprotectedExposure",
+                "evidenceMaxAgeMs",
+                "chainMaxAgeMs",
+                "zeroGrace",
+                "lowHeadroomThreshold"
+              ],
+              "additionalProperties": false
+            },
+            "reservePolicy": {
+              "type": "object",
+              "properties": {
+                "initialDeposit": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "topUpIncrement": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                }
+              },
+              "required": ["initialDeposit", "topUpIncrement"],
+              "additionalProperties": false
+            },
+            "settlementPolicy": {
+              "type": "object",
+              "properties": {
+                "minimumIntervalMs": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "minimumUnsettledProtectedValue": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                }
+              },
+              "required": [
+                "minimumIntervalMs",
+                "minimumUnsettledProtectedValue"
+              ],
+              "additionalProperties": false
+            }
           },
-          "label": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 80
-          },
-          "powerClass": {
-            "type": "string",
-            "enum": ["AC", "DC", "HPC"]
-          },
-          "maxPowerWatts": {
-            "type": "string",
-            "pattern": "^(0|[1-9][0-9]*)$"
-          },
-          "meterProfileId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 128,
-            "pattern": "^[A-Za-z0-9._:-]+$"
-          },
-          "meterId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 128,
-            "pattern": "^[A-Za-z0-9._:-]+$"
-          },
-          "chargerId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 128,
-            "pattern": "^[A-Za-z0-9._:-]+$"
-          },
-          "sessionId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 128,
-            "pattern": "^[A-Za-z0-9._:-]+$"
-          },
-          "expectedProofIntervalMs": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 3600000
-          },
-          "initialEnergyWh": {
-            "type": "string",
-            "pattern": "^(0|[1-9][0-9]*)$"
+          "required": [
+            "name",
+            "payerEmsp",
+            "payeeCpo",
+            "settlementAssetId",
+            "tempoNetwork",
+            "tariff",
+            "protectionPolicy",
+            "reservePolicy",
+            "settlementPolicy"
+          ],
+          "additionalProperties": false
+        },
+        "lanes": {
+          "minItems": 1,
+          "maxItems": 3,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9._:-]+$"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "powerClass": {
+                "type": "string",
+                "enum": ["AC", "DC", "HPC"]
+              },
+              "maxPowerWatts": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "meterProfileId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9._:-]+$"
+              },
+              "meterId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9._:-]+$"
+              },
+              "chargerId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9._:-]+$"
+              },
+              "sessionId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9._:-]+$"
+              },
+              "expectedProofIntervalMs": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 3600000
+              },
+              "initialEnergyWh": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              }
+            },
+            "required": [
+              "key",
+              "label",
+              "powerClass",
+              "maxPowerWatts",
+              "meterProfileId",
+              "meterId",
+              "chargerId",
+              "sessionId",
+              "expectedProofIntervalMs",
+              "initialEnergyWh"
+            ],
+            "additionalProperties": false
           }
         },
-        "required": [
-          "key",
-          "label",
-          "powerClass",
-          "maxPowerWatts",
-          "meterProfileId",
-          "meterId",
-          "chargerId",
-          "sessionId",
-          "expectedProofIntervalMs",
-          "initialEnergyWh"
-        ],
-        "additionalProperties": false
-      }
-    },
-    "events": {
-      "minItems": 1,
-      "maxItems": 200,
-      "type": "array",
-      "items": {
-        "oneOf": [
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "laneKey": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "traceOffsetMs": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 3600000
-              },
-              "sequence": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 10000
-              },
-              "durationMs": {
-                "anyOf": [
-                  {
-                    "type": "integer",
-                    "exclusiveMinimum": 0,
-                    "maximum": 3600000
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "type": {
-                "type": "string",
-                "const": "session_start"
-              },
-              "parameters": {
-                "type": "object",
-                "properties": {},
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "id",
-              "laneKey",
-              "traceOffsetMs",
-              "sequence",
-              "durationMs",
-              "type",
-              "parameters"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "laneKey": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "traceOffsetMs": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 3600000
-              },
-              "sequence": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 10000
-              },
-              "durationMs": {
-                "anyOf": [
-                  {
-                    "type": "integer",
-                    "exclusiveMinimum": 0,
-                    "maximum": 3600000
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "type": {
-                "type": "string",
-                "const": "valid_reading"
-              },
-              "parameters": {
+        "events": {
+          "minItems": 1,
+          "maxItems": 200,
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
                 "type": "object",
                 "properties": {
-                  "cumulativeMilliWh": {
+                  "id": {
                     "type": "string",
-                    "pattern": "^(0|[1-9][0-9]*)$"
-                  }
-                },
-                "required": ["cumulativeMilliWh"],
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "id",
-              "laneKey",
-              "traceOffsetMs",
-              "sequence",
-              "durationMs",
-              "type",
-              "parameters"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "laneKey": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "traceOffsetMs": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 3600000
-              },
-              "sequence": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 10000
-              },
-              "durationMs": {
-                "anyOf": [
-                  {
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
                     "type": "integer",
-                    "exclusiveMinimum": 0,
+                    "minimum": 0,
                     "maximum": 3600000
                   },
-                  {
-                    "type": "null"
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "session_start"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
                   }
-                ]
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
               },
-              "type": {
-                "type": "string",
-                "const": "recovery_reading"
-              },
-              "parameters": {
+              {
                 "type": "object",
                 "properties": {
-                  "cumulativeMilliWh": {
+                  "id": {
                     "type": "string",
-                    "pattern": "^(0|[1-9][0-9]*)$"
-                  }
-                },
-                "required": ["cumulativeMilliWh"],
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "id",
-              "laneKey",
-              "traceOffsetMs",
-              "sequence",
-              "durationMs",
-              "type",
-              "parameters"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "laneKey": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "traceOffsetMs": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 3600000
-              },
-              "sequence": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 10000
-              },
-              "durationMs": {
-                "anyOf": [
-                  {
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
                     "type": "integer",
-                    "exclusiveMinimum": 0,
+                    "minimum": 0,
                     "maximum": 3600000
                   },
-                  {
-                    "type": "null"
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "valid_reading"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "cumulativeMilliWh": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)$"
+                      }
+                    },
+                    "required": ["cumulativeMilliWh"],
+                    "additionalProperties": false
                   }
-                ]
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
               },
-              "type": {
-                "type": "string",
-                "const": "corrupt_signature"
-              },
-              "parameters": {
+              {
                 "type": "object",
                 "properties": {
-                  "cumulativeMilliWh": {
+                  "id": {
                     "type": "string",
-                    "pattern": "^(0|[1-9][0-9]*)$"
-                  }
-                },
-                "required": ["cumulativeMilliWh"],
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "id",
-              "laneKey",
-              "traceOffsetMs",
-              "sequence",
-              "durationMs",
-              "type",
-              "parameters"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "laneKey": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "traceOffsetMs": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 3600000
-              },
-              "sequence": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 10000
-              },
-              "durationMs": {
-                "anyOf": [
-                  {
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
                     "type": "integer",
-                    "exclusiveMinimum": 0,
+                    "minimum": 0,
                     "maximum": 3600000
                   },
-                  {
-                    "type": "null"
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "recovery_reading"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "cumulativeMilliWh": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)$"
+                      }
+                    },
+                    "required": ["cumulativeMilliWh"],
+                    "additionalProperties": false
                   }
-                ]
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
               },
-              "type": {
-                "type": "string",
-                "const": "wrong_meter"
-              },
-              "parameters": {
+              {
                 "type": "object",
                 "properties": {
-                  "cumulativeMilliWh": {
+                  "id": {
                     "type": "string",
-                    "pattern": "^(0|[1-9][0-9]*)$"
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600000
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "corrupt_signature"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "cumulativeMilliWh": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)$"
+                      }
+                    },
+                    "required": ["cumulativeMilliWh"],
+                    "additionalProperties": false
                   }
                 },
-                "required": ["cumulativeMilliWh"],
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
                 "additionalProperties": false
-              }
-            },
-            "required": [
-              "id",
-              "laneKey",
-              "traceOffsetMs",
-              "sequence",
-              "durationMs",
-              "type",
-              "parameters"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
               },
-              "laneKey": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "traceOffsetMs": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 3600000
-              },
-              "sequence": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 10000
-              },
-              "durationMs": {
-                "anyOf": [
-                  {
-                    "type": "integer",
-                    "exclusiveMinimum": 0,
-                    "maximum": 3600000
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "type": {
-                "type": "string",
-                "const": "replay_reading"
-              },
-              "parameters": {
-                "type": "object",
-                "properties": {},
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "id",
-              "laneKey",
-              "traceOffsetMs",
-              "sequence",
-              "durationMs",
-              "type",
-              "parameters"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "laneKey": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "traceOffsetMs": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 3600000
-              },
-              "sequence": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 10000
-              },
-              "durationMs": {
-                "anyOf": [
-                  {
-                    "type": "integer",
-                    "exclusiveMinimum": 0,
-                    "maximum": 3600000
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "type": {
-                "type": "string",
-                "const": "sequence_break"
-              },
-              "parameters": {
+              {
                 "type": "object",
                 "properties": {
-                  "cumulativeMilliWh": {
+                  "id": {
                     "type": "string",
-                    "pattern": "^(0|[1-9][0-9]*)$"
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600000
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "wrong_meter"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "cumulativeMilliWh": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)$"
+                      }
+                    },
+                    "required": ["cumulativeMilliWh"],
+                    "additionalProperties": false
                   }
                 },
-                "required": ["cumulativeMilliWh"],
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
                 "additionalProperties": false
-              }
-            },
-            "required": [
-              "id",
-              "laneKey",
-              "traceOffsetMs",
-              "sequence",
-              "durationMs",
-              "type",
-              "parameters"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
               },
-              "laneKey": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "traceOffsetMs": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 3600000
-              },
-              "sequence": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 10000
-              },
-              "durationMs": {
-                "anyOf": [
-                  {
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
                     "type": "integer",
-                    "exclusiveMinimum": 0,
+                    "minimum": 0,
                     "maximum": 3600000
                   },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "type": {
-                "type": "string",
-                "const": "evidence_gap"
-              },
-              "parameters": {
-                "type": "object",
-                "properties": {},
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "id",
-              "laneKey",
-              "traceOffsetMs",
-              "sequence",
-              "durationMs",
-              "type",
-              "parameters"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "laneKey": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "traceOffsetMs": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 3600000
-              },
-              "sequence": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 10000
-              },
-              "durationMs": {
-                "anyOf": [
-                  {
+                  "sequence": {
                     "type": "integer",
-                    "exclusiveMinimum": 0,
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "replay_reading"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
                     "maximum": 3600000
                   },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "type": {
-                "type": "string",
-                "const": "signer_unavailable"
-              },
-              "parameters": {
-                "type": "object",
-                "properties": {},
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "id",
-              "laneKey",
-              "traceOffsetMs",
-              "sequence",
-              "durationMs",
-              "type",
-              "parameters"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "laneKey": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "traceOffsetMs": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 3600000
-              },
-              "sequence": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 10000
-              },
-              "durationMs": {
-                "anyOf": [
-                  {
+                  "sequence": {
                     "type": "integer",
-                    "exclusiveMinimum": 0,
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "sequence_break"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "cumulativeMilliWh": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)$"
+                      }
+                    },
+                    "required": ["cumulativeMilliWh"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
                     "maximum": 3600000
                   },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "type": {
-                "type": "string",
-                "const": "signer_restored"
-              },
-              "parameters": {
-                "type": "object",
-                "properties": {},
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "id",
-              "laneKey",
-              "traceOffsetMs",
-              "sequence",
-              "durationMs",
-              "type",
-              "parameters"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "laneKey": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "traceOffsetMs": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 3600000
-              },
-              "sequence": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 10000
-              },
-              "durationMs": {
-                "anyOf": [
-                  {
+                  "sequence": {
                     "type": "integer",
-                    "exclusiveMinimum": 0,
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "evidence_gap"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
                     "maximum": 3600000
                   },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "type": {
-                "type": "string",
-                "const": "top_up_failure"
-              },
-              "parameters": {
-                "type": "object",
-                "properties": {},
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "id",
-              "laneKey",
-              "traceOffsetMs",
-              "sequence",
-              "durationMs",
-              "type",
-              "parameters"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "laneKey": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "traceOffsetMs": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 3600000
-              },
-              "sequence": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 10000
-              },
-              "durationMs": {
-                "anyOf": [
-                  {
+                  "sequence": {
                     "type": "integer",
-                    "exclusiveMinimum": 0,
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "signer_unavailable"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
                     "maximum": 3600000
                   },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "type": {
-                "type": "string",
-                "const": "tempo_unavailable"
-              },
-              "parameters": {
-                "type": "object",
-                "properties": {},
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "id",
-              "laneKey",
-              "traceOffsetMs",
-              "sequence",
-              "durationMs",
-              "type",
-              "parameters"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "laneKey": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "traceOffsetMs": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 3600000
-              },
-              "sequence": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 10000
-              },
-              "durationMs": {
-                "anyOf": [
-                  {
+                  "sequence": {
                     "type": "integer",
-                    "exclusiveMinimum": 0,
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "signer_restored"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
                     "maximum": 3600000
                   },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "type": {
-                "type": "string",
-                "const": "tempo_restored"
-              },
-              "parameters": {
-                "type": "object",
-                "properties": {},
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "id",
-              "laneKey",
-              "traceOffsetMs",
-              "sequence",
-              "durationMs",
-              "type",
-              "parameters"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "laneKey": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9._:-]+$"
-              },
-              "traceOffsetMs": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 3600000
-              },
-              "sequence": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 10000
-              },
-              "durationMs": {
-                "anyOf": [
-                  {
+                  "sequence": {
                     "type": "integer",
-                    "exclusiveMinimum": 0,
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "top_up_failure"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
                     "maximum": 3600000
                   },
-                  {
-                    "type": "null"
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "tempo_unavailable"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
                   }
-                ]
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
               },
-              "type": {
-                "type": "string",
-                "const": "protection_tick"
-              },
-              "parameters": {
+              {
                 "type": "object",
-                "properties": {},
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600000
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "tempo_restored"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "laneKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "traceOffsetMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600000
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 3600000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "protection_tick"
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "laneKey",
+                  "traceOffsetMs",
+                  "sequence",
+                  "durationMs",
+                  "type",
+                  "parameters"
+                ],
                 "additionalProperties": false
               }
-            },
-            "required": [
-              "id",
-              "laneKey",
-              "traceOffsetMs",
-              "sequence",
-              "durationMs",
-              "type",
-              "parameters"
-            ],
-            "additionalProperties": false
+            ]
           }
-        ]
-      }
-    },
-    "terminalCondition": {
-      "type": "string",
-      "const": "after_recovery"
+        },
+        "terminalCondition": {
+          "type": "string",
+          "enum": ["after_recovery", "after_trace"]
+        },
+        "accountingByLane": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9._:-]+$"
+          },
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "const": "matching"
+                  }
+                },
+                "required": ["mode"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "const": "custom"
+                  },
+                  "totalEnergyWh": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$"
+                  },
+                  "totalCost": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$"
+                  }
+                },
+                "required": ["mode", "totalEnergyWh", "totalCost"],
+                "additionalProperties": false
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "id",
+        "name",
+        "description",
+        "traceEpoch",
+        "corridor",
+        "lanes",
+        "events",
+        "terminalCondition"
+      ],
+      "additionalProperties": false
     }
-  },
-  "required": [
-    "schemaVersion",
-    "id",
-    "name",
-    "description",
-    "traceEpoch",
-    "corridor",
-    "lanes",
-    "events",
-    "terminalCondition"
-  ],
-  "additionalProperties": false
+  ]
 }
 ```
 

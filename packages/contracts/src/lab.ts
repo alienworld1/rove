@@ -115,7 +115,7 @@ export const labLaneSchema = z
   })
   .strict();
 
-export const labScenarioSchema = z
+export const labScenarioV1Schema = z
   .object({
     schemaVersion: z.literal(1),
     id: idSchema,
@@ -150,6 +150,28 @@ export const labScenarioSchema = z
     terminalCondition: z.literal("after_recovery"),
   })
   .strict();
+
+export const labAccountingSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("matching") }).strict(),
+  z
+    .object({
+      mode: z.literal("custom"),
+      totalEnergyWh: decimalSchema,
+      totalCost: decimalSchema,
+    })
+    .strict(),
+]);
+export const labScenarioV2Schema = labScenarioV1Schema
+  .extend({
+    schemaVersion: z.literal(2),
+    terminalCondition: z.enum(["after_recovery", "after_trace"]),
+    accountingByLane: z.record(idSchema, labAccountingSchema).optional(),
+  })
+  .strict();
+export const labScenarioSchema = z.discriminatedUnion("schemaVersion", [
+  labScenarioV1Schema,
+  labScenarioV2Schema,
+]);
 
 export type LabScenario = z.infer<typeof labScenarioSchema>;
 export type LabScenarioEvent = LabScenario["events"][number];

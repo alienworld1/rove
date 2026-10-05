@@ -8,7 +8,9 @@ async function handle(
   const { action } = await context.params;
   if (
     !(
-      request.method === "GET" ? ["session"] : ["invite", "end", "runs"]
+      request.method === "GET"
+        ? ["session"]
+        : ["invite", "end", "runs", "quote"]
     ).includes(action)
   )
     return new Response(null, { status: 404 });

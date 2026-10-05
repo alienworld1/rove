@@ -614,3 +614,16 @@ export const hostedRateLimits = pgTable("hosted_rate_limits", {
   windowStart: instant("window_start").notNull(),
   count: integer("count").notNull(),
 }).enableRLS();
+
+export const hostedScenarios = pgTable(
+  "hosted_scenarios",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    name: text("name").notNull(),
+    digest: text("digest").notNull(),
+    compiled: jsonb("compiled").notNull(),
+    updatedAt: instant("updated_at").notNull().defaultNow(),
+  },
+  (table) => [index("hosted_scenario_workspace_idx").on(table.workspaceId)],
+).enableRLS();

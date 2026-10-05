@@ -1,4 +1,5 @@
 "use client";
+import { navigateLab } from "./lab/lab-navigation";
 import Link from "next/link";
 import { useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -70,6 +71,12 @@ export function PrivateRunWorkspace({ session }: { session: HostedSession }) {
           className="min-h-11 rounded-sm bg-ink px-5 py-2 text-sm font-semibold text-pure disabled:opacity-50"
         >
           {start.isPending ? "Preparing…" : "Run on Tempo testnet"}
+        </button>
+        <button
+          className="min-h-11 border border-line-strong px-4 text-sm font-semibold"
+          onClick={() => navigateLab("lab")}
+        >
+          Build a custom scenario
         </button>
         <p className="text-sm text-ink-secondary">
           {session.remainingRuns} {session.remainingRuns === 1 ? "run" : "runs"}{" "}

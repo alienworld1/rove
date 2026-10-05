@@ -1,4 +1,5 @@
 "use client";
+import { navigateLab } from "./lab/lab-navigation";
 import { useEffect } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
@@ -68,6 +69,12 @@ export function HostedRunViewer({
         <Link href="/" className="min-h-11 text-sm text-ink underline">
           Explore runs and workspace
         </Link>
+        <button
+          className="min-h-11 border border-line-strong px-4 text-sm font-semibold"
+          onClick={() => navigateLab("lab", { copy: runId })}
+        >
+          Edit a copy in Lab
+        </button>
         <p className="text-sm text-ink-secondary">
           {live
             ? "Private workspace · Tempo testnet"
@@ -103,8 +110,8 @@ export function HostedRunViewer({
       ) : null}
       {run.data && !corridorId ? (
         <p role="status" className="py-12 text-sm text-ink-secondary">
-          Preparing your three-Lane Corridor. You can leave this page and resume
-          the same run from your workspace.
+          Preparing your Corridor. You can leave this page and resume the same
+          run from your workspace.
         </p>
       ) : null}
       {corridor.data ? (

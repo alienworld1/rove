@@ -1,5 +1,5 @@
 import { publishedDataResponse } from "../../published-data";
-import { engineHeaders, sameOrigin } from "../../hosted-proxy";
+import { boundedBody, engineHeaders, sameOrigin } from "../../hosted-proxy";
 import { readBaseConfig } from "@rove/config";
 import { hasDemoSession } from "../../demo-session";
 
@@ -61,15 +61,9 @@ async function proxy(
       );
     }
   }
-  const body = method === "POST" ? await request.text() : undefined;
-  if (body && Buffer.byteLength(body) > 70_000)
-    return Response.json(
-      {
-        message: "This scenario is too large. Reduce its events and try again.",
-      },
-      { status: 413, headers: { "cache-control": "no-store" } },
-    );
   try {
+    const body =
+      method === "POST" ? await boundedBody(request, 70_000) : undefined;
     const upstream = await fetch(
       new URL(`/api/lab/${path.join("/")}`, config.ENGINE_ORIGIN),
       {
@@ -90,10 +84,18 @@ async function proxy(
         "cache-control": "no-store",
       },
     });
-  } catch {
+  } catch (error) {
     return Response.json(
-      { message: "Corridor Lab is unavailable right now. Try again." },
-      { status: 503, headers: { "cache-control": "no-store" } },
+      {
+        message:
+          error instanceof RangeError
+            ? "This scenario is too large. Reduce its events and try again."
+            : "Corridor Lab is unavailable right now. Try again.",
+      },
+      {
+        status: error instanceof RangeError ? 413 : 503,
+        headers: { "cache-control": "no-store" },
+      },
     );
   }
 }

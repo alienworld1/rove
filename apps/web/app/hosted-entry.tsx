@@ -1,4 +1,7 @@
 "use client";
+import dynamic from "next/dynamic";
+import { useLabNavigation } from "./lab/lab-navigation";
+import { useLabDraft } from "./lab/lab-draft-store";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -9,7 +12,12 @@ import { PublishedRunList } from "./published-run-list";
 import { InviteAccessForm } from "./invite-access-form";
 import { PrivateRunWorkspace } from "./private-run-workspace";
 import { HostedRunViewer } from "./hosted-run-viewer";
+const LabWorkspace = dynamic(() =>
+  import("./lab/lab-workspace").then((module) => module.LabWorkspace),
+);
 export function HostedEntry({ runId }: { runId: string | null }) {
+  const navigation = useLabNavigation();
+  const selectedRunId = navigation.runId ?? runId;
   const client = useQueryClient();
   const published = useQuery({
     queryKey: ["published-runs"],
@@ -39,7 +47,10 @@ export function HostedEntry({ runId }: { runId: string | null }) {
   }, [expiresAt, client]);
   useEffect(() => {
     if (session.data?.authenticated === false) {
+      useLabDraft.getState().clear();
       for (const key of [
+        "scenario",
+        "scenarios",
         "run",
         "corridor",
         "corridor-trace",
@@ -51,15 +62,31 @@ export function HostedEntry({ runId }: { runId: string | null }) {
   }, [session.data?.authenticated, client]);
   const owned = Boolean(
     session.data?.authenticated &&
-    session.data.runs.some((run) => run.id === runId) &&
-    !published.data?.some((run) => run.id === runId),
+    session.data.runs.some((run) => run.id === selectedRunId) &&
+    !published.data?.some((run) => run.id === selectedRunId),
   );
   return (
     <main className="mx-auto w-full max-w-[1720px] px-5 py-5 sm:px-8 lg:px-12">
-      {runId ? (
+      {navigation.view === "lab" ? (
+        <>
+          <AppShell connection="idle" checkedAt={null} />
+          {session.data?.authenticated ? (
+            <LabWorkspace hosted remainingRuns={session.data.remainingRuns} />
+          ) : (
+            <section className="py-12">
+              <h1 className="text-3xl font-semibold">Your Lab workspace</h1>
+              <p className="mt-3 text-sm text-ink-secondary">
+                Use an invite to build private scenarios and run them on Tempo
+                testnet.
+              </p>
+              <InviteAccessForm />
+            </section>
+          )}
+        </>
+      ) : selectedRunId ? (
         <HostedRunViewer
-          key={`${runId}:${owned}`}
-          runId={runId}
+          key={`${selectedRunId}:${owned}`}
+          runId={selectedRunId}
           owned={owned}
         />
       ) : (

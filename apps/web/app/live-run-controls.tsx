@@ -29,9 +29,9 @@ export function LiveRunControls({
           {run.status === "awaiting_chain" || run.awaiting
             ? "Waiting for Tempo confirmation"
             : run.status === "completed"
-              ? "Protection restored. Final accounting and channel closure continue automatically."
+              ? "Trace complete. Final accounting continues; matching Lanes can close."
               : run.status === "initializing"
-                ? "Preparing three payment channels…"
+                ? "Preparing payment channels…"
                 : run.status === "running"
                   ? "Running on Tempo testnet"
                   : "Ready to continue"}
@@ -71,7 +71,7 @@ export function LiveRunControls({
         </p>
       ) : null}
       <p className="mt-3 text-xs text-ink-tertiary">
-        Live controls process the approved scenario. After the channels close,
+        Live controls process the saved scenario. After the channels close,
         start a new run from your workspace to replay. Unattended paused runs
         continue after 15 minutes so their reserve can be returned.
       </p>

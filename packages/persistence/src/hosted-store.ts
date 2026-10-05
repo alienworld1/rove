@@ -191,6 +191,67 @@ export class HostedStore {
       );
     return row;
   }
+  async listScenarios(token?: string) {
+    const identity = await this.identity(token);
+    const rows = await this
+      .sql`select id, name, digest, compiled from hosted_scenarios where workspace_id = ${identity.workspace_id} order by updated_at desc limit 50`;
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      digest: row.digest,
+      schemaVersion: (row.compiled as CompiledLabScenario).definition
+        .schemaVersion,
+      validationStatus: "valid",
+    }));
+  }
+  async scenario(
+    token: string | undefined,
+    id: string,
+  ): Promise<CompiledLabScenario> {
+    const identity = await this.identity(token);
+    const [row] = await this
+      .sql`select compiled from hosted_scenarios where id = ${id} and workspace_id = ${identity.workspace_id}`;
+    if (!row)
+      throw new HostedAccessError(
+        404,
+        "That scenario isn't available in this workspace.",
+      );
+    return row.compiled as CompiledLabScenario;
+  }
+  async saveScenario(token: string | undefined, compiled: CompiledLabScenario) {
+    const identity = await this.identity(token, "control_owned");
+    await this.rateLimit(`scenarios:${identity.workspace_id}`, 30);
+    if (!/^scenario-[0-9a-f-]{36}$/.test(compiled.definition.id))
+      throw new HostedAccessError(
+        400,
+        "Create an editable copy before saving this scenario.",
+      );
+    await this.sql.begin(async (tx) => {
+      await tx`select pg_advisory_xact_lock(hashtext(${identity.workspace_id}))`;
+      const [count] =
+        await tx`select count(*)::int as count from hosted_scenarios where workspace_id = ${identity.workspace_id}`;
+      const [existing] =
+        await tx`select workspace_id from hosted_scenarios where id = ${compiled.definition.id}`;
+      if (existing && existing.workspace_id !== identity.workspace_id)
+        throw new HostedAccessError(404, "That scenario isn't available.");
+      if (!existing && count.count >= 50)
+        throw new HostedAccessError(
+          409,
+          "Your workspace holds 50 scenarios. Edit an existing scenario to continue.",
+        );
+      const rows =
+        await tx`insert into hosted_scenarios (id, workspace_id, name, digest, compiled) values (${compiled.definition.id}, ${identity.workspace_id}, ${compiled.definition.name}, ${compiled.digest}, ${tx.json(compiled as unknown as postgres.JSONValue)})
+        on conflict (id) do update set name = excluded.name, digest = excluded.digest, compiled = excluded.compiled, updated_at = now() where hosted_scenarios.workspace_id = ${identity.workspace_id} returning id`;
+      if (!rows.length)
+        throw new HostedAccessError(404, "That scenario isn't available.");
+    });
+    return {
+      id: compiled.definition.id,
+      name: compiled.definition.name,
+      digest: compiled.digest,
+    };
+  }
+
   async ownsResource(
     token: string | undefined,
     id: string,
@@ -228,6 +289,14 @@ export class HostedStore {
       if (existing) {
         if (existing.workspace_id !== identity.workspace_id)
           throw new HostedAccessError(404, "That run isn't available.");
+        if (
+          (existing.compiled as CompiledLabScenario).digest !==
+          reservation.compiled.digest
+        )
+          throw new HostedAccessError(
+            409,
+            "This run was started with a different scenario. Open its saved state.",
+          );
         return existing;
       }
       const [active] =
@@ -291,7 +360,7 @@ export class HostedStore {
   async releaseClosed() {
     await this
       .sql`update hosted_admissions a set status = 'released' from lab_runs r where r.id = a.run_id and a.status = 'active'
-      and (select count(*) from jsonb_each_text(r.lane_bindings)) = 3
+      and (select count(*) from jsonb_each_text(r.lane_bindings)) = jsonb_array_length(a.compiled->'definition'->'lanes')
       and not exists (select 1 from jsonb_each_text(r.lane_bindings) b left join lanes l on l.id = b.value where l.id is null or l.state <> 'CLOSED')`;
   }
 

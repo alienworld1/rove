@@ -84,9 +84,12 @@ export class LabStore {
     compiled: CompiledLabScenario,
     replayOfRunId?: string,
     requestedRunId?: string,
+    admittedSnapshot = false,
   ) {
     const scenario = await this.getScenario(compiled.definition.id);
-    if (scenario.digest !== compiled.digest)
+    // Hosted admission has already pinned and reserved this immutable snapshot.
+    // Subsequent draft saves cannot invalidate or substitute that admitted input.
+    if (!admittedSnapshot && scenario.digest !== compiled.digest)
       throw new StoreError("VERSION_CONFLICT");
     const id = requestedRunId ?? randomUUID();
     const now = new Date().toISOString();

@@ -1,5 +1,10 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { hostedStartSchema, inviteRedemptionSchema } from "@rove/contracts";
+import {
+  hostedStartSchema,
+  hostedScenarioRefSchema,
+  idSchema,
+  inviteRedemptionSchema,
+} from "@rove/contracts";
 import { HostedAccessError, HostedStore } from "@rove/persistence";
 import { HostedRuntime } from "./hosted-runtime.js";
 
@@ -44,7 +49,66 @@ export async function handleHostedHttp(input: {
   }
   if (path === "/api/access/runs" && method === "POST") {
     const body = hostedStartSchema.parse(await readJson(request));
-    reply(response, 202, await runtime.start(token, body.runId));
+    reply(response, 202, await runtime.start(token, body.runId, body.scenario));
+    return true;
+  }
+  if (path === "/api/access/quote" && method === "POST") {
+    reply(
+      response,
+      200,
+      await runtime.quote(
+        token,
+        hostedScenarioRefSchema.parse(await readJson(request)),
+      ),
+    );
+    return true;
+  }
+  if (path === "/api/lab/scenarios" && method === "GET") {
+    await access.identity(token);
+    const template = runtime.template();
+    const { compileLabScenario } = await import("@rove/lab");
+    const { controlledMeterProfiles } =
+      await import("@rove/lab/scenarios/northstar-voltway");
+    const compiled = compileLabScenario(template, controlledMeterProfiles);
+    reply(response, 200, [
+      {
+        id: template.id,
+        name: template.name,
+        digest: compiled.digest,
+        schemaVersion: template.schemaVersion,
+        validationStatus: "valid",
+      },
+      ...(await access.listScenarios(token)),
+    ]);
+    return true;
+  }
+  if (path === "/api/lab/scenarios" && method === "POST") {
+    reply(
+      response,
+      201,
+      await runtime.saveScenario(token, await readJson(request)),
+    );
+    return true;
+  }
+  const scenario = /^\/api\/lab\/scenarios\/([^/]+)$/.exec(path);
+  if (scenario && method === "GET") {
+    await access.identity(token);
+    const id = idSchema.parse(scenario[1]);
+    let compiled;
+    if (id === "hosted-template") {
+      const { compileLabScenario } = await import("@rove/lab");
+      const { controlledMeterProfiles } =
+        await import("@rove/lab/scenarios/northstar-voltway");
+      compiled = compileLabScenario(
+        runtime.template(),
+        controlledMeterProfiles,
+      );
+    } else compiled = await access.scenario(token, id);
+    reply(response, 200, {
+      definition: compiled.definition,
+      digest: compiled.digest,
+      validationStatus: "valid",
+    });
     return true;
   }
   const run = /^\/api\/lab\/runs\/([^/]+)$/.exec(path);

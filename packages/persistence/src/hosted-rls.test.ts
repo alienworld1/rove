@@ -15,7 +15,7 @@ test(
         "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'rove_hosted_public_test') THEN CREATE ROLE rove_hosted_public_test; END IF; END $$",
       );
       await sql.unsafe(
-        "GRANT USAGE ON SCHEMA public TO rove_hosted_public_test; GRANT SELECT ON hosted_sessions, published_runs TO rove_hosted_public_test; GRANT INSERT ON published_runs TO rove_hosted_public_test",
+        "GRANT USAGE ON SCHEMA public TO rove_hosted_public_test; GRANT SELECT ON hosted_sessions, hosted_scenarios, published_runs TO rove_hosted_public_test; GRANT INSERT ON published_runs TO rove_hosted_public_test",
       );
       const tables =
         await sql`select relname, relrowsecurity from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r'`;
@@ -24,6 +24,7 @@ test(
       await sql.begin(async (tx) => {
         await tx.unsafe("SET LOCAL ROLE rove_hosted_public_test");
         assert.equal((await tx`select * from hosted_sessions`).length, 0);
+        assert.equal((await tx`select * from hosted_scenarios`).length, 0);
         await tx`select * from published_runs`;
       });
       await assert.rejects(

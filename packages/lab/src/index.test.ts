@@ -113,7 +113,7 @@ test("compiler rejects ambiguous order and unapproved profiles", () => {
   assert.throws(
     () =>
       compileLabScenario(
-        { ...northstarVoltwayScenario, schemaVersion: 2 },
+        { ...northstarVoltwayScenario, schemaVersion: 3 },
         controlledMeterProfiles,
       ),
     LabValidationError,

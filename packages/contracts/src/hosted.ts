@@ -9,7 +9,25 @@ export const inviteRedemptionSchema = z
       .regex(/^[A-Za-z0-9_-]{32,128}$/),
   })
   .strict();
-export const hostedStartSchema = z.object({ runId: z.uuid() }).strict();
+export const hostedScenarioRefSchema = z
+  .object({
+    scenarioId: idSchema,
+    scenarioDigest: z.string().regex(/^[0-9a-f]{64}$/),
+  })
+  .strict();
+export const hostedStartSchema = z
+  .object({ runId: z.uuid(), scenario: hostedScenarioRefSchema.optional() })
+  .strict();
+export const hostedQuoteSchema = z
+  .object({
+    funding: z.string().regex(/^\d+$/),
+    fees: z.string().regex(/^\d+$/),
+    assetDecimals: z.number().int(),
+    asset: z.string(),
+    remainingRuns: z.number().int(),
+    maxTransactions: z.number().int(),
+  })
+  .strict();
 export const hostedSessionSchema = z
   .object({
     authenticated: z.boolean(),

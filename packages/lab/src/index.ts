@@ -5,8 +5,8 @@ import {
   type LabScenarioEvent,
 } from "@rove/contracts";
 
-export const LAB_COMPILER_VERSION = 1;
-export type LabIssue = { path: string; message: string };
+export const LAB_COMPILER_VERSION = 2;
+export type LabIssue = { path: string; message: string; eventId?: string };
 export type CompiledLabScenario = {
   definition: LabScenario;
   events: LabScenarioEvent[];
@@ -21,12 +21,19 @@ export class LabValidationError extends Error {
   }
 }
 
-function duplicate(values: string[], path: string, issues: LabIssue[]) {
+function duplicate(
+  values: string[],
+  path: string,
+  issues: LabIssue[],
+  field = "",
+  identities?: string[],
+) {
   const seen = new Set<string>();
   for (const [index, value] of values.entries()) {
     if (seen.has(value))
       issues.push({
-        path: `${path}.${index}`,
+        path: `${path}.${index}${field ? `.${field}` : ""}`,
+        ...(identities ? { eventId: identities[index] } : {}),
         message: "Choose a unique identity.",
       });
     seen.add(value);
@@ -54,32 +61,47 @@ export function compileLabScenario(
     definition.lanes.map((lane) => lane.key),
     "lanes",
     issues,
+    "key",
   );
   duplicate(
     definition.lanes.map((lane) => lane.meterId),
     "lanes",
     issues,
+    "meterId",
   );
   duplicate(
     definition.lanes.map((lane) => lane.chargerId),
     "lanes",
     issues,
+    "chargerId",
   );
   duplicate(
     definition.lanes.map((lane) => lane.sessionId),
     "lanes",
     issues,
+    "sessionId",
   );
   duplicate(
     definition.events.map((event) => event.id),
     "events",
     issues,
+    "id",
+    definition.events.map((event) => event.id),
   );
   const laneKeys = new Set(definition.lanes.map((lane) => lane.key));
   const energyByLane = new Map(
     definition.lanes.map((lane) => [
       lane.key,
-      { milliWh: BigInt(lane.initialEnergyWh) * 1000n, offsetMs: 0 },
+      {
+        milliWh: BigInt(lane.initialEnergyWh) * 1000n,
+        offsetMs:
+          definition.schemaVersion === 2
+            ? (definition.events.find(
+                (event) =>
+                  event.laneKey === lane.key && event.type === "session_start",
+              )?.traceOffsetMs ?? 0)
+            : 0,
+      },
     ]),
   );
   for (const [index, lane] of definition.lanes.entries())
@@ -227,12 +249,161 @@ export function compileLabScenario(
       }
     }
   }
-  if (recovered.size === 0)
+  if (definition.terminalCondition === "after_recovery" && recovered.size === 0)
     issues.push({
       path: "events",
       message: "Add a recovery reading after the fault.",
     });
-  if (issues.length) throw new LabValidationError(issues);
+  if (definition.schemaVersion === 2) {
+    for (const key of Object.keys(definition.accountingByLane ?? {}))
+      if (!laneKeys.has(key))
+        issues.push({
+          path: `accountingByLane.${key}`,
+          message: "Choose a Lane in this scenario.",
+        });
+    for (const lane of definition.lanes) {
+      const laneEvents = events.filter((event) => event.laneKey === lane.key);
+      const starts = laneEvents.filter(
+        (event) => event.type === "session_start",
+      );
+      if (starts.length !== 1 || laneEvents[0]?.type !== "session_start")
+        issues.push({
+          path: `lanes.${definition.lanes.indexOf(lane)}.key`,
+          message: "Each Lane needs one session start before its other events.",
+        });
+      const unavailable = new Map<string, number>();
+      let evidenceFault: number | undefined;
+      for (const event of laneEvents) {
+        const path = `events.${definition.events.findIndex((item) => item.id === event.id)}`;
+        if (
+          ["evidence_gap", "signer_unavailable", "tempo_unavailable"].includes(
+            event.type,
+          )
+        ) {
+          if ((unavailable.get(event.type) ?? -1) > event.traceOffsetMs)
+            issues.push({
+              path: `${path}.traceOffsetMs`,
+              eventId: event.id,
+              message:
+                "These unavailable intervals overlap. Move or shorten one interval.",
+            });
+          const restoreType =
+            event.type === "signer_unavailable"
+              ? "signer_restored"
+              : event.type === "tempo_unavailable"
+                ? "tempo_restored"
+                : "recovery_reading";
+          const restore = laneEvents.find(
+            (item) =>
+              item.type === restoreType &&
+              item.traceOffsetMs > event.traceOffsetMs,
+          );
+          unavailable.set(
+            event.type,
+            event.durationMs === null
+              ? (restore?.traceOffsetMs ?? Infinity)
+              : event.traceOffsetMs + event.durationMs,
+          );
+        }
+        if (
+          [
+            "corrupt_signature",
+            "wrong_meter",
+            "replay_reading",
+            "sequence_break",
+            "evidence_gap",
+          ].includes(event.type)
+        )
+          evidenceFault = event.traceOffsetMs;
+        if (
+          event.type === "valid_reading" &&
+          (unavailable.get("evidence_gap") ?? -1) > event.traceOffsetMs
+        )
+          issues.push({
+            path: `${path}.traceOffsetMs`,
+            eventId: event.id,
+            message: "Move this reading outside the evidence gap.",
+          });
+        if (event.type === "recovery_reading") {
+          if ((unavailable.get("evidence_gap") ?? -1) > event.traceOffsetMs)
+            issues.push({
+              path: `${path}.traceOffsetMs`,
+              eventId: event.id,
+              message: "Place recovery after the evidence gap ends.",
+            });
+          evidenceFault = undefined;
+        }
+        if (
+          event.type === "signer_restored" ||
+          event.type === "tempo_restored"
+        ) {
+          const source =
+            event.type === "signer_restored"
+              ? "signer_unavailable"
+              : "tempo_unavailable";
+          const previous = laneEvents
+            .filter(
+              (item) =>
+                item.type === source &&
+                item.traceOffsetMs < event.traceOffsetMs,
+            )
+            .at(-1);
+          if (!previous || previous.durationMs !== null)
+            issues.push({
+              path: `${path}.traceOffsetMs`,
+              eventId: event.id,
+              message:
+                "Restoration needs an earlier unavailable event without an automatic duration.",
+            });
+        }
+      }
+      if (
+        definition.terminalCondition === "after_recovery" &&
+        evidenceFault !== undefined
+      )
+        issues.push({
+          path: "events",
+          message: `${lane.label} needs a recovery reading after its last evidence fault.`,
+        });
+      if (
+        !laneEvents.some(
+          (event) =>
+            event.type === "valid_reading" || event.type === "recovery_reading",
+        )
+      )
+        issues.push({
+          path: "events",
+          message: `${lane.label} needs an accepted-reading input before completion.`,
+        });
+    }
+  }
+  if (definition.schemaVersion === 2 && events.length + generated.length > 200)
+    issues.push({
+      path: "events",
+      message:
+        "Keep the trace within 200 events including automatic restorations.",
+    });
+  for (const event of generated)
+    if (definition.events.some((item) => item.id === event.id))
+      issues.push({
+        path: "events",
+        message: "An event identity conflicts with an automatic restoration.",
+      });
+  if (issues.length) {
+    // Earlier checks run in sorted order; report original indexes to the editor.
+    for (const issue of issues) {
+      if (issue.eventId) continue;
+      const match = /^events\.(\d+)(.*)$/.exec(issue.path);
+      if (match) {
+        const event = events[Number(match[1])];
+        if (event) {
+          issue.eventId = event.id;
+          issue.path = `events.${definition.events.findIndex((item) => item.id === event.id)}${match[2]}`;
+        }
+      }
+    }
+    throw new LabValidationError(issues);
+  }
   const normalized = {
     ...definition,
     lanes: [...definition.lanes].sort((a, b) => a.key.localeCompare(b.key)),
@@ -241,7 +412,7 @@ export function compileLabScenario(
   const digest = createHash("sha256")
     .update(
       JSON.stringify({
-        compilerVersion: LAB_COMPILER_VERSION,
+        compilerVersion: definition.schemaVersion === 1 ? 1 : 2,
         definition: normalized,
       }),
     )
@@ -256,8 +427,17 @@ export function compileLabScenario(
     definition: normalized,
     events: compiledEvents,
     digest,
-    compilerVersion: LAB_COMPILER_VERSION,
-    warnings: [],
+    compilerVersion: definition.schemaVersion === 1 ? 1 : 2,
+    warnings: normalized.lanes
+      .filter(
+        (lane) =>
+          lane.expectedProofIntervalMs >
+          normalized.corridor.protectionPolicy.evidenceMaxAgeMs,
+      )
+      .map(
+        (lane) =>
+          `${lane.label}: proof cadence exceeds the evidence freshness limit.`,
+      ),
   };
 }
 

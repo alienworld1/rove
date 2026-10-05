@@ -99,6 +99,13 @@
       "when": 1791125309896,
       "tag": "0013_hosted_capabilities_and_retained_proof",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791127554001,
+      "tag": "0014_same_vision",
+      "breakpoints": true
     }
   ]
 }

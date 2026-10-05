@@ -27,6 +27,7 @@ export function quoteHostedRun(
   const initial = BigInt(reservePolicy.initialDeposit);
   const increment = BigInt(reservePolicy.topUpIncrement);
   let funding = 0n;
+  let transactions = BigInt(scenario.lanes.length * 3);
   for (const lane of scenario.lanes) {
     const energies = scenario.events
       .filter(
@@ -53,9 +54,22 @@ export function quoteHostedRun(
     );
     const needed =
       value + BigInt(protectionPolicy.lowHeadroomThreshold) - initial;
-    funding +=
-      initial + (needed >= 0n ? (needed / increment + 1n) * increment : 0n);
+    const topUps = needed >= 0n ? needed / increment + 1n : 0n;
+    funding += initial + topUps * increment;
+    const partialByValue =
+      value /
+      BigInt(scenario.corridor.settlementPolicy.minimumUnsettledProtectedValue);
+    transactions +=
+      topUps +
+      (partialByValue < BigInt(energies.length)
+        ? partialByValue
+        : BigInt(energies.length));
   }
+  if (transactions > BigInt(limits.HOSTED_MAX_TRANSACTIONS_PER_RUN))
+    throw new HostedAccessError(
+      422,
+      "This scenario may exceed the transaction allowance. Increase the top-up increment or settlement threshold, or shorten the trace.",
+    );
   return {
     funding: funding.toString(),
     fees: (
@@ -77,14 +91,87 @@ export class HostedRuntime {
     private lab: CorridorLab,
     private charging: ChargingStore,
   ) {}
-  async start(token: string | undefined, runId: string) {
+  template() {
+    return {
+      ...createLiveLabScenario(),
+      id: "hosted-template",
+      traceEpoch: "2026-01-01T00:00:00.000Z",
+    };
+  }
+  private validateScenario(input: unknown) {
+    const compiled = compileLabScenario(input, controlledMeterProfiles);
+    const template = this.template();
+    const corridor = compiled.definition.corridor;
+    if (
+      corridor.tempoNetwork !== template.corridor.tempoNetwork ||
+      corridor.settlementAssetId !== template.corridor.settlementAssetId ||
+      corridor.tariff.assetDecimals !==
+        template.corridor.tariff.assetDecimals ||
+      corridor.tariff.tariffDecimals !== template.corridor.tariff.tariffDecimals
+    )
+      throw new HostedAccessError(
+        422,
+        "Use this workspace's configured Tempo testnet asset and precision.",
+      );
+    return compiled;
+  }
+  async saveScenario(token: string | undefined, input: unknown) {
+    await this.access.identity(token, "control_owned");
+    return this.access.saveScenario(token, this.validateScenario(input));
+  }
+  async quote(
+    token: string | undefined,
+    ref: { scenarioId: string; scenarioDigest: string },
+  ) {
+    const compiled = await this.access.scenario(token, ref.scenarioId);
+    if (compiled.digest !== ref.scenarioDigest)
+      throw new HostedAccessError(
+        409,
+        "This scenario changed. Save and review it again.",
+      );
+    const validated = this.validateScenario(compiled.definition);
+    const quote = quoteHostedRun(validated.definition, readHostedLimits());
+    const session = await this.access.session(token);
+    return {
+      funding: quote.funding,
+      fees: quote.fees,
+      assetDecimals: validated.definition.corridor.tariff.assetDecimals,
+      asset: validated.definition.corridor.settlementAssetId,
+      remainingRuns: session.remainingRuns,
+      maxTransactions: quote.maxTransactions,
+    };
+  }
+  async start(
+    token: string | undefined,
+    runId: string,
+    ref?: { scenarioId: string; scenarioDigest: string },
+  ) {
     try {
-      await this.access.ownsRun(token, runId);
+      const existing = await this.access.ownsRun(token, runId);
+      if (
+        ref &&
+        ((existing.compiled as CompiledLabScenario).digest !==
+          ref.scenarioDigest ||
+          (existing.compiled as CompiledLabScenario).definition.id !==
+            ref.scenarioId)
+      )
+        throw new HostedAccessError(
+          409,
+          "This run already has a different scenario.",
+        );
       return this.view(token, runId);
     } catch (error) {
       if (!(error instanceof HostedAccessError) || error.status !== 404)
         throw error;
     }
+    const owned = ref
+      ? await this.access.scenario(token, ref.scenarioId)
+      : undefined;
+    if (ref && owned!.digest !== ref.scenarioDigest)
+      throw new HostedAccessError(
+        409,
+        "This scenario changed. Save and review it again.",
+      );
     let scenario: LabScenario;
     let limits: ReturnType<typeof readHostedLimits>;
     try {
@@ -104,8 +191,11 @@ export class HostedRuntime {
         assetDecimals: payment.TEMPO_ASSET_DECIMALS,
       });
       if (readiness.state !== "ready") throw new Error("PAYMENT_UNAVAILABLE");
-      scenario = { ...createLiveLabScenario(), id: `hosted-${runId}` };
-    } catch {
+      if (ref) {
+        scenario = this.validateScenario(owned!.definition).definition;
+      } else scenario = { ...createLiveLabScenario(), id: `hosted-${runId}` };
+    } catch (error) {
+      if (error instanceof HostedAccessError) throw error;
       throw new HostedAccessError(
         503,
         "Live execution is unavailable right now. You can still explore published runs.",
@@ -204,14 +294,7 @@ export class HostedRuntime {
   async prepareQueued() {
     for (const admission of await this.access.queued()) {
       const compiled = admission.compiled as CompiledLabScenario;
-      await this.lab.saveScenario(compiled.definition);
-      await this.lab.start(
-        compiled.definition.id,
-        compiled.digest,
-        undefined,
-        admission.run_id,
-        true,
-      );
+      await this.lab.startAdmitted(compiled, admission.run_id);
       await this.lab.initialize(admission.run_id);
       const view = await this.lab.view(admission.run_id);
       if (view.run.status === "ready")

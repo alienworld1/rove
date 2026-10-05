@@ -83,7 +83,10 @@ export class CorridorLab {
         sessionId: context.lane.externalSessionId,
         instant,
         sequence: (context.lane.lastEvidenceSequence ?? 0) + 1,
-        cumulativeMilliWh: endReading.parameters.cumulativeMilliWh,
+        cumulativeMilliWh:
+          view.scenario.schemaVersion === 2
+            ? (BigInt(context.lane.trustedEnergyWh) * 1000n).toString()
+            : endReading.parameters.cumulativeMilliWh,
       });
       await this.charging.advanceLane(
         {
@@ -108,13 +111,25 @@ export class CorridorLab {
       context.lane.completion?.finalTrustedEnergyWh !== undefined &&
       !context.lane.finalCdrId
     ) {
-      const amount = BigInt(context.lane.completion.finalTrustedValue!);
+      const accounting =
+        view.scenario.schemaVersion === 2
+          ? view.scenario.accountingByLane?.[laneKey!]
+          : undefined;
+      const amount = BigInt(
+        accounting?.mode === "custom"
+          ? accounting.totalCost
+          : context.lane.completion.finalTrustedValue!,
+      );
       const precision = context.lane.tariff.assetDecimals;
       const divisor = 10n ** BigInt(precision);
       const cost = precision
         ? `${amount / divisor}.${(amount % divisor).toString().padStart(precision, "0")}`
         : amount.toString();
-      const energy = BigInt(context.lane.completion.finalTrustedEnergyWh);
+      const energy = BigInt(
+        accounting?.mode === "custom"
+          ? accounting.totalEnergyWh
+          : context.lane.completion.finalTrustedEnergyWh,
+      );
       await this.charging.advanceLane(
         {
           commandId: `${input.commandId}:cdr`,
@@ -256,6 +271,19 @@ export class CorridorLab {
     );
     if (run.created && !deferInitialization) await this.initialize(run.run.id);
     return this.view(run.run.id);
+  }
+
+  async startAdmitted(snapshot: CompiledLabScenario, runId: string) {
+    const compiled = compileLabScenario(
+      snapshot.definition,
+      controlledMeterProfiles,
+    );
+    if (compiled.digest !== snapshot.digest)
+      throw new StoreError("VERSION_CONFLICT");
+    this.checkEnvironment(compiled);
+    await this.lab.saveScenario(compiled);
+    await this.lab.createRun(compiled, undefined, runId, true);
+    return this.view(runId);
   }
 
   async initialize(runId: string) {
@@ -497,10 +525,23 @@ export class CorridorLab {
     ];
     if (!laneId) return;
     const projection = await this.charging.getLane(laneId);
+    const compiled = run.compiledSnapshot as CompiledLabScenario;
+    const projections =
+      compiled.definition.schemaVersion === 2
+        ? await Promise.all(
+            Object.values(run.laneBindings as Record<string, string>).map(
+              (id) => this.charging.getLane(id),
+            ),
+          )
+        : [projection];
     if (
-      projection.state === "PROTECTED" &&
-      projection.operations.every(
-        (operation) => operation.status === "confirmed",
+      projections.every(
+        (lane) =>
+          (compiled.definition.terminalCondition === "after_trace" ||
+            lane.state === "PROTECTED") &&
+          lane.operations.every(
+            (operation) => operation.status === "confirmed",
+          ),
       )
     )
       await this.lab.completeEvent(
@@ -554,7 +595,11 @@ export class CorridorLab {
       await this.lab.completeEvent(
         runId,
         event.id,
-        "blocked",
+        compiled.definition.schemaVersion === 2 &&
+          compiled.definition.terminalCondition === "after_recovery" &&
+          event.sequence === compiled.events.length - 1
+          ? "awaiting_chain"
+          : "blocked",
         "CONTROL_PAUSE_REQUIRED",
       );
       return;
@@ -598,7 +643,22 @@ export class CorridorLab {
         await this.drainLocal(laneId, compiled.definition.traceEpoch);
       const current = await this.charging.getLane(laneId);
       const isLast = event.sequence === compiled.events.length - 1;
-      const waiting = isLast && current.state !== "PROTECTED";
+      const finalLanes =
+        isLast && compiled.definition.schemaVersion === 2
+          ? await Promise.all(
+              Object.values(bindings).map((id) => this.charging.getLane(id)),
+            )
+          : [current];
+      const waiting =
+        isLast &&
+        finalLanes.some(
+          (lane) =>
+            (compiled.definition.terminalCondition === "after_recovery" &&
+              lane.state !== "PROTECTED") ||
+            lane.operations.some(
+              (operation) => operation.status !== "confirmed",
+            ),
+        );
       await this.lab.completeEvent(
         runId,
         event.id,
@@ -780,6 +840,7 @@ export class CorridorLab {
         if (this.localEffectsAvailable(compiled, last?.sequence ?? -1, laneKey))
           await this.drainLocal(laneId, compiled.definition.traceEpoch);
       }
+      await this.reconcileAwaiting(active.id);
     }
     const running = await this.lab.listRunningRuns();
     for (const run of running) {

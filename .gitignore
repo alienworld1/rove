@@ -68,3 +68,6 @@ test-results/
 
 **/.next/
 **/.source/
+
+# Isolated Lab development/build verification
+**/.next-lab-*/
