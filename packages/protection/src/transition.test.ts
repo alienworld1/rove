@@ -644,3 +644,110 @@ test("zero service still requires an independently verified final voucher", () =
   assert.equal(verified.lane.completion?.status, "reconciled");
   assert.equal(verified.lane.completion?.finalVoucherDigest, "zero-digest");
 });
+
+test("rejected evidence records exact event-time bound operands without authorizing its claim", () => {
+  const previous = {
+    ...lane(),
+    maxPowerWatts: "3600000",
+    serviceStarted: true,
+    state: "PROTECTED" as const,
+    evidenceHealth: "fresh" as const,
+    lastTrustedEvidenceAt: "2026-01-01T00:00:00.000Z",
+    trustedEnergyWh: "10",
+    trustedDeliveredValue: "10",
+    authorizedValue: "10",
+    protectedValue: "10",
+    protectedWatermark: "10",
+    channelId: "channel",
+    confirmedDeposit: "200",
+    chainHealth: "fresh" as const,
+    lastChainObservedAt: "2026-01-01T00:00:00.000Z",
+  };
+  const rejected = transitionLane(
+    previous,
+    {
+      type: "EvidenceObserved",
+      accepted: false,
+      evidenceHash: "bad",
+      reasonCode: "EVIDENCE_SIGNATURE_INVALID",
+      cumulativeWh: "999",
+    },
+    "2026-01-01T00:00:00.100Z",
+    "reject",
+  );
+  assert.equal(rejected.lane.authorizedValue, "10");
+  assert.equal(rejected.lane.trustedDeliveredValue, "10");
+  assert.equal(rejected.lane.state, "PAUSE_REQUIRED");
+  assert.deepEqual(rejected.calculation, {
+    evaluatedAt: "2026-01-01T00:00:00.100Z",
+    lastTrustedEvidenceAt: previous.lastTrustedEvidenceAt,
+    lastTrustedValue: "10",
+    elapsedUnverifiedMs: "100",
+    maxPowerWatts: "3600000",
+    upperBoundEnergyWh: "100",
+    unverifiedServiceBound: "100",
+    worstCaseDeliveredValue: "110",
+    protectedValue: "10",
+    exposureBound: "100",
+    exposureLimit: "100",
+    remainingMargin: "0",
+    boundApplied: true,
+  });
+  const historical = structuredClone(rejected.calculation);
+  transitionLane(
+    rejected.lane,
+    {
+      type: "EvidenceObserved",
+      accepted: true,
+      evidenceHash: "recovery",
+      cumulativeWh: "10",
+      sequence: 2,
+      observedAt: "2026-01-01T00:00:00.101Z",
+    },
+    "2026-01-01T00:00:00.101Z",
+    "recover",
+  );
+  assert.deepEqual(rejected.calculation, historical);
+});
+
+test("unfinished cessation resumes only with immutable times and source", () => {
+  const observation = {
+    type: "ServiceEnded" as const,
+    startedAt: lane().createdAt,
+    endedAt: "2026-01-01T00:00:00.100Z",
+    source: "controlled_twin" as const,
+  };
+  const stopped = transitionLane(
+    lane(),
+    observation,
+    observation.endedAt,
+    "stop",
+  );
+  const resumed = transitionLane(
+    stopped.lane,
+    observation,
+    observation.endedAt,
+    "resume",
+  );
+  assert.equal(
+    resumed.events.filter((event) => event.type === "lane.service_ended")
+      .length,
+    0,
+  );
+  assert.equal(resumed.lane.completion?.serviceEndedAt, observation.endedAt);
+  for (const changed of [
+    { ...observation, endedAt: "2026-01-01T00:00:00.200Z" },
+    { ...observation, startedAt: "2026-01-01T00:00:00.001Z" },
+    { ...observation, source: "external_adapter" as const },
+  ])
+    assert.throws(
+      () =>
+        transitionLane(
+          stopped.lane,
+          changed,
+          "2026-01-01T00:00:00.200Z",
+          "changed",
+        ),
+      /SERVICE_END_INVALID/,
+    );
+});

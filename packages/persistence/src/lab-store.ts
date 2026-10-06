@@ -85,6 +85,7 @@ export class LabStore {
     replayOfRunId?: string,
     requestedRunId?: string,
     admittedSnapshot = false,
+    playbackMode: "guided" | "continuous" = "continuous",
   ) {
     const scenario = await this.getScenario(compiled.definition.id);
     // Hosted admission has already pinned and reserved this immutable snapshot.
@@ -102,6 +103,7 @@ export class LabStore {
           scenarioId: scenario.id,
           scenarioDigest: compiled.digest,
           compiledSnapshot: compiled,
+          guidance: { mode: playbackMode, reached: [], active: null },
           status: "initializing",
           cursor: 0,
           version: 0,
@@ -233,7 +235,7 @@ export class LabStore {
   async changeTransport(
     id: string,
     expectedVersion: number,
-    status: "running" | "paused" | "ready",
+    status: "running" | "paused" | "ready" | "completed",
     allowedStatuses: Array<"ready" | "running" | "paused" | "awaiting_chain">,
     speed?: number,
   ) {
@@ -241,6 +243,10 @@ export class LabStore {
       .update(labRuns)
       .set({
         status,
+        guidance:
+          speed === undefined
+            ? sql`case when guidance is null then null else jsonb_set(guidance, '{active}', 'null'::jsonb) end`
+            : undefined,
         speed: speed === undefined ? undefined : String(speed),
         version: sql`${labRuns.version} + 1`,
         updatedAt: new Date().toISOString(),
@@ -252,6 +258,25 @@ export class LabStore {
           inArray(labRuns.status, allowedStatuses),
         ),
       )
+      .returning();
+    if (!run) throw new StoreError("VERSION_CONFLICT");
+    return run;
+  }
+
+  async setGuidance(
+    id: string,
+    expectedVersion: number,
+    guidance: import("@rove/contracts").RunGuidance,
+  ) {
+    const [run] = await this.db
+      .update(labRuns)
+      .set({
+        guidance,
+        status: guidance.active ? "paused" : undefined,
+        version: sql`${labRuns.version} + 1`,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(and(eq(labRuns.id, id), eq(labRuns.version, expectedVersion)))
       .returning();
     if (!run) throw new StoreError("VERSION_CONFLICT");
     return run;

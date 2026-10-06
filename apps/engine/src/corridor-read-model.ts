@@ -157,6 +157,11 @@ function runSummary(view: LabRunView | null) {
   const recovery = view.scenario.events.find(
     (event) => event.type === "recovery_reading",
   );
+  const committed = (id: string | undefined) =>
+    view.events.some(
+      (event) =>
+        event.id === id && ["completed", "rejected"].includes(event.status),
+    );
   return {
     id: view.run.id,
     status: view.run.status,
@@ -168,8 +173,11 @@ function runSummary(view: LabRunView | null) {
       ...view.scenario.events.map((event) => event.traceOffsetMs),
     ),
     speed: view.run.speed,
-    faultTraceOffsetMs: fault?.traceOffsetMs ?? null,
-    recoveryTraceOffsetMs: recovery?.traceOffsetMs ?? null,
+    guidance: view.run.guidance ?? null,
+    faultTraceOffsetMs: committed(fault?.id) ? fault!.traceOffsetMs : null,
+    recoveryTraceOffsetMs: committed(recovery?.id)
+      ? recovery!.traceOffsetMs
+      : null,
   };
 }
 

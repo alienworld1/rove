@@ -244,6 +244,8 @@ function corridorFromRow(row: typeof corridors.$inferSelect): CorridorConfig {
     reservePolicy: row.reservePolicy as CorridorConfig["reservePolicy"],
     settlementPolicy:
       row.settlementPolicy as CorridorConfig["settlementPolicy"],
+    accountingProfile:
+      row.accountingProfile as CorridorConfig["accountingProfile"],
     status: row.status as CorridorConfig["status"],
     createdAt: date(row.createdAt),
     updatedAt: date(row.updatedAt),
@@ -406,7 +408,9 @@ export class ChargingStore {
           reasonCode: operation.reasonCode,
         })),
       canFinish:
-        !completion &&
+        (!completion ||
+          ((!completion.finalEvidenceHash || !completion.cdr) &&
+            completion.status !== "closed")) &&
         projection.meterSource === "controlled-fixture" &&
         recovery.status === "ready",
       canClose:
@@ -468,8 +472,14 @@ export class ChargingStore {
     );
   }
 
-  async createCorridor(input: CreateCorridorInput, actor: string) {
-    const requestHash = hash(input);
+  async createCorridor(
+    input: CreateCorridorInput,
+    actor: string,
+    accountingProfile?: import("@rove/domain").AccountingProfile,
+  ) {
+    const requestHash = hash(
+      accountingProfile ? { ...input, accountingProfile } : input,
+    );
     return this.db.transaction(async (tx) => {
       await tx.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${input.commandId}, 0))`,
@@ -498,6 +508,7 @@ export class ChargingStore {
         protectionPolicy: input.protectionPolicy,
         reservePolicy: input.reservePolicy,
         settlementPolicy: input.settlementPolicy,
+        accountingProfile: accountingProfile ?? null,
         status: "ACTIVE",
         createdAt: now,
         updatedAt: now,
@@ -1099,6 +1110,7 @@ export class ChargingStore {
         )[0];
         const payload = event.payload as {
           projection?: Record<string, unknown>;
+          calculation?: import("@rove/domain").ProtectionCalculation | null;
           digest?: string;
         };
         const beforePayload = previousEvent?.payload as
@@ -1272,6 +1284,7 @@ export class ChargingStore {
                 }
               : null,
           calculation: {
+            snapshot: payload.calculation ?? null,
             tariffPerKwh: corridor.tariffPerKwh,
             tariffDecimals: corridor.tariffDecimals,
             assetDecimals: corridor.assetDecimals,
@@ -1356,7 +1369,7 @@ export class ChargingStore {
             {
               type: "calculation",
               label: "Protection calculation",
-              status: rejectedEvidence ? "not_applicable" : "complete",
+              status: payload.calculation ? "complete" : "unavailable",
               reference: null,
             },
             {
@@ -1585,7 +1598,23 @@ export class ChargingStore {
       if (input.payload.type === "ReceiveCDR") {
         if (!lane.completion || lane.state === "CLOSED")
           throw new StoreError("VALIDATION");
-        const settings = readAccountingConfig();
+        const corridor = corridorFromRow(
+          (
+            await tx
+              .select()
+              .from(corridors)
+              .where(eq(corridors.id, lane.corridorId))
+          )[0]!,
+        );
+        const profile =
+          actor === "corridor-lab" ? corridor.accountingProfile : null;
+        const settings = profile
+          ? {
+              CDR_SETTLEMENT_ASSET_ID: profile.settlementAssetId,
+              CDR_CURRENCY: profile.currency,
+              CDR_SOURCE_PARTY_ID: profile.sourcePartyId,
+            }
+          : readAccountingConfig();
         if (
           settings.CDR_SETTLEMENT_ASSET_ID.toLowerCase() !==
           lane.settlementAssetId.toLowerCase()
@@ -1656,7 +1685,8 @@ export class ChargingStore {
       // Receipt timestamps and chain freshness continue to use the real clock.
       const labClock =
         lane.tempoNetwork !== "local-simulation" ||
-        (override && input.payload.type === "TickProtectionClock")
+        (input.payload.type === "TickProtectionClock" &&
+          (override || actor !== "corridor-lab"))
           ? (
               await tx
                 .select({
@@ -1669,7 +1699,9 @@ export class ChargingStore {
             )[0]
           : undefined;
       const physicalNow =
-        labClock && override && input.payload.type === "TickProtectionClock"
+        labClock &&
+        input.payload.type === "TickProtectionClock" &&
+        (override || actor !== "corridor-lab")
           ? new Date(
               Date.parse(labClock.traceEpoch) + labClock.offset,
             ).toISOString()
@@ -2022,6 +2054,7 @@ export class ChargingStore {
             ...item.payload,
             actor,
             projection: protectionSnapshot(result.lane),
+            calculation: result.calculation ?? null,
           },
           evidenceHash: item.evidenceHash,
           channelId: item.channelId,

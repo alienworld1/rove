@@ -91,6 +91,10 @@ export class HostedRuntime {
     private lab: CorridorLab,
     private charging: ChargingStore,
   ) {}
+  scenarioReadiness(scenario: LabScenario) {
+    return this.lab.readinessForScenario(scenario);
+  }
+
   template() {
     return {
       ...createLiveLabScenario(),
@@ -130,6 +134,8 @@ export class HostedRuntime {
         "This scenario changed. Save and review it again.",
       );
     const validated = this.validateScenario(compiled.definition);
+    const readiness = this.scenarioReadiness(validated.definition);
+    if (!readiness.ready) throw new HostedAccessError(503, readiness.message!);
     const quote = quoteHostedRun(validated.definition, readHostedLimits());
     const session = await this.access.session(token);
     return {
@@ -177,13 +183,24 @@ export class HostedRuntime {
     try {
       limits = readHostedLimits();
       const payment = readPaymentConfig();
-      const accounting = readAccountingConfig();
+      let accounting: ReturnType<typeof readAccountingConfig>;
+      try {
+        accounting = readAccountingConfig();
+      } catch {
+        throw new HostedAccessError(
+          503,
+          "Final accounting is unavailable. Ask the operator to update this demo’s accounting setup.",
+        );
+      }
       if (payment.TEMPO_CHAIN_ID !== 42431) throw new Error("TESTNET_REQUIRED");
       if (
         accounting.CDR_SETTLEMENT_ASSET_ID.toLowerCase() !==
         payment.TEMPO_ASSET_ADDRESS.toLowerCase()
       )
-        throw new Error("ASSET_MISMATCH");
+        throw new HostedAccessError(
+          503,
+          "Final accounting is configured for a different settlement asset. Ask the operator to update this demo’s accounting setup.",
+        );
       const readiness = await probePaymentEnvironment({
         rpcUrl: payment.TEMPO_RPC_URL,
         chainId: payment.TEMPO_CHAIN_ID,
@@ -250,15 +267,20 @@ export class HostedRuntime {
   }
   async maintain() {
     for (const admission of await this.access.active()) {
-      const view = await this.lab.view(admission.run_id);
-      if (
-        ["ready", "paused"].includes(view.run.status) &&
+      let view = await this.lab.view(admission.run_id);
+      const unattended =
         Date.now() - new Date(admission.last_activity_at).getTime() >
-          15 * 60_000
-      ) {
+        15 * 60_000;
+      if (["ready", "paused"].includes(view.run.status) && unattended) {
+        if (view.run.guidance?.mode === "guided")
+          view = await this.lab.guidance(
+            view.run.id,
+            view.run.version,
+            "continuous",
+          );
         await this.lab.transport(view.run.id, "play", view.run.version);
       }
-      if (view.run.status !== "completed") continue;
+      if (view.run.status !== "completed" || !unattended) continue;
       const adapter = createChargingEffectAdapter(this.charging, this.access);
       for (const laneId of Object.values(view.run.laneBindings)) {
         const summary = await this.charging.getCompletion(laneId);

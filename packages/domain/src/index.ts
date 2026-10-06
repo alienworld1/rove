@@ -31,6 +31,28 @@ export type ProtectionPolicy = {
   lowHeadroomThreshold: string;
 };
 
+export type AccountingProfile = {
+  settlementAssetId: string;
+  currency: string;
+  sourcePartyId: string;
+};
+
+export type ProtectionCalculation = {
+  evaluatedAt: string;
+  lastTrustedEvidenceAt: string | null;
+  lastTrustedValue: string;
+  elapsedUnverifiedMs: string;
+  maxPowerWatts: string;
+  upperBoundEnergyWh: string;
+  unverifiedServiceBound: string;
+  worstCaseDeliveredValue: string;
+  protectedValue: string;
+  exposureBound: string;
+  exposureLimit: string;
+  remainingMargin: string;
+  boundApplied: boolean;
+};
+
 export type CorridorConfig = {
   id: string;
   name: string;
@@ -45,6 +67,7 @@ export type CorridorConfig = {
     minimumIntervalMs: number;
     minimumUnsettledProtectedValue: string;
   };
+  accountingProfile?: AccountingProfile | null;
   status: "ACTIVE" | "PAUSED" | "CLOSED";
   createdAt: string;
   updatedAt: string;
@@ -224,6 +247,7 @@ export type TransitionEffect =
       payload: { laneId: string; channelId: string; amount: string };
     };
 export type TransitionResult = {
+  calculation?: ProtectionCalculation;
   lane: Lane;
   events: {
     type: string;

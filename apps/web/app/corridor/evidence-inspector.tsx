@@ -76,7 +76,11 @@ export function EvidenceInspector({
             </dd>
           </div>
           <div>
-            <dt className="text-ink-tertiary">Cumulative energy</dt>
+            <dt className="text-ink-tertiary">
+              {evidence.accepted
+                ? "Cumulative energy"
+                : "Claimed energy · untrusted"}
+            </dt>
             <dd className="mt-0.5 font-mono text-ink">
               {evidence.cumulativeWh === null
                 ? "Unavailable"
@@ -157,10 +161,10 @@ export function EvidenceInspector({
         </div>
         <p className="mt-3 text-xs text-ink-secondary">
           {evidence?.accepted === false
-            ? "This reading did not create a new payment authorization."
+            ? "This reading cannot advance trusted service or payment authorization. Electricity may still be delivered, so Rove calculates a conservative upper bound."
             : trace.voucher
               ? `Offchain authorization of ${formatOperationalValue(trace.voucher.cumulativeAmount, assetDecimals)} ${assetUnit} was recorded.`
-              : "No new payment authorization is linked to this reading."}
+              : "No new payment authorization is linked to this event."}
         </p>
       </div>
     </div>

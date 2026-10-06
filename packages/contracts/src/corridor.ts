@@ -1,3 +1,4 @@
+import { guidanceSchema } from "./lab.ts";
 import { z } from "zod";
 import { laneStates } from "@rove/domain";
 import { sessionCompletionSchema } from "./completion.ts";
@@ -11,6 +12,24 @@ import {
   protectionPolicySchema,
   tariffSchema,
 } from "./charging.ts";
+
+export const protectionCalculationSchema = z
+  .object({
+    evaluatedAt: instantSchema,
+    lastTrustedEvidenceAt: instantSchema.nullable(),
+    lastTrustedValue: decimalSchema,
+    elapsedUnverifiedMs: decimalSchema,
+    maxPowerWatts: positiveDecimalSchema,
+    upperBoundEnergyWh: decimalSchema,
+    unverifiedServiceBound: decimalSchema,
+    worstCaseDeliveredValue: decimalSchema,
+    protectedValue: decimalSchema,
+    exposureBound: decimalSchema,
+    exposureLimit: positiveDecimalSchema,
+    remainingMargin: decimalSchema,
+    boundApplied: z.boolean(),
+  })
+  .strict();
 
 export const traceOutcomeSchema = z.enum([
   "accepted",
@@ -154,6 +173,7 @@ export const corridorOperatingViewSchema = z
           z.literal(2),
           z.literal(4),
         ]),
+        guidance: guidanceSchema.nullable().optional(),
         faultTraceOffsetMs: z.number().int().nonnegative().nullable(),
         recoveryTraceOffsetMs: z.number().int().nonnegative().nullable(),
       })
@@ -227,6 +247,7 @@ export const causalInspectorTraceSchema = z
       .nullable(),
     calculation: z
       .object({
+        snapshot: protectionCalculationSchema.nullable().optional(),
         tariffPerKwh: decimalSchema,
         tariffDecimals: z.number().int().nonnegative(),
         assetDecimals: z.number().int().nonnegative(),

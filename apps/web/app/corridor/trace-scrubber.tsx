@@ -1,4 +1,5 @@
 "use client";
+import { milestoneLabels } from "../demo-guide";
 
 import { useEffect, useRef, useState } from "react";
 import { useDrag } from "@use-gesture/react";
@@ -9,13 +10,17 @@ export function TraceScrubber({
   committedOffsets,
   selectedOffsetMs,
   onChange,
+  onInspect,
   recorded = false,
+  pauseOffsetMs = null,
 }: {
   run: NonNullable<CorridorOperatingView["activeRun"]>;
   committedOffsets: number[];
   selectedOffsetMs: number | null;
   onChange: (offsetMs: number | null) => void;
+  onInspect: (laneId: string, eventId: string) => void;
   recorded?: boolean;
+  pauseOffsetMs?: number | null;
 }) {
   const track = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -26,12 +31,22 @@ export function TraceScrubber({
       ...committedOffsets.filter((offset) => offset <= run.traceOffsetMs),
     ]),
   ];
+  points.sort((a, b) => a - b);
   const nearest = (offset: number) =>
     points.reduce(
       (best, point) =>
         Math.abs(point - offset) < Math.abs(best - offset) ? point : best,
       points[0],
     );
+  const faultMilestone = run.guidance?.reached.find(
+    (item) => item.id === "rejected",
+  );
+  const recoveryMilestone = run.guidance?.reached.find(
+    (item) => item.id === "recovered",
+  );
+  const pauseMilestone = run.guidance?.reached.find(
+    (item) => item.id === "pause",
+  );
   const nextOffset = points.find((point) => point > selected);
   useEffect(() => {
     if (!playing || !recorded) return;
@@ -83,12 +98,15 @@ export function TraceScrubber({
           type="button"
           onClick={() => {
             setPlaying(false);
-            if (run.faultTraceOffsetMs !== null)
+            if (faultMilestone)
+              onInspect(faultMilestone.laneId, faultMilestone.eventId);
+            else if (run.faultTraceOffsetMs !== null)
               onChange(nearest(run.faultTraceOffsetMs));
           }}
           disabled={
-            run.faultTraceOffsetMs === null ||
-            !points.includes(run.faultTraceOffsetMs)
+            !faultMilestone &&
+            (run.faultTraceOffsetMs === null ||
+              !points.includes(run.faultTraceOffsetMs))
           }
           className="min-h-11 rounded-sm border border-line-strong px-3 py-1.5 text-xs text-ink focus-visible:outline-2 focus-visible:outline-info disabled:text-ink-disabled"
         >
@@ -98,16 +116,35 @@ export function TraceScrubber({
           type="button"
           onClick={() => {
             setPlaying(false);
-            if (run.recoveryTraceOffsetMs !== null)
+            if (recoveryMilestone)
+              onInspect(recoveryMilestone.laneId, recoveryMilestone.eventId);
+            else if (run.recoveryTraceOffsetMs !== null)
               onChange(nearest(run.recoveryTraceOffsetMs));
           }}
           disabled={
-            run.recoveryTraceOffsetMs === null ||
-            !points.includes(run.recoveryTraceOffsetMs)
+            !recoveryMilestone &&
+            (run.recoveryTraceOffsetMs === null ||
+              !points.includes(run.recoveryTraceOffsetMs))
           }
           className="min-h-11 rounded-sm border border-line-strong px-3 py-1.5 text-xs text-ink focus-visible:outline-2 focus-visible:outline-info disabled:text-ink-disabled"
         >
           Jump to recovery
+        </button>
+        <button
+          type="button"
+          disabled={
+            !pauseMilestone &&
+            (pauseOffsetMs === null || !points.includes(pauseOffsetMs))
+          }
+          onClick={() => {
+            setPlaying(false);
+            if (pauseMilestone)
+              onInspect(pauseMilestone.laneId, pauseMilestone.eventId);
+            else if (pauseOffsetMs !== null) onChange(pauseOffsetMs);
+          }}
+          className="min-h-11 rounded-sm border border-line-strong px-3 py-1.5 text-xs text-ink focus-visible:outline-2 focus-visible:outline-info disabled:text-ink-disabled"
+        >
+          Jump to pause
         </button>
         {selectedOffsetMs !== null ? (
           <button
@@ -129,6 +166,16 @@ export function TraceScrubber({
         aria-hidden="true"
       >
         <div className="absolute left-0 right-0 top-3.5 h-px bg-line-strong" />
+        {(run.guidance?.reached ?? []).map((item) => (
+          <span
+            key={item.id}
+            title={milestoneLabels[item.id]}
+            className="absolute top-2 h-3 w-1 bg-ink-secondary"
+            style={{
+              left: `${run.traceEndMs > 0 ? (item.traceOffsetMs / run.traceEndMs) * 100 : 0}%`,
+            }}
+          />
+        ))}
         <div
           className="absolute top-1 h-6 w-px bg-info"
           style={{
@@ -136,6 +183,24 @@ export function TraceScrubber({
           }}
         />
       </div>
+      <nav
+        aria-label="Recorded milestones"
+        className="mb-2 flex flex-wrap gap-2"
+      >
+        {(run.guidance?.reached ?? []).map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => {
+              setPlaying(false);
+              onInspect(item.laneId, item.eventId);
+            }}
+            className="min-h-11 border-b border-line px-2 text-xs text-ink-secondary focus-visible:outline-2 focus-visible:outline-info"
+          >
+            {milestoneLabels[item.id]} · {item.traceOffsetMs / 1000}s
+          </button>
+        ))}
+      </nav>
       <input
         aria-label="Inspect recorded trace point"
         type="range"
@@ -151,9 +216,9 @@ export function TraceScrubber({
         className="sr-only focus:not-sr-only focus:mt-2 focus:w-full focus:accent-info"
       />
       <p className="text-[11px] text-ink-tertiary">
-        Inspection changes only the recorded view. It does not move the run or
-        payment confirmation. Fault and recovery become available after they are
-        recorded.
+        Milestone markers show committed states. Inspection changes only the
+        recorded view. It does not move the run or payment confirmation. Fault
+        and recovery become available after they are recorded.
       </p>
     </section>
   );

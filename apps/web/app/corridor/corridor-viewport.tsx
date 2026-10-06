@@ -15,6 +15,7 @@ import { AttachedInspector } from "./attached-inspector";
 import { CorridorAggregateBand } from "./corridor-aggregate-band";
 import { CorridorLane } from "./corridor-lane";
 import { CounterpartyAnchor } from "./counterparty-anchor";
+import { CorridorLegend } from "./corridor-legend";
 import { TraceScrubber } from "./trace-scrubber";
 import { useCorridorSelection } from "./corridor-selection";
 import { validateSelection } from "./selection-validation";
@@ -256,6 +257,7 @@ export function CorridorViewport({
               : "Last checked protection state"}
         </p>
       </div>
+      <CorridorLegend />
       <CorridorAggregateBand
         assetUnit={assetUnit}
         assetDecimals={view.corridor.tariff.assetDecimals}
@@ -299,6 +301,12 @@ export function CorridorViewport({
       ) : null}
       {view.activeRun ? (
         <TraceScrubber
+          pauseOffsetMs={
+            liveView.lanes
+              .flatMap((lane) => lane.trace)
+              .find((event) => event.eventType === "pause.requested")
+              ?.traceOffsetMs ?? null
+          }
           recorded={recorded}
           run={view.activeRun}
           committedOffsets={[
@@ -314,6 +322,11 @@ export function CorridorViewport({
           ].sort((a, b) => a - b)}
           selectedOffsetMs={selection.traceOffsetMs}
           onChange={selectTrace}
+          onInspect={(laneId, eventId) => {
+            eventTrigger.current = document.activeElement;
+            selection.replace(laneId, eventId, null);
+            replaceSelectionUrl(view.corridor.id, laneId, eventId, null);
+          }}
         />
       ) : null}
       <div

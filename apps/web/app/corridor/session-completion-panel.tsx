@@ -1,14 +1,11 @@
 "use client";
 
+import { useCompletionCommands } from "./use-completion-commands";
 import { DocsLink } from "../docs-link";
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CorridorOperatingView } from "@rove/contracts";
-import { readCompletion, controlCompletion, CorridorApiError } from "./api";
-import {
-  retainCompletionIntent,
-  type CompletionIntent,
-} from "./completion-intent";
+import { readCompletion } from "./api";
 import {
   formatOperationalValue,
   formatOperationalDelta,
@@ -45,46 +42,27 @@ export function SessionCompletionPanel({
   const setEvent = useCorridorSelection((state) => state.setEvent);
   const lane = view.lanes.find((lane) => lane.projection.id === focusedLaneId);
   const queryClient = useQueryClient();
+  const execute = useCompletionCommands();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const confirmationLane = useRef<string | null>(null);
   const [confirm, setConfirm] = useState<"complete" | "close" | null>(null);
-  const intents = useRef(new Map<string, CompletionIntent>());
   const summary = useQuery({
-    queryKey: ["completion", focusedLaneId, lane?.projection.version],
+    queryKey: ["completion", focusedLaneId],
     queryFn: ({ signal }) => readCompletion(focusedLaneId!, signal),
     enabled: Boolean(lane),
     refetchInterval: !readOnly && connected && trace === null ? 3000 : false,
   });
   const mutation = useMutation({
-    mutationFn: (action: "complete" | "check" | "close") => {
-      const key = `${focusedLaneId}:${action}`;
-      const intent = retainCompletionIntent(
-        intents.current.get(key),
-        focusedLaneId!,
-        summary.data!.version,
-      );
-      if (action !== "check") intents.current.set(key, intent);
-      return controlCompletion(
-        intent.laneId,
-        intent.expectedVersion,
-        action,
-        intent,
-      );
-    },
-    onSuccess: async (result, action) => {
-      intents.current.delete(`${result.laneId}:${action}`);
+    mutationFn: (action: "complete" | "check" | "close") =>
+      execute(focusedLaneId!, action),
+    onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["completion"] }),
         queryClient.invalidateQueries({ queryKey: ["corridor"] }),
         queryClient.invalidateQueries({ queryKey: ["run"] }),
       ]);
     },
-    onError: (error, action) => {
-      if (
-        error instanceof CorridorApiError &&
-        [400, 403, 404, 409, 422].includes(error.status)
-      )
-        intents.current.delete(`${focusedLaneId}:${action}`);
+    onError: () => {
       void summary.refetch();
     },
   });
@@ -282,7 +260,7 @@ export function SessionCompletionPanel({
         </p>
       ) : null}
       <div className="mt-4 flex flex-wrap gap-2">
-        {!readOnly && !completion ? (
+        {!readOnly && summary.data?.canFinish ? (
           <button
             type="button"
             disabled={

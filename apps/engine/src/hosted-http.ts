@@ -90,6 +90,17 @@ export async function handleHostedHttp(input: {
     );
     return true;
   }
+  const readiness = /^\/api\/lab\/scenarios\/([^/]+)\/readiness$/.exec(path);
+  if (readiness && method === "GET") {
+    await access.identity(token);
+    const id = idSchema.parse(readiness[1]);
+    const definition =
+      id === "hosted-template"
+        ? runtime.template()
+        : (await access.scenario(token, id)).definition;
+    reply(response, 200, runtime.scenarioReadiness(definition));
+    return true;
+  }
   const scenario = /^\/api\/lab\/scenarios\/([^/]+)$/.exec(path);
   if (scenario && method === "GET") {
     await access.identity(token);
@@ -167,7 +178,9 @@ export async function handleHostedHttp(input: {
     }
   }
   const transport =
-    /^\/api\/lab\/runs\/([^/]+)\/(play|pause|step|speed|check)$/.exec(path);
+    /^\/api\/lab\/runs\/([^/]+)\/(play|pause|step|speed|check|guidance)$/.exec(
+      path,
+    );
   if (transport && method === "POST") {
     await access.ownsRun(token, transport[1]);
     const identity = await access.identity(token, "control_owned");

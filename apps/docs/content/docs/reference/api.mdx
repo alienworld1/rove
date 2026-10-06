@@ -46,10 +46,12 @@ Source for every engine row: `apps/engine/src/server.ts`. Schemas: `packages/con
 | POST       | `/api/lanes/:id/cdr`                              | External ReceiveCDR with raw immutable record; 202                        | `laneCommandSchema`               |
 | GET / POST | `/api/lab/scenarios`                              | List / validate and save definition (201)                                 | `labScenarioSchema`               |
 | GET        | `/api/lab/scenarios/:id`                          | Definition, digest, validation status                                     | `labScenarioDetailSchema`         |
+| GET        | `/api/lab/scenarios/:id/readiness`                | Payment and final accounting compatibility; safe launch blockers          | `scenarioReadinessSchema`         |
 | POST       | `/api/lab/runs`                                   | Start saved scenario and digest; 201                                      | `labStartRunSchema`               |
 | GET        | `/api/lab/runs/:id`                               | Run, Lane projections, environment, dispatch events                       | `labRunViewSchema`                |
 | POST       | `/api/lab/runs/:id/{play,pause,step,reset,check}` | Versioned playback or check; reset retains prior history                  | `labTransportSchema`              |
 | POST       | `/api/lab/runs/:id/speed`                         | Version plus speed 0.25 / 0.5 / 1 / 2 / 4                                 | `labSpeedSchema`                  |
+| POST       | `/api/lab/runs/:id/guidance`                      | Versioned guided or continuous playback                                   | `labGuidanceCommandSchema`        |
 | GET        | `/api/events/stream`                              | Presentation SSE; query/cursor bounds and connection limit                | `realtimePresentationEventSchema` |
 
 ## Browser routes
@@ -60,11 +62,19 @@ Source for every engine row: `apps/engine/src/server.ts`. Schemas: `packages/con
 
 Browser mutations require the current session cookie and a matching `Origin`. A run start accepts an optional `runId`: retain the same identity with its scenario ID and digest when checking an interrupted start. An identical retry returns that durable run; reuse with different content conflicts. The product saves the identity in its URL before starting, so refreshing checks the existing run instead of opening another set of channels. Without `runId`, a start creates a fresh run.
 
+New product demos start with guided playback. `playbackMode` may select `guided` or `continuous`; existing saved runs keep continuous playback. Guided holds come from committed evidence and confirmed payment outcomes. Play or step releases the active hold; changing speed preserves it. Recorded milestone inspection executes no commands. The guidance endpoint accepts `expectedVersion` and `mode`, and the run response retains reached milestones and the active hold.
+
+Read scenario readiness before offering launch. The server repeats these checks before creating a run or payment channels and pins a matching accounting profile to the Corridor. Controlled local accounting uses the simulation asset independently of Tempo settings. External accounting ingestion continues to use its configured source and currency boundary. Finish and close controls remain per-Lane commands; a Corridor action coordinates those commands independently and checks saved progress after an ambiguous response.
+
 ## Commands, units, and idempotency
 
 The Lane command envelope carries `commandId`, `correlationId`, `laneId`, `expectedVersion`, optional injected development `now`, and a discriminated `payload`. Identical command delivery returns the retained outcome; changed content under the same command ID conflicts. A stale version returns conflict: refresh and reassess intent before issuing another command.
 
 Money/Wh/power are decimal integer strings with explicit scales; clocks are ISO timestamps or integer ms offsets. JSON floats cannot stand in for exact accounting strings. External evidence and CDR endpoints use the Lane envelope. `ObserveEvidence` carries raw signed text, bound transport session ID, and explicit final marker where required. `/end` accepts `CompleteLane` with `endSource: "external_adapter"`; `/cdr` accepts `ReceiveCDR` with raw immutable accounting text. External payment observations are never accepted through the generic HTTP command endpoint.
+
+Inspector responses may include an event-time `calculation.snapshot`: evaluation and last trusted evidence times, trusted value, elapsed unverified milliseconds, maximum watts, upper-bound Wh and value, worst-case delivered value, protected value, exposure limit, and remaining margin. Historical inspection uses these retained operands. Older events have no snapshot and report unavailable operands. The displayed energy bound is rounded independently; the monetary bound comes directly from the exact power, elapsed time, tariff, and asset scales.
+
+Repeating service cessation may resume unfinished final evidence and accounting only when its original start time, end time, and source match exactly. Completed channel closure remains terminal.
 
 ### Completion command example
 

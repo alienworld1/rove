@@ -13,8 +13,9 @@
     "matchers": [
       "/^\\/api\\/corridors\\/([^/]+)$/",
       "/^\\/api\\/lab\\/runs\\/([^/]+)$/",
-      "/^\\/api\\/lab\\/runs\\/([^/]+)\\/(play|pause|step|reset|speed|check)$/",
+      "/^\\/api\\/lab\\/runs\\/([^/]+)\\/(play|pause|step|reset|speed|check|guidance)$/",
       "/^\\/api\\/lab\\/scenarios\\/([^/]+)$/",
+      "/^\\/api\\/lab\\/scenarios\\/([^/]+)\\/readiness$/",
       "/^\\/api\\/lanes\\/([^/]+)$/",
       "/^\\/api\\/lanes\\/([^/]+)\\/(completion|complete|check|close|cdr|accounting|end)$/",
       "/^\\/api\\/lanes\\/([^/]+)\\/commands$/",
@@ -25,6 +26,7 @@
       "completionCommandSchema",
       "createCorridorSchema",
       "idSchema",
+      "labGuidanceCommandSchema",
       "labSpeedSchema",
       "labStartRunSchema",
       "labTransportSchema",

@@ -8,6 +8,7 @@ export function ScenarioLaunchPanel({
   busy,
   onSelect,
   onStart,
+  readiness,
 }: {
   summaries: ScenarioSummary[];
   selectedId: string;
@@ -15,6 +16,7 @@ export function ScenarioLaunchPanel({
   busy: boolean;
   onSelect: (id: string) => void;
   onStart: () => void;
+  readiness?: { ready: boolean; message: string | null };
 }) {
   return (
     <section
@@ -35,7 +37,8 @@ export function ScenarioLaunchPanel({
           <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-secondary">
             Start a controlled run to observe signed meter evidence, funded
             protection, a bounded fault, and recovery across independent
-            charging Lanes.
+            charging Lanes, then reconcile totals, close channels, and return
+            unused reserves.
           </p>
         </div>
         <label className="w-64 text-xs text-ink-secondary">
@@ -56,12 +59,18 @@ export function ScenarioLaunchPanel({
         <button
           type="button"
           onClick={onStart}
-          disabled={busy || !scenario}
+          disabled={busy || !scenario || !readiness?.ready}
           className="min-h-11 rounded-sm bg-ink px-4 py-2 text-sm font-semibold text-pure focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:bg-ink-disabled"
         >
           {busy ? "Preparing…" : "Start run"}
         </button>
       </div>
+      <p role="status" className="mt-3 text-sm text-ink-secondary">
+        {readiness?.ready
+          ? "Payment and final accounting are ready for this scenario."
+          : (readiness?.message ??
+            "Checking payment and final accounting readiness…")}
+      </p>
       {scenario ? (
         <details className="mt-5 border-t border-line pt-4">
           <summary className="cursor-pointer text-sm font-semibold text-ink focus-visible:outline-2 focus-visible:outline-info">

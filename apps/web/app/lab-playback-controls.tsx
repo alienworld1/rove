@@ -1,5 +1,6 @@
 "use client";
 
+import { DemoGuide } from "./demo-guide";
 import { useEffect, useState } from "react";
 import type { LabRunView } from "@rove/contracts";
 
@@ -11,12 +12,16 @@ export function LabPlaybackControls({
   onAction,
   onSpeed,
   onCheck,
+  onMode,
+  onInspect,
 }: {
   run: LabRunView["run"];
   busy: boolean;
   onAction: (action: "play" | "pause" | "step" | "reset") => void;
   onSpeed: (speed: number) => void;
   onCheck: () => void;
+  onMode?: (mode: "guided" | "continuous") => void;
+  onInspect?: (laneId: string, eventId: string) => void;
 }) {
   const [now, setNow] = useState(0);
   const waiting =
@@ -43,7 +48,7 @@ export function LabPlaybackControls({
           {run.status === "running"
             ? "Running"
             : run.status === "completed"
-              ? "Scenario completed through recovery."
+              ? "Trace recovered. Review the completion checklist for session totals and reserve returns."
               : run.status === "failed"
                 ? "This run needs attention. Check again or replay it."
                 : run.status === "awaiting_chain"
@@ -70,7 +75,7 @@ export function LabPlaybackControls({
             disabled={busy || finished || run.status === "initializing"}
             className="min-h-11 rounded-sm border border-line-strong bg-ink px-4 py-2 text-sm font-semibold text-pure focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
           >
-            Play
+            {run.guidance?.active ? "Continue" : "Play"}
           </button>
         )}
         <button
@@ -134,6 +139,12 @@ export function LabPlaybackControls({
           </label>
         ))}
       </fieldset>
+      <DemoGuide
+        guidance={run.guidance}
+        busy={busy}
+        onMode={onMode}
+        onInspect={onInspect}
+      />
       <p className="mt-2 text-xs text-ink-tertiary">
         Speed changes the time between trace events. Payment confirmation
         follows the network.

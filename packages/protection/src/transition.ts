@@ -2,6 +2,7 @@ import { finishCompletionTransition } from "./completion.js";
 import type { Lane, TransitionResult, VerifiedObservation } from "@rove/domain";
 import {
   conservativeTariffBound,
+  maxEnergyWh,
   nonnegativeInteger,
   tariffValue,
 } from "./index.js";
@@ -51,30 +52,41 @@ export function transitionLane(
 
   if (observation.type === "ServiceEnded") {
     if (
-      lane.completion ||
+      lane.completion?.status === "closed" ||
       milliseconds(observation.endedAt) > currentTime ||
       milliseconds(observation.endedAt) <
         milliseconds(observation.startedAt ?? lane.createdAt)
     )
       throw new RangeError("SERVICE_END_INVALID");
-    lane.completion = {
-      status: "awaiting_end_evidence",
-      serviceStartedAt: observation.startedAt ?? lane.createdAt,
-      serviceEndedAt: observation.endedAt,
-      endSource: observation.source,
-      finalVoucherDigest: null,
-      finalEvidenceHash: null,
-      finalEvidenceSequence: null,
-      finalTrustedEnergyWh: null,
-      finalTrustedValue: null,
-      finalAuthorizedValue: null,
-      finalSettledValue: null,
-      cdr: null,
-      comparison: null,
-      closure: null,
-      reasonCodes: ["FINAL_EVIDENCE_MISSING"],
-    };
-    events.push(event("lane.service_ended"));
+    if (lane.completion) {
+      if (
+        lane.completion.serviceEndedAt !== observation.endedAt ||
+        lane.completion.serviceStartedAt !==
+          (observation.startedAt ?? lane.createdAt) ||
+        lane.completion.endSource !== observation.source
+      )
+        throw new RangeError("SERVICE_END_INVALID");
+      events.push(event("lane.completion_checked"));
+    } else {
+      lane.completion = {
+        status: "awaiting_end_evidence",
+        serviceStartedAt: observation.startedAt ?? lane.createdAt,
+        serviceEndedAt: observation.endedAt,
+        endSource: observation.source,
+        finalVoucherDigest: null,
+        finalEvidenceHash: null,
+        finalEvidenceSequence: null,
+        finalTrustedEnergyWh: null,
+        finalTrustedValue: null,
+        finalAuthorizedValue: null,
+        finalSettledValue: null,
+        cdr: null,
+        comparison: null,
+        closure: null,
+        reasonCodes: ["FINAL_EVIDENCE_MISSING"],
+      };
+      events.push(event("lane.service_ended"));
+    }
   } else if (observation.type === "ChannelClosed") {
     const completion = lane.completion;
     const closure = completion?.closure;
@@ -343,8 +355,46 @@ export function transitionLane(
   lane.worstCaseDeliveredValue = worstCase.toString();
   lane.unprotectedExposureBound = exposure.toString();
 
+  const boundApplied =
+    lane.serviceStarted &&
+    lane.evidenceHealth !== "fresh" &&
+    lane.lastTrustedEvidenceAt !== null;
+  const evaluatedAt =
+    lane.completion &&
+    physicalTime > milliseconds(lane.completion.serviceEndedAt)
+      ? lane.completion.serviceEndedAt
+      : physicalNow;
+  const elapsed = lane.lastTrustedEvidenceAt
+    ? elapsedMs(
+        milliseconds(evaluatedAt),
+        milliseconds(lane.lastTrustedEvidenceAt),
+      )
+    : 0n;
+  const limit = nonnegativeInteger(lane.policy.maxUnprotectedExposure);
+  const calculation = {
+    evaluatedAt,
+    lastTrustedEvidenceAt: lane.lastTrustedEvidenceAt,
+    lastTrustedValue: lane.trustedDeliveredValue,
+    elapsedUnverifiedMs: elapsed.toString(),
+    maxPowerWatts: lane.maxPowerWatts,
+    upperBoundEnergyWh: (boundApplied
+      ? maxEnergyWh(lane.maxPowerWatts, elapsed)
+      : 0n
+    ).toString(),
+    unverifiedServiceBound: lane.unverifiedServiceBound,
+    worstCaseDeliveredValue: lane.worstCaseDeliveredValue,
+    protectedValue: lane.protectedValue,
+    exposureBound: lane.unprotectedExposureBound,
+    exposureLimit: limit.toString(),
+    remainingMargin: (exposure < limit ? limit - exposure : 0n).toString(),
+    boundApplied,
+  };
+
   if (lane.completion)
-    return finishCompletionTransition(lane, previous, observation, events, now);
+    return {
+      ...finishCompletionTransition(lane, previous, observation, events, now),
+      calculation,
+    };
 
   const reasons: string[] = [];
   if (!lane.serviceStarted) {
@@ -475,5 +525,5 @@ export function transitionLane(
   if (events.length === 0)
     events.push(event("lane.protection_checked", lane.reasonCodes[0]));
   lane.version = previous.version + 1;
-  return { lane, events, effects };
+  return { lane, events, effects, calculation };
 }

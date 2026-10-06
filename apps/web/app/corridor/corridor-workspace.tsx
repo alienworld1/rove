@@ -1,4 +1,5 @@
 "use client";
+import { CorridorCompletionChecklist } from "./corridor-completion-checklist";
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -13,6 +14,8 @@ import {
   readRun,
   readScenario,
   readScenarios,
+  readScenarioReadiness,
+  controlGuidance,
   startRun,
 } from "./api";
 import { CorridorSkeleton } from "./corridor-skeleton";
@@ -53,11 +56,35 @@ export function CorridorWorkspace({
     queryKey: ["scenarios"],
     queryFn: readScenarios,
   });
-  const effectiveScenarioId = scenarioId || summaries.data?.[0]?.id || "";
+  const effectiveScenarioId =
+    scenarioId ||
+    summaries.data?.find((item) => item.id === "northstar-voltway-presentation")
+      ?.id ||
+    summaries.data?.[0]?.id ||
+    "";
   const scenario = useQuery({
     queryKey: ["scenario", effectiveScenarioId],
     queryFn: ({ signal }) => readScenario(effectiveScenarioId, signal),
     enabled: effectiveScenarioId.length > 0 && runId === null,
+  });
+  const readiness = useQuery({
+    queryKey: [
+      "scenario-readiness",
+      effectiveScenarioId,
+      scenario.data?.digest,
+    ],
+    queryFn: ({ signal }) => readScenarioReadiness(effectiveScenarioId, signal),
+    enabled: Boolean(scenario.data) && runId === null,
+  });
+  const guidance = useMutation({
+    mutationFn: (mode: "guided" | "continuous") =>
+      controlGuidance(run.data!.run, mode),
+    onSuccess: (next) => {
+      queryClient.setQueryData(["run", next.run.id], next);
+    },
+    onError: () => {
+      void run.refetch();
+    },
   });
   const run = useQuery({
     queryKey: ["run", runId],
@@ -85,6 +112,11 @@ export function CorridorWorkspace({
   );
   const start = useMutation({
     mutationFn: () => {
+      if (!readiness.data?.ready)
+        throw new Error(
+          readiness.data?.message ??
+            "Check scenario readiness before starting.",
+        );
       const definition = scenario.data!.definition;
       const requestedRunId = crypto.randomUUID();
       const url = new URL(window.location.href);
@@ -241,6 +273,7 @@ export function CorridorWorkspace({
             <ScenarioLaunchPanel
               summaries={summaries.data}
               selectedId={effectiveScenarioId}
+              readiness={readiness.data}
               scenario={scenario.data?.definition ?? null}
               busy={start.isPending}
               onSelect={(id) => {
@@ -309,13 +342,17 @@ export function CorridorWorkspace({
               </button>
             </div>
           ) : null}
-          <CorridorViewport view={corridor.data} current={!stale} />
-          <SessionCompletionPanel view={corridor.data} connected={!stale} />
           {run.data ? (
             <LabPlaybackControls
+              onMode={(mode) => guidance.mutate(mode)}
+              onInspect={(laneId, eventId) => {
+                useCorridorSelection.getState().setTrace(null);
+                useCorridorSelection.getState().setEvent(laneId, eventId);
+              }}
               run={run.data.run}
               busy={
                 transport.isPending ||
+                guidance.isPending ||
                 realtime.connection === "reconnecting" ||
                 stale
               }
@@ -324,6 +361,13 @@ export function CorridorWorkspace({
               onCheck={() => transport.mutate({ action: "check" })}
             />
           ) : null}
+          <CorridorViewport view={corridor.data} current={!stale} />
+          <CorridorCompletionChecklist
+            view={corridor.data}
+            connected={!stale}
+          />
+          <SessionCompletionPanel view={corridor.data} connected={!stale} />
+
           <details className="mt-8 border-t border-line-strong pt-5">
             <summary className="cursor-pointer text-sm font-semibold text-ink focus-visible:outline-2 focus-visible:outline-info">
               Environment and scenario

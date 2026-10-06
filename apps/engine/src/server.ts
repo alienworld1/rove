@@ -16,6 +16,7 @@ import {
   createCorridorSchema,
   idSchema,
   labSpeedSchema,
+  labGuidanceCommandSchema,
   labStartRunSchema,
   labTransportSchema,
   laneCommandSchema,
@@ -249,6 +250,7 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
         "x-accel-buffering": "no",
       });
       response.flushHeaders();
+      response.write(": connected\n\n");
       activeStreams += 1;
       streamsBySession.set(
         sessionKey,
@@ -454,6 +456,22 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
         );
         return;
       }
+      const readinessMatch = /^\/api\/lab\/scenarios\/([^/]+)\/readiness$/.exec(
+        path,
+      );
+      if (readinessMatch && request.method === "GET") {
+        const scenario = await corridorLab.getScenario(
+          idSchema.parse(readinessMatch[1]),
+        );
+        send(
+          response,
+          200,
+          corridorLab.readinessForScenario(
+            scenario.definition as import("@rove/contracts").LabScenario,
+          ),
+        );
+        return;
+      }
       const scenarioMatch = /^\/api\/lab\/scenarios\/([^/]+)$/.exec(path);
       if (scenarioMatch && request.method === "GET") {
         const scenario = await corridorLab.getScenario(
@@ -476,6 +494,8 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
             input.scenarioDigest,
             undefined,
             input.runId,
+            false,
+            input.playbackMode ?? "guided",
           ),
         );
         return;
@@ -490,27 +510,35 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
         return;
       }
       const transportMatch =
-        /^\/api\/lab\/runs\/([^/]+)\/(play|pause|step|reset|speed|check)$/.exec(
+        /^\/api\/lab\/runs\/([^/]+)\/(play|pause|step|reset|speed|check|guidance)$/.exec(
           path,
         );
       if (transportMatch && request.method === "POST") {
         const input =
-          transportMatch[2] === "speed"
-            ? labSpeedSchema.parse(await readJson(request))
-            : labTransportSchema.parse(await readJson(request));
+          transportMatch[2] === "guidance"
+            ? labGuidanceCommandSchema.parse(await readJson(request))
+            : transportMatch[2] === "speed"
+              ? labSpeedSchema.parse(await readJson(request))
+              : labTransportSchema.parse(await readJson(request));
         const runId = idSchema.parse(transportMatch[1]);
         send(
           response,
           200,
-          transportMatch[2] === "check"
-            ? await corridorLab.check(runId, input.expectedVersion)
-            : await corridorLab.transport(
+          transportMatch[2] === "guidance"
+            ? await corridorLab.guidance(
                 runId,
-                transportMatch[2] as
-                  "play" | "pause" | "step" | "reset" | "speed",
                 input.expectedVersion,
-                "speed" in input ? Number(input.speed) : undefined,
-              ),
+                labGuidanceCommandSchema.parse(input).mode,
+              )
+            : transportMatch[2] === "check"
+              ? await corridorLab.check(runId, input.expectedVersion)
+              : await corridorLab.transport(
+                  runId,
+                  transportMatch[2] as
+                    "play" | "pause" | "step" | "reset" | "speed",
+                  input.expectedVersion,
+                  "speed" in input ? Number(input.speed) : undefined,
+                ),
         );
         return;
       }
@@ -618,7 +646,11 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
     }
     if (error instanceof LabValidationError) {
       send(response, 400, {
-        message: "Review the highlighted settings.",
+        message:
+          error.issues.find(
+            (issue) =>
+              issue.path === "readiness" || issue.path === "accounting",
+          )?.message ?? "Review the highlighted settings.",
         issues: error.issues,
       });
       return;

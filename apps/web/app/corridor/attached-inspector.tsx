@@ -4,6 +4,7 @@ import { useRef, useState, type CSSProperties, type Ref } from "react";
 import dynamic from "next/dynamic";
 import type { CausalInspectorTrace } from "@rove/contracts";
 import { EvidenceInspector } from "./evidence-inspector";
+import { ProtectionCalculation } from "./protection-calculation";
 import { PaymentInspector } from "./payment-inspector";
 
 const RawDetailsDialog = dynamic(
@@ -110,6 +111,10 @@ export function AttachedInspector({
               assetUnit={assetUnit}
             />
           )}
+          <ProtectionCalculation
+            calculation={trace.calculation}
+            assetUnit={assetUnit}
+          />
           <ol
             className="mt-4 flex flex-wrap gap-2 border-t border-line pt-3 text-[11px]"
             aria-label="Causal trace"

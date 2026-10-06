@@ -1,4 +1,5 @@
 "use client";
+import { CorridorCompletionChecklist } from "./corridor/corridor-completion-checklist";
 import { navigateLab } from "./lab/lab-navigation";
 import { useEffect } from "react";
 import Link from "next/link";
@@ -130,19 +131,24 @@ export function HostedRunViewer({
               actions resume when current reads succeed.
             </p>
           ) : null}
+          {live && run.data ? (
+            <LiveRunControls run={run.data.run} connected={current} />
+          ) : null}
           <CorridorViewport
             view={corridor.data}
             current={current}
             recorded={recorded}
+          />
+          <CorridorCompletionChecklist
+            view={corridor.data}
+            connected={current}
+            readOnly={!live}
           />
           <SessionCompletionPanel
             view={corridor.data}
             connected={current}
             readOnly={!live}
           />
-          {live && run.data ? (
-            <LiveRunControls run={run.data.run} connected={current} />
-          ) : null}
           {recorded ? (
             <p className="mt-5 text-sm text-ink-secondary">
               Each Lane is one charging session. Select a session or event to

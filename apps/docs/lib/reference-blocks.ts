@@ -229,6 +229,12 @@ export const apiEntries = [
     "labScenarioDetailSchema",
   ],
   [
+    "GET",
+    "/api/lab/scenarios/:id/readiness",
+    "Payment and final accounting compatibility; safe launch blockers",
+    "scenarioReadinessSchema",
+  ],
+  [
     "POST",
     "/api/lab/runs",
     "Start saved scenario and digest; 201",
@@ -251,6 +257,12 @@ export const apiEntries = [
     "/api/lab/runs/:id/speed",
     "Version plus speed 0.25 / 0.5 / 1 / 2 / 4",
     "labSpeedSchema",
+  ],
+  [
+    "POST",
+    "/api/lab/runs/:id/guidance",
+    "Versioned guided or continuous playback",
+    "labGuidanceCommandSchema",
   ],
   [
     "GET",

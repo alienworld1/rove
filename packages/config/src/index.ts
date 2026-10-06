@@ -142,3 +142,29 @@ const accountingSchema = z.object({
 export function readAccountingConfig(env: NodeJS.ProcessEnv = process.env) {
   return parseSettings(accountingSchema, env);
 }
+
+export function resolveDemoAccountingProfile(
+  corridor: { tempoNetwork: string; settlementAssetId: string },
+  env: NodeJS.ProcessEnv = process.env,
+) {
+  if (corridor.tempoNetwork === "local-simulation") {
+    if (corridor.settlementAssetId !== "TEST_ASSET")
+      throw new Error("ACCOUNTING_ASSET_MISMATCH");
+    return {
+      settlementAssetId: "TEST_ASSET",
+      currency: "USD",
+      sourcePartyId: "controlled-cpo",
+    };
+  }
+  const settings = readAccountingConfig(env);
+  if (
+    settings.CDR_SETTLEMENT_ASSET_ID.toLowerCase() !==
+    corridor.settlementAssetId.toLowerCase()
+  )
+    throw new Error("ACCOUNTING_ASSET_MISMATCH");
+  return {
+    settlementAssetId: settings.CDR_SETTLEMENT_ASSET_ID,
+    currency: settings.CDR_CURRENCY,
+    sourcePartyId: settings.CDR_SOURCE_PARTY_ID,
+  };
+}

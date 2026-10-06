@@ -1,6 +1,11 @@
+import { collectDemoMilestones } from "./demo-milestones.js";
 import { createHash } from "node:crypto";
 import { labRunViewSchema, type LabScenarioEvent } from "@rove/contracts";
-import { readAccountingConfig, readPaymentConfig } from "@rove/config";
+import {
+  resolveDemoAccountingProfile,
+  readAccountingConfig,
+  readPaymentConfig,
+} from "@rove/config";
 import {
   compileLabScenario,
   LabValidationError,
@@ -38,12 +43,42 @@ export class CorridorLab {
     )?.[0];
     const definition = view.scenario.lanes.find((lane) => lane.key === laneKey);
     if (!definition) throw new StoreError("ACCESS_DENIED");
-    const settings = readAccountingConfig();
+    const corridor = await this.charging.getCorridor(current.lane.corridorId);
+    let profile = corridor.accountingProfile;
+    if (!profile) {
+      try {
+        const legacy = readAccountingConfig();
+        profile = {
+          settlementAssetId: legacy.CDR_SETTLEMENT_ASSET_ID,
+          currency: legacy.CDR_CURRENCY,
+          sourcePartyId: legacy.CDR_SOURCE_PARTY_ID,
+        };
+      } catch {
+        throw new LabValidationError([
+          {
+            path: "accounting",
+            message:
+              "Final accounting is unavailable for this saved run. Ask the operator to configure matching accounting settings.",
+          },
+        ]);
+      }
+    }
+    const settings = {
+      CDR_SETTLEMENT_ASSET_ID: profile.settlementAssetId,
+      CDR_CURRENCY: profile.currency,
+      CDR_SOURCE_PARTY_ID: profile.sourcePartyId,
+    };
     if (
       settings.CDR_SETTLEMENT_ASSET_ID.toLowerCase() !==
       current.lane.settlementAssetId.toLowerCase()
     )
-      throw new StoreError("VALIDATION");
+      throw new LabValidationError([
+        {
+          path: "accounting",
+          message:
+            "Final accounting is configured for a different settlement asset. Ask the operator to update this demo’s accounting setup.",
+        },
+      ]);
     const local = current.lane.tempoNetwork === "local-simulation";
     const instant =
       current.lane.completion?.serviceEndedAt ??
@@ -172,7 +207,60 @@ export class CorridorLab {
       northstarVoltwayScenario,
       controlledMeterProfiles,
     );
-    return this.lab.saveScenario(compiled);
+    const boundary = await this.lab.saveScenario(compiled);
+    const { createPresentationScenario } =
+      await import("@rove/lab/scenarios/northstar-voltway-presentation");
+    await this.lab.saveScenario(
+      compileLabScenario(createPresentationScenario(), controlledMeterProfiles),
+    );
+    try {
+      const { createLiveLabScenario } = await import("./lab-live-scenario.js");
+      const live = {
+        ...createLiveLabScenario(),
+        id: "northstar-voltway-tempo",
+      };
+      await this.lab.saveScenario(
+        compileLabScenario(live, controlledMeterProfiles),
+      );
+    } catch {
+      /* Local execution remains available when Tempo settings are incomplete. */
+    }
+    return boundary;
+  }
+
+  readinessForScenario(scenario: import("@rove/contracts").LabScenario) {
+    let paymentCompatible = true;
+    let accountingCompatible = true;
+    try {
+      this.checkEnvironment(
+        compileLabScenario(scenario, controlledMeterProfiles),
+      );
+    } catch {
+      paymentCompatible = false;
+    }
+    try {
+      resolveDemoAccountingProfile(scenario.corridor);
+    } catch {
+      accountingCompatible = false;
+    }
+    return {
+      ready: paymentCompatible && accountingCompatible,
+      paymentCompatible,
+      accountingCompatible,
+      message: !paymentCompatible
+        ? "Payment settings do not support this scenario. Ask the operator to configure the matching Tempo network and asset."
+        : !accountingCompatible
+          ? "Final accounting is unavailable or configured for a different settlement asset. Ask the operator to update this demo’s accounting setup."
+          : null,
+    };
+  }
+
+  private requireReadiness(scenario: import("@rove/contracts").LabScenario) {
+    const readiness = this.readinessForScenario(scenario);
+    if (!readiness.ready)
+      throw new LabValidationError([
+        { path: "readiness", message: readiness.message! },
+      ]);
   }
 
   async saveScenario(input: unknown) {
@@ -237,6 +325,7 @@ export class CorridorLab {
     replayOfRunId?: string,
     requestedRunId?: string,
     deferInitialization = false,
+    playbackMode: "guided" | "continuous" = "continuous",
   ) {
     if (requestedRunId) {
       const existing = await this.lab.getRun(requestedRunId).catch((error) => {
@@ -260,12 +349,14 @@ export class CorridorLab {
       scenario.definition,
       controlledMeterProfiles,
     );
-    this.checkEnvironment(compiled);
+    this.requireReadiness(compiled.definition);
     if (compiled.digest !== digest) throw new StoreError("VERSION_CONFLICT");
     const run = await this.lab.createRun(
       compiled,
       replayOfRunId,
       requestedRunId,
+      false,
+      playbackMode,
     );
     if (run.created && !deferInitialization) await this.initialize(run.run.id);
     return this.view(run.run.id);
@@ -278,9 +369,9 @@ export class CorridorLab {
     );
     if (compiled.digest !== snapshot.digest)
       throw new StoreError("VERSION_CONFLICT");
-    this.checkEnvironment(compiled);
+    this.requireReadiness(compiled.definition);
     await this.lab.saveScenario(compiled);
-    await this.lab.createRun(compiled, undefined, runId, true);
+    await this.lab.createRun(compiled, undefined, runId, true, "guided");
     return this.view(runId);
   }
 
@@ -289,6 +380,7 @@ export class CorridorLab {
     if (run.status !== "initializing") return;
     const compiled = run.compiledSnapshot as CompiledLabScenario;
     const definition = compiled.definition;
+    this.requireReadiness(definition);
     const corridor = await this.charging.createCorridor(
       {
         commandId: stableId(`${runId}:corridor`),
@@ -297,6 +389,7 @@ export class CorridorLab {
         meters: definition.lanes.map(controlledMeterIdentity),
       },
       "corridor-lab",
+      resolveDemoAccountingProfile(definition.corridor),
     );
     const bindings: Record<string, string> = {};
     for (const lane of definition.lanes) {
@@ -333,6 +426,19 @@ export class CorridorLab {
     )
       return false;
     const adapter = createChargingEffectAdapter(this.charging, this.hosted);
+    const { lane } = await this.charging.getPaymentContext(laneId);
+    if (
+      lane.channelId &&
+      lane.confirmedDeposit !== null &&
+      lane.lastChainObservedAt &&
+      (lane.chainHealth !== "fresh" ||
+        Date.now() - Date.parse(lane.lastChainObservedAt) >=
+          Math.max(1_000, lane.policy.chainMaxAgeMs / 2))
+    ) {
+      // Guided holds stop trace inputs, while channel observations remain live.
+      // Failed reads never replace the last confirmed observation.
+      await adapter.refresh(laneId).catch(() => undefined);
+    }
     return processNextEffect(
       this.charging,
       adapter,
@@ -404,6 +510,7 @@ export class CorridorLab {
         replayOfRunId: run.replayOfRunId,
         awaiting: run.awaiting,
         failureCode: run.failureCode,
+        guidance: run.guidance ?? null,
         startedAt: new Date(run.startedAt).toISOString(),
         updatedAt: new Date(run.updatedAt).toISOString(),
       },
@@ -438,6 +545,67 @@ export class CorridorLab {
     return runId ? this.view(runId) : null;
   }
 
+  async guidance(
+    runId: string,
+    expectedVersion: number,
+    mode: "guided" | "continuous",
+  ) {
+    const { run } = await this.lab.getRun(runId);
+    const prior = run.guidance as import("@rove/contracts").RunGuidance | null;
+    await this.lab.setGuidance(runId, expectedVersion, {
+      mode,
+      reached: prior?.reached ?? [],
+      active: null,
+    });
+    return this.view(runId);
+  }
+
+  private async syncGuidance(runId: string, holdOnly = false) {
+    const { run } = await this.lab.getRun(runId);
+    const guidance = run.guidance as
+      import("@rove/contracts").RunGuidance | null;
+    if (
+      !guidance ||
+      (holdOnly && guidance.mode === "continuous") ||
+      guidance.active ||
+      ["initializing", "failed"].includes(run.status)
+    )
+      return Boolean(guidance?.active);
+    const compiled = run.compiledSnapshot as CompiledLabScenario;
+    const histories = await Promise.all(
+      Object.values(run.laneBindings as Record<string, string>).map(
+        async (laneId) => ({
+          laneId,
+          history: await this.charging.getHistory(laneId),
+        }),
+      ),
+    );
+    const candidates = collectDemoMilestones(
+      histories,
+      compiled.definition.traceEpoch,
+      run.traceOffsetMs,
+    );
+    const next = candidates.find(
+      (item) => !guidance.reached.some((reached) => reached.id === item.id),
+    );
+    if (!next) return false;
+    await this.lab.setGuidance(runId, run.version, {
+      ...guidance,
+      reached:
+        guidance.mode === "guided"
+          ? [...guidance.reached, next]
+          : [
+              ...guidance.reached,
+              ...candidates.filter(
+                (item) =>
+                  !guidance.reached.some((reached) => reached.id === item.id),
+              ),
+            ],
+      active: guidance.mode === "guided" ? next.id : null,
+    });
+    return guidance.mode === "guided";
+  }
+
   async transport(
     runId: string,
     action: "play" | "pause" | "step" | "reset" | "speed",
@@ -448,7 +616,51 @@ export class CorridorLab {
       const { run } = await this.lab.getRun(runId);
       if (run.version !== expectedVersion)
         throw new StoreError("VERSION_CONFLICT", run.version);
-      return this.start(run.scenarioId, run.scenarioDigest, run.id);
+      const snapshot = run.compiledSnapshot as CompiledLabScenario;
+      const compiled = compileLabScenario(
+        snapshot.definition,
+        controlledMeterProfiles,
+      );
+      if (compiled.digest !== run.scenarioDigest)
+        throw new StoreError("CONFLICT");
+      this.requireReadiness(compiled.definition);
+      const replay = await this.lab.createRun(
+        compiled,
+        run.id,
+        undefined,
+        true,
+        (run.guidance as import("@rove/contracts").RunGuidance | null)?.mode ??
+          "continuous",
+      );
+      await this.initialize(replay.run.id);
+      return this.view(replay.run.id);
+    }
+    if (action === "play" || action === "step") {
+      const { run, events } = await this.lab.getRun(runId);
+      const guidance = run.guidance as
+        import("@rove/contracts").RunGuidance | null;
+      if (
+        guidance?.active &&
+        events.every((event) =>
+          ["completed", "rejected", "blocked"].includes(event.status),
+        )
+      ) {
+        if (run.version !== expectedVersion)
+          throw new StoreError("VERSION_CONFLICT", run.version);
+        await this.lab.changeTransport(runId, expectedVersion, "paused", [
+          "paused",
+        ]);
+        await this.syncGuidance(runId);
+        const latest = (await this.lab.getRun(runId)).run;
+        if (
+          !(latest.guidance as import("@rove/contracts").RunGuidance | null)
+            ?.active
+        )
+          await this.lab.changeTransport(runId, latest.version, "completed", [
+            "paused",
+          ]);
+        return this.view(runId);
+      }
     }
     if (action === "step") {
       const { run } = await this.lab.getRun(runId);
@@ -456,6 +668,14 @@ export class CorridorLab {
         throw new StoreError("VERSION_CONFLICT", run.version);
       if (!["ready", "paused"].includes(run.status))
         throw new StoreError("CONFLICT");
+      const guidance = run.guidance as
+        import("@rove/contracts").RunGuidance | null;
+      if (guidance?.active) {
+        await this.lab.changeTransport(runId, expectedVersion, "paused", [
+          "paused",
+        ]);
+        return this.view(runId);
+      }
       await this.dispatchOne(runId, expectedVersion);
       return this.view(runId);
     }
@@ -552,7 +772,9 @@ export class CorridorLab {
   }
 
   async dispatchOne(runId: string, expectedVersion: number) {
+    if (await this.syncGuidance(runId, true)) return;
     const snapshot = await this.lab.getRun(runId);
+    if (snapshot.run.version !== expectedVersion) return;
     const unavailableLanes = new Set<string>();
     if (this.charging.recoveryEnforced)
       for (const [key, id] of Object.entries(
@@ -668,6 +890,7 @@ export class CorridorLab {
         outcome.reasonCodes[0],
         commandId,
       );
+      await this.syncGuidance(runId);
       if (compiled.definition.corridor.tempoNetwork !== "local-simulation")
         await this.syncAwaiting(runId).catch(() => undefined);
     } catch (error) {
@@ -825,6 +1048,7 @@ export class CorridorLab {
           await this.drainLive(laneId);
         await this.reconcileAwaiting(active.id);
         await this.syncAwaiting(active.id);
+        await this.syncGuidance(active.id);
         continue;
       }
       for (const [laneKey, laneId] of Object.entries(bindings)) {
@@ -839,6 +1063,7 @@ export class CorridorLab {
           await this.drainLocal(laneId, compiled.definition.traceEpoch);
       }
       await this.reconcileAwaiting(active.id);
+      await this.syncGuidance(active.id);
     }
     const running = await this.lab.listRunningRuns();
     for (const run of running) {

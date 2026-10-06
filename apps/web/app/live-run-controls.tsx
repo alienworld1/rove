@@ -1,7 +1,9 @@
 "use client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { LabRunView } from "@rove/contracts";
-import { controlRun } from "./corridor/api";
+import { DemoGuide } from "./demo-guide";
+import { useCorridorSelection } from "./corridor/corridor-selection";
+import { controlGuidance, controlRun } from "./corridor/api";
 export function LiveRunControls({
   run,
   connected,
@@ -16,6 +18,13 @@ export function LiveRunControls({
     onSuccess: (next) => {
       client.setQueryData(["run", run.id], next);
       void client.invalidateQueries({ queryKey: ["corridor"] });
+    },
+  });
+  const guidance = useMutation({
+    mutationFn: (mode: "guided" | "continuous") => controlGuidance(run, mode),
+    onSuccess: (next) => client.setQueryData(["run", run.id], next),
+    onError: () => {
+      void client.invalidateQueries({ queryKey: ["run", run.id] });
     },
   });
   const ready = ["ready", "paused"].includes(run.status);
@@ -49,6 +58,7 @@ export function LiveRunControls({
             disabled={
               !connected ||
               mutation.isPending ||
+              guidance.isPending ||
               (action === "play" && !ready) ||
               (action === "step" && !ready) ||
               (action === "pause" && run.status !== "running")
@@ -65,6 +75,20 @@ export function LiveRunControls({
           </button>
         ))}
       </div>
+      <DemoGuide
+        guidance={run.guidance}
+        busy={!connected || mutation.isPending || guidance.isPending}
+        onMode={(mode) => guidance.mutate(mode)}
+        onInspect={(laneId, eventId) => {
+          useCorridorSelection.getState().setTrace(null);
+          useCorridorSelection.getState().setEvent(laneId, eventId);
+        }}
+      />
+      {guidance.error ? (
+        <p role="alert" className="mt-3 text-sm text-critical">
+          {guidance.error.message}
+        </p>
+      ) : null}
       {mutation.error ? (
         <p role="alert" className="mt-3 text-sm text-critical">
           {mutation.error.message}

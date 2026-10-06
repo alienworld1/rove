@@ -136,7 +136,13 @@ test(
           ?.status,
         "rejected",
       );
-      for (const type of ["calculation", "voucher", "payment"] as const)
+      assert.equal(
+        rejectedTrace.causalSteps.find((step) => step.type === "calculation")
+          ?.status,
+        "complete",
+      );
+      assert.ok(rejectedTrace.calculation?.snapshot);
+      for (const type of ["voucher", "payment"] as const)
         assert.equal(
           rejectedTrace.causalSteps.find((step) => step.type === type)?.status,
           "not_applicable",

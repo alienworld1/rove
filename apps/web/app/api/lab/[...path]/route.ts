@@ -15,16 +15,24 @@ function allowed(path: string[], method: "GET" | "POST") {
     return false;
   if (path[0] === "scenarios")
     return method === "GET"
-      ? path.length === 1 || path.length === 2
+      ? path.length === 1 ||
+          path.length === 2 ||
+          (path.length === 3 && path[2] === "readiness")
       : path.length === 1;
   if (path[0] === "runs")
     return method === "GET"
       ? path.length === 2
       : path.length === 1 ||
           (path.length === 3 &&
-            ["play", "pause", "step", "reset", "speed", "check"].includes(
-              path[2],
-            ));
+            [
+              "play",
+              "pause",
+              "step",
+              "reset",
+              "speed",
+              "check",
+              "guidance",
+            ].includes(path[2]));
   return false;
 }
 

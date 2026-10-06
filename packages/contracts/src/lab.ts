@@ -177,11 +177,48 @@ export type LabScenario = z.infer<typeof labScenarioSchema>;
 export type LabScenarioEvent = LabScenario["events"][number];
 export type LabLaneDefinition = LabScenario["lanes"][number];
 
+export const demoMilestoneIds = [
+  "accepted",
+  "top_up",
+  "settled",
+  "rejected",
+  "risk",
+  "pause",
+  "recovered",
+] as const;
+export const demoMilestoneSchema = z
+  .object({
+    id: z.enum(demoMilestoneIds),
+    laneId: idSchema,
+    eventId: idSchema,
+    traceOffsetMs: z.number().int().nonnegative(),
+  })
+  .strict();
+export const guidanceSchema = z
+  .object({
+    mode: z.enum(["guided", "continuous"]),
+    reached: z.array(demoMilestoneSchema).max(7),
+    active: z.enum(demoMilestoneIds).nullable(),
+  })
+  .strict();
+export type RunGuidance = z.infer<typeof guidanceSchema>;
+export const scenarioReadinessSchema = z
+  .object({
+    ready: z.boolean(),
+    paymentCompatible: z.boolean(),
+    accountingCompatible: z.boolean(),
+    message: z.string().nullable(),
+  })
+  .strict();
+
 export const labTransportSchema = z
   .object({
     expectedVersion: z.number().int().nonnegative(),
   })
   .strict();
+export const labGuidanceCommandSchema = labTransportSchema.extend({
+  mode: z.enum(["guided", "continuous"]),
+});
 export const labSpeedSchema = labTransportSchema.extend({
   speed: z.union([
     z.literal(0.25),
@@ -196,6 +233,7 @@ export const labStartRunSchema = z
     scenarioId: idSchema,
     scenarioDigest: z.string().regex(/^[0-9a-f]{64}$/),
     runId: idSchema.optional(),
+    playbackMode: z.enum(["guided", "continuous"]).optional(),
   })
   .strict();
 
@@ -256,6 +294,7 @@ export const labRunViewSchema = z
         replayOfRunId: idSchema.nullable(),
         awaiting: z.unknown().nullable(),
         failureCode: z.string().nullable(),
+        guidance: guidanceSchema.nullable().optional(),
         startedAt: instantSchema,
         updatedAt: instantSchema,
       })

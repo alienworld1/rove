@@ -1,5 +1,6 @@
 import {
   causalInspectorTraceSchema,
+  scenarioReadinessSchema,
   completionSummarySchema,
   corridorOperatingViewSchema,
   labRunViewSchema,
@@ -116,6 +117,7 @@ export async function startRun(
       scenarioId: scenario.id,
       scenarioDigest: digest,
       runId,
+      playbackMode: "guided",
     }),
   );
 }
@@ -222,5 +224,27 @@ export async function controlCompletion(
 export async function readAccountingRecord(laneId: string) {
   return readJson(
     `/api/charging/lanes/${encodeURIComponent(laneId)}/accounting`,
+  );
+}
+
+export async function readScenarioReadiness(id: string, signal?: AbortSignal) {
+  return parseRead(
+    scenarioReadinessSchema,
+    await readJson(
+      `/api/lab/scenarios/${encodeURIComponent(id)}/readiness`,
+      undefined,
+      signal,
+    ),
+  );
+}
+export async function controlGuidance(
+  run: LabRunView["run"],
+  mode: "guided" | "continuous",
+) {
+  return labRunViewSchema.parse(
+    await readJson(`/api/lab/runs/${encodeURIComponent(run.id)}/guidance`, {
+      expectedVersion: run.version,
+      mode,
+    }),
   );
 }

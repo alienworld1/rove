@@ -47,6 +47,21 @@ export function LaneFocusDetails({
       <div className="col-span-4">
         <DocsLink topic="protection">How protection works</DocsLink>
       </div>
+      {BigInt(projection.unverifiedServiceBound) > BigInt(0) ? (
+        <div className="col-span-4 border-l-2 border-risk pl-2">
+          <dt className="font-semibold text-ink">
+            Why the risk envelope grows
+          </dt>
+          <dd>
+            The last trusted reading remains the billing frontier. Maximum
+            charger power and elapsed trace time bound possible additional
+            electricity.{" "}
+            {projection.state === "PAUSE_REQUIRED"
+              ? "The exposure limit is exhausted, so this Lane must pause."
+              : "Select a risk event to inspect the calculation."}
+          </dd>
+        </div>
+      ) : null}
       {details.map(([label, value]) => (
         <div key={label} className="min-w-0">
           <dt>{label}</dt>

@@ -12,6 +12,7 @@ import {
 import {
   readScenarios,
   readScenario,
+  readScenarioReadiness,
   readRun,
   saveScenario,
   startRun,
@@ -175,6 +176,15 @@ export function useLabWorkspaceModel({
       await client.invalidateQueries({ queryKey: ["scenarios"] });
       if (useLabDraft.getState().revision !== revision) return;
       if (runAfter) {
+        const readiness = await readScenarioReadiness(saved.id);
+        if (!readiness.ready) {
+          setQuote(null);
+          setMessage(
+            readiness.message ??
+              "Payment and final accounting need attention before this scenario can start.",
+          );
+          return;
+        }
         if (hosted) {
           const quoted = hostedQuoteSchema.parse(
             await hostedJson("/api/access/quote", {

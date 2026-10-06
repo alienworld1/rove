@@ -194,6 +194,18 @@ test(
           );
           assert.equal(waiting.unverifiedServiceBound, "0");
           assert.equal(waiting.chainObservedAt, wallTime);
+          await store.advanceLane(
+            {
+              laneId: c.id,
+              expectedVersion: waiting.version,
+              commandId: randomUUID(),
+              correlationId: view.run.id,
+              now: wallTime,
+              payload: { type: "TickProtectionClock" },
+            },
+            "engine-recovery",
+          );
+          assert.equal((await store.getLane(c.id)).unverifiedServiceBound, "0");
         }
         if (event?.id === "reading-lane-c-4") return;
       }

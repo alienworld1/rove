@@ -34,3 +34,32 @@ test("rejects fractional and uncommitted trace positions", () => {
   assert.equal(validateSelection(view, null, null, 50.5).traceOffsetMs, null);
   assert.equal(validateSelection(view, null, null, 75).traceOffsetMs, null);
 });
+
+test("keeps saved milestone evidence after recent history rolls over", () => {
+  const saved = {
+    ...view,
+    activeRun: {
+      ...view.activeRun,
+      guidance: {
+        mode: "guided",
+        active: null,
+        reached: [
+          {
+            id: "pause",
+            laneId: "lane-a",
+            eventId: "older-event",
+            traceOffsetMs: 25,
+          },
+        ],
+      },
+    },
+  } as CorridorOperatingView;
+  assert.equal(
+    validateSelection(saved, "lane-a", "older-event", null).changed,
+    false,
+  );
+  assert.equal(
+    validateSelection(saved, "lane-b", "older-event", null).eventId,
+    null,
+  );
+});

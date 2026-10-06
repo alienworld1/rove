@@ -12,6 +12,10 @@ export function validateSelection(
   const event = eventId
     ? lane?.trace.find((candidate) => candidate.eventId === eventId)
     : null;
+  const savedMilestone = view.activeRun?.guidance?.reached.find(
+    (item) => item.laneId === laneId && item.eventId === eventId,
+  );
+  const validEventId = event?.eventId ?? savedMilestone?.eventId ?? null;
   const validTrace =
     traceOffsetMs !== null &&
     view.activeRun !== null &&
@@ -25,11 +29,11 @@ export function validateSelection(
     );
   return {
     laneId: lane?.projection.id ?? null,
-    eventId: event?.eventId ?? null,
+    eventId: validEventId,
     traceOffsetMs: validTrace ? traceOffsetMs : null,
     changed:
       (laneId !== null && !lane) ||
-      (eventId !== null && !event) ||
+      (eventId !== null && !validEventId) ||
       (traceOffsetMs !== null && !validTrace),
   };
 }
