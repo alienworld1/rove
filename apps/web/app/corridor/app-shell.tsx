@@ -1,6 +1,7 @@
 "use client";
 import { navigateLab, useLabNavigation } from "../lab/lab-navigation";
 import { DocsLink } from "../docs-link";
+import Image from "next/image";
 import type { ConnectionState } from "./use-corridor-stream";
 import { MotionPreferenceToggle } from "./motion-preference-toggle";
 import Link from "next/link";
@@ -27,13 +28,13 @@ export function AppShell({
   const navigation = useLabNavigation();
   return (
     <header className="flex flex-wrap items-center justify-between gap-4 border-b border-line-strong pb-4">
-      <div className="flex items-baseline gap-4">
+      <div className="flex items-center gap-4">
         <Link
           href="/"
           aria-label="Rove home"
-          className="text-2xl font-semibold tracking-tight text-ink focus-visible:outline-2 focus-visible:outline-info"
+          className="inline-flex shrink-0 items-center focus-visible:outline-2 focus-visible:outline-info"
         >
-          Rove
+          <Image src="/rove-logo.png" alt="" width={120} height={40} />
         </Link>
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-tertiary">
           Charging assurance

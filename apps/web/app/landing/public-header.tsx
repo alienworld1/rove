@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { DocsLink } from "../docs-link";
 
@@ -7,12 +8,9 @@ export function PublicHeader() {
       <Link
         href="/"
         aria-label="Rove home"
-        className="text-3xl font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-info"
+        className="inline-flex items-center focus-visible:outline-2 focus-visible:outline-info"
       >
-        Rove
-        <span aria-hidden="true" className="text-ink-tertiary">
-          .
-        </span>
+        <Image src="/rove-logo.png" alt="" width={144} height={48} />
       </Link>
       <nav
         aria-label="Main navigation"
