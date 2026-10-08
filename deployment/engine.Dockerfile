@@ -10,4 +10,5 @@ COPY deployment/published-runs deployment/published-runs
 ENV NODE_ENV=production ACCESS_MODE=hosted ENGINE_HOST=0.0.0.0 ENGINE_PORT=4100
 EXPOSE 4100
 USER node
-CMD ["pnpm", "--filter", "@rove/engine", "start"]
+WORKDIR /app/apps/engine
+CMD ["node", "--import", "tsx", "src/server.ts"]

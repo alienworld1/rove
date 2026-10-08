@@ -2,6 +2,9 @@
   "name": "rove",
   "private": true,
   "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev:web": "pnpm --filter @rove/web dev",
     "dev:engine": "pnpm --filter @rove/engine dev",
@@ -10,7 +13,13 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "build": "pnpm -r build",
-    "dev:docs": "pnpm --filter @rove/docs dev"
+    "dev:docs": "pnpm --filter @rove/docs dev",
+    "deploy:setup": "node deployment/setup.mjs",
+    "deploy:check": "pnpm --filter @rove/engine deploy:check",
+    "deploy:db": "node deployment/run.mjs migrate",
+    "deploy:seed": "pnpm deploy:admin seed",
+    "deploy:admin": "node deployment/run.mjs admin",
+    "deploy:probe": "node deployment/run.mjs probe"
   },
   "devDependencies": {
     "prettier": "^3.6.2",

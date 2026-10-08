@@ -8,6 +8,8 @@ The hosted product offers public **Explore runs** analysis and **Invite access**
 
 Set `ACCESS_MODE=hosted` explicitly. Invitations, opaque sessions, ownership, spending reservations, and pending work persist in PostgreSQL. Public records are published only through an operator command after verifying the real lifecycle. See [hosted deployment](docs/hosted-deployment.md) for Vercel web/docs, Supabase PostgreSQL, and a single persistent engine, including a Koyeb free-preview option and its sleep limitation.
 
+For a new deployment, run `pnpm deploy:setup` to create private per-service settings with a shared service credential. Fill in your provider URLs and Supabase credentials, then run `pnpm deploy:db`, `pnpm deploy:seed`, and `pnpm deploy:check`. The [first deployment walkthrough](docs/hosted-deployment.md#first-deployment-from-a-fresh-account) covers provider settings, environment imports, and enabling live invites after public analysis works.
+
 ## Run locally
 
 Use Node.js 22 and pnpm 11.19.0. Prepare the ignored environment file and PostgreSQL described below before starting the services. From the repository root:

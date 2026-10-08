@@ -4,13 +4,60 @@ The hosted product offers **Explore runs** and **Invite access**. Public visitor
 
 ## Services
 
+The easiest starting point is Supabase Free, a Koyeb free Web Service, and two Vercel projects connected to the same Git repository. Start with published analysis, then enable invited live runs. No Supabase Auth, Storage, Edge Functions, Redis, or database connection on Vercel is needed. Choose Frankfurt for Koyeb Free and a nearby Supabase region. Keep the public app and docs on their default provider domains initially; add custom domains later and update both origins before rebuilding.
+
+Free hosting suits an occasional demo, not an availability promise. [Supabase Free](https://supabase.com/pricing) includes a 500 MB database and pauses after a week of inactivity; it has no automatic backups. Keep an independent database backup before migrations. [Vercel Hobby](https://vercel.com/docs/plans/hobby) is for personal, non-commercial use. For a reliable live demo, start by upgrading the engine to an always-on instance with 1 GB RAM and measure peak memory during a real run. Koyeb's current [Eco instance list](https://www.koyeb.com/docs/reference/instances) has `eco-small` at approximately $5.36/month before other usage charges. Supabase Pro starts at $25/month if database pausing or managed backups matter. Check current prices and account eligibility when creating projects.
+
+### First deployment, from a fresh account
+
+1. Connect this repository to Vercel and create two projects: app root `apps/web`, docs root `apps/docs`. Select Next.js and Node 22.x. Enable **Include source files outside of the Root Directory** for both projects so workspace packages are available. Record the assigned production domains; the example names below are placeholders, not reserved domains. A first build may fail until origins are configured.
+2. Create a Supabase project near Frankfurt. Save its database password privately, copy its HTTPS project URL and `sb_publishable_…` key, and copy the **Session pooler** connection from **Connect**, using port **5432**. URL-encode special characters in the password and add `?sslmode=verify-full` (or `&sslmode=verify-full` if the URL already has query parameters). This works over IPv4 without a paid IPv4 add-on. Use the pooler URL for both migrations and the engine. Do not weaken certificate verification if TLS fails; check the hostname and trusted certificate chain.
+3. In Koyeb, create one **Web Service** from the same repository. Select Dockerfile `deployment/engine.Dockerfile`, build context at the repository root, Frankfurt, free instance, port **4100 / HTTP**, route **/**, and HTTP health check **/health**. Record the generated HTTPS domain. Allow a startup grace period for database recovery. Disable automatic Git deployments for this service: use the engine update procedure below. Do not change the Docker command or select a Worker Service. Until the database and env are ready, the first deployment may be unhealthy.
+4. From the repository root, initialize private settings:
+
+   ```sh
+   pnpm install --frozen-lockfile
+   pnpm deploy:setup
+   ```
+
+   Edit `deployment/engine/.env`, `deployment/web/.env`, and `deployment/docs/.env`. Replace every example domain, set `DATABASE_URL` on the engine, and set the Supabase URL and publishable key on web. Setup generates the same random service credential for web and engine, creates owner-only files, and refuses to overwrite existing settings. These files are Git-ignored. It does not copy local development credentials.
+
+5. Initialize the database and the verified public recording:
+
+   ```sh
+   pnpm deploy:db
+   pnpm deploy:seed
+   pnpm deploy:check
+   ```
+
+   Commands load the engine deployment env explicitly and give those settings precedence over your shell; you do not need to source it. Drizzle remains the only migration owner; do not also apply this history through Supabase migrations. Keep the `public` schema exposed in Data API settings. The existing migration explicitly grants anonymous SELECT on `published_runs`, so it also supports Supabase projects where new tables receive no automatic API grants. The check reads the real database and API, verifies the seeded recording is public, and confirms private tables reject anonymous reads. It never starts a payment.
+
+6. Import `deployment/engine/.env` into Koyeb's environment settings and deploy/resume the service. Verify `https://<engine-domain>/health` returns HTTP 200. Import `deployment/web/.env` into the app project's **Production** environment and `deployment/docs/.env` into docs. Both include `ENABLE_EXPERIMENTAL_COREPACK=1`; the committed build configuration uses Corepack to select pnpm 11.19.0. Redeploy both Vercel projects after saving env settings. Environment changes do not alter an existing deployment.
+7. Open docs at `/docs` and the main app in a fresh browser. Verify public run analysis, receipt links, playback, and cross-app navigation. Published analysis should continue working while the Koyeb engine sleeps. Run the HTTPS smoke checks below before sharing live invitations.
+
+At this point, analysis works with all signing keys and budgets empty. For live execution, fill **all** Tempo signing/account settings and finite budget settings in `deployment/engine/.env`, rerun `pnpm deploy:check`, and run a read-only payment probe:
+
+```sh
+pnpm deploy:probe
+```
+
+Upload the updated engine env through the maintenance flow below. Both payer and payee need funded testnet fee assets. Issue invites using `pnpm deploy:admin invite` with the allowances described below. Setup never chooses financial limits or creates invites automatically. The deployment check validates settings and storage; it does not prove RPC funding, live-run performance, proxy streaming, or recovery on the actual host.
+
+### Updating without overlapping engines
+
+Keep one engine process across deployments, not just one configured replica. Koyeb deployments can provision replacement instances while an earlier deployment exists; see its [deployment lifecycle](https://www.koyeb.com/docs/reference/deployments). This engine coordinates its worker and payer nonces in one process, so do not use overlapping rolling deployments or a second engine pointed at the same database and payer accounts.
+
+For engine updates, keep automatic Git deployments disabled. Wait until live runs are complete and channels are closed, pause the Koyeb service, and confirm its old instances have stopped. Apply any new database migrations with `pnpm deploy:db`, update the service revision/environment while paused, then resume using the latest configuration. Verify `/health` and a private workspace before issuing more invites. Koyeb exposes [pause and resume](https://www.koyeb.com/docs/build-and-deploy/cli/reference) in its control panel and CLI. Public analysis remains served by Vercel/Supabase during this maintenance window. Never run a local engine against the hosted database in parallel.
+
+Vercel app/docs deployments can remain automatic. Keep production engine credentials out of Vercel Preview environments; use `ACCESS_MODE=disabled` and the public docs origin for app previews, plus the production app origin for docs previews. Only use hosted preview access with separate database, engine, token, and payer accounts.
+
 Use two Vercel projects, rooted at `apps/web` and `apps/docs`, and one persistent Node 22 engine built with `deployment/engine.Dockerfile`. Use Supabase PostgreSQL for the engine's durable state. Keep exactly one engine replica: its worker and payer nonce coordination assume one process.
 
 For a free preview, [Koyeb's free instance](https://www.koyeb.com/docs/reference/instances) provides 512 MB RAM and 0.1 vCPU. It [sleeps after an hour without traffic](https://www.koyeb.com/docs/run-and-scale/scale-to-zero). This is a preview option, not an always-on worker guarantee. Paused unattended runs resume after 15 minutes while the engine is awake; incomplete financial work resumes after wake/restart. Public analysis reads Supabase directly and does not wake the engine. Use an always-on instance when continuous execution is required. Do not use an artificial keep-alive to bypass hosting limits.
 
 ## Database first
 
-Create a Supabase project near the engine region. Take the PostgreSQL connection string from its Connect panel. Use the direct connection or session pooler for migrations; the transaction pooler is supported for runtime (prepared statements disabled). Require TLS and retain certificate verification; never set `rejectUnauthorized: false`. Keep the privileged database credential exclusively on the engine and migration operator machine.
+Create a Supabase project near the engine region. Take the PostgreSQL connection string from its Connect panel. Prefer the session pooler on port 5432 for both migrations and runtime; direct connections also work when the host supports the project's IP version and certificate chain. Avoid the transaction pooler for this setup: disabling prepared statements alone does not address all [transaction-mode limitations](https://supabase.com/docs/guides/database/connecting-to-postgres#transaction-mode-limitations), including query pipelining. Require TLS and retain certificate verification; never set `rejectUnauthorized: false`. Keep the privileged database credential exclusively on the engine and migration operator machine.
 
 ```sh
 # With DATABASE_URL set to the privileged migration connection:
@@ -39,7 +86,7 @@ Budgets persist cumulatively in PostgreSQL. Deleting sessions, reusing an invite
 
 ## Vercel web and docs
 
-Use Node 22 and pnpm 11.19.0. The project `vercel.json` files supply build/install commands. Set the following on the web project before building:
+Use Node 22 and pnpm 11.19.0. The project `vercel.json` files supply Corepack build/install commands. Set `ENABLE_EXPERIMENTAL_COREPACK=1` on both projects. Set the following on the web project before building:
 
 ```text
 ACCESS_MODE=hosted

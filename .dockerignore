@@ -4,6 +4,7 @@
 **/.source
 **/*.tsbuildinfo
 .env*
+**/.env*
 .agent*
 .codex
 AGENTS.md

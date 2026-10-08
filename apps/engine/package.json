@@ -17,7 +17,8 @@
     "build": "tsc --noEmit",
     "proof:completion": "node --import tsx src/prove-completion.ts",
     "proof:terminal": "node --import tsx src/prove-terminal-cases.ts",
-    "hosted:admin": "node --import tsx src/hosted-admin.ts"
+    "hosted:admin": "node --import tsx src/hosted-admin.ts",
+    "deploy:check": "node --import tsx src/deployment-check.ts"
   },
   "dependencies": {
     "@noble/curves": "^1.9.1",
