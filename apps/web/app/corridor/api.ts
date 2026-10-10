@@ -48,8 +48,8 @@ async function readJson(path: string, body?: unknown, signal?: AbortSignal) {
     body: body === undefined ? undefined : JSON.stringify(body),
     cache: "no-store",
     signal: signal
-      ? AbortSignal.any([signal, AbortSignal.timeout(10_000)])
-      : AbortSignal.timeout(10_000),
+      ? AbortSignal.any([signal, AbortSignal.timeout(50_000)])
+      : AbortSignal.timeout(50_000),
   });
   const value = (await response.json()) as {
     message?: string;
@@ -145,8 +145,8 @@ export async function readCorridor(
     {
       cache: "no-store",
       signal: signal
-        ? AbortSignal.any([signal, AbortSignal.timeout(10_000)])
-        : AbortSignal.timeout(10_000),
+        ? AbortSignal.any([signal, AbortSignal.timeout(50_000)])
+        : AbortSignal.timeout(50_000),
     },
   );
   const value = (await response.json()) as { message?: string };
@@ -172,8 +172,8 @@ export async function readInspector(
     {
       cache: "no-store",
       signal: signal
-        ? AbortSignal.any([signal, AbortSignal.timeout(10_000)])
-        : AbortSignal.timeout(10_000),
+        ? AbortSignal.any([signal, AbortSignal.timeout(50_000)])
+        : AbortSignal.timeout(50_000),
     },
   );
   const value = (await response.json()) as { message?: string };

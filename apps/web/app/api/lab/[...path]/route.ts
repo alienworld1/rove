@@ -4,6 +4,7 @@ import { readBaseConfig } from "@rove/config";
 import { hasDemoSession } from "../../demo-session";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 function allowed(path: string[], method: "GET" | "POST") {
   if (
@@ -82,7 +83,7 @@ async function proxy(
         },
         body,
         cache: "no-store",
-        signal: AbortSignal.timeout(10_000),
+        signal: AbortSignal.timeout(45_000),
       },
     );
     return new Response(await upstream.text(), {

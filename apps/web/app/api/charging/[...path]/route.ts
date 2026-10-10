@@ -12,6 +12,7 @@ import {
 import { hasDemoSession } from "../../demo-session";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function GET(
   request: Request,
@@ -81,7 +82,7 @@ export async function GET(
     const upstream = await fetch(upstreamUrl, {
       headers: engineHeaders(request),
       cache: "no-store",
-      signal: AbortSignal.timeout(5_000),
+      signal: AbortSignal.timeout(45_000),
     });
     const text = await upstream.text();
     if (upstream.ok) {
@@ -169,7 +170,7 @@ export async function POST(
         },
         body: JSON.stringify(body),
         cache: "no-store",
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(45_000),
       },
     );
     const value = await upstream.json();
