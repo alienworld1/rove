@@ -19,6 +19,50 @@ const fixture = JSON.parse(
 };
 const when = "2019-08-13T10:03:37.000Z";
 
+test(
+  "health bypasses a saturated charging connection pool",
+  {
+    skip:
+      !databaseUrl && "Set DATABASE_URL to run PostgreSQL integration checks",
+  },
+  async () => {
+    const store = new ChargingStore(databaseUrl!);
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let started = 0;
+    let allStarted!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      allStarted = resolve;
+    });
+    const reads = Array.from({ length: 3 }, () =>
+      store.consistentRead(async () => {
+        if (++started === 3) allStarted();
+        await held;
+      }),
+    );
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await ready;
+      await Promise.race([
+        store.health(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("Health queued behind reads")),
+            4_000,
+          );
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+      release();
+      await Promise.allSettled(reads);
+      await store.close();
+    }
+  },
+);
+
 function command(
   laneId: string,
   version: number,

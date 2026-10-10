@@ -331,6 +331,8 @@ function verificationChecks(reasonCode: string | null) {
 
 export class ChargingStore {
   private client: ReturnType<typeof postgres>;
+  private healthClient: ReturnType<typeof postgres>;
+  private healthPending: Promise<void> | null = null;
   private db: Database;
   readonly recovery = new Map<
     string,
@@ -453,13 +455,28 @@ export class ChargingStore {
       idle_timeout: 20,
     });
     this.db = drizzle(this.client);
+    // Readiness must not queue behind long consistent reads or payment work.
+    this.healthClient = postgres(databaseUrl, {
+      max: 1,
+      prepare: false,
+      connect_timeout: 3,
+      idle_timeout: 0,
+      connection: { statement_timeout: 1000 },
+    });
   }
 
   async close() {
-    await this.client.end();
+    await Promise.all([this.client.end(), this.healthClient.end()]);
   }
   async health() {
-    await this.db.execute(sql`select 1`);
+    this.healthPending ??= (async () => {
+      try {
+        await this.healthClient`select 1`;
+      } finally {
+        this.healthPending = null;
+      }
+    })();
+    await this.healthPending;
   }
 
   async consistentRead<T>(read: (store: ChargingStore) => Promise<T>) {

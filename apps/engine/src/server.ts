@@ -1,4 +1,5 @@
 import { PresentationPoller } from "./presentation-poller.js";
+import { checkDatabaseHealth } from "./health-check.js";
 import { HostedStore, HostedAccessError } from "@rove/persistence";
 import { HostedRuntime } from "./hosted-runtime.js";
 import { handleHostedHttp } from "./hosted-http.js";
@@ -69,9 +70,11 @@ const paymentEffects =
   store && proofPrerequisites().paymentConfigured
     ? createChargingEffectAdapter(store, hostedStore)
     : null;
+let recoveryComplete = false;
 const initialRecovery = store
   ? recoverCharging(store, paymentEffects).then(
       () => {
+        recoveryComplete = true;
         process.stdout.write(
           `${JSON.stringify({ level: "info", event: "engine.recovery_complete" })}\n`,
         );
@@ -167,16 +170,10 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
   const requestUrl = new URL(request.url ?? "/", "http://localhost");
   const path = requestUrl.pathname;
   if (request.method === "GET" && path === "/health") {
-    let database = "unconfigured";
-    if (store) {
-      try {
-        await store.health();
-        database = "ready";
-      } catch {
-        database = "unavailable";
-      }
-    }
-    const recovered = await initialRecovery;
+    const database = store
+      ? await checkDatabaseHealth(() => store.health())
+      : "unconfigured";
+    const recovered = recoveryComplete;
     const gates = store ? [...store.recovery.values()] : [];
     const ready =
       database === "ready" &&
