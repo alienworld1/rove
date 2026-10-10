@@ -62,7 +62,10 @@ async function main() {
         `${JSON.stringify({ ...invite, link: config.APP_ORIGIN ? `${config.APP_ORIGIN}/#invite=${invite.code}` : undefined })}\n`,
       );
     } else if (action === "seed") {
-      const snapshot = await readVerifiedReleaseSeed();
+      const recording = process.argv[3] ?? "presentation";
+      if (recording !== "presentation" && recording !== "boundary")
+        throw new Error("Choose the presentation or boundary recording.");
+      const snapshot = await readVerifiedReleaseSeed(recording);
       await access.publish(snapshot.run.run.id, snapshot);
       process.stdout.write(
         `${JSON.stringify({ runId: snapshot.run.run.id, published: true })}\n`,

@@ -56,7 +56,7 @@ export async function publishedDataResponse(
           title: row.title,
           description: row.description,
           payment: row.payment,
-          publishedAt: row.published_at,
+          publishedAt: new Date(row.published_at).toISOString(),
         })),
       ),
       {

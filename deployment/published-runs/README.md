@@ -1,6 +1,6 @@
-# Verified release recording
+# Verified release recordings
 
-`tempo-three-lane.json` is the immutable public analysis seed for run `bd7f748d-7580-405e-b667-861249987536`, verified on Tempo Moderato (chain 42431) on 2026-10-04. Import it with `pnpm --filter @rove/engine hosted:admin seed` after migrations. The command checks the artifact checksum and contracts; it submits no transactions. The engine is not required to execute another run to populate a new release database.
+`tempo-three-lane.json` is the immutable boundary recording for run `bd7f748d-7580-405e-b667-861249987536`, verified on Tempo Moderato (chain 42431) on 2026-10-04. Import it with `pnpm deploy:seed boundary` after migrations. The default `pnpm deploy:seed` imports `tempo-rolling-protection.json`, the presentation recording with 5.796 PathUSD settled and all three channels closed. Run both commands to make both saved examples visible. The command checks the artifact checksum and contracts; it submits no transactions. The engine is not required to execute another run to populate a new release database.
 
 Charging equipment is a digital twin. Signed meter inputs pass through the normal verifier, including Lane C's invalid signature, exact protection limit, and valid recovery. Payments below are actual testnet transactions in pathUSD, using six decimal places. Funding was 1,800 base units; final settled value was 550; confirmed refunds total 1,250. Fee reservations were separate from channel funding.
 

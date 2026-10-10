@@ -114,7 +114,7 @@ test("public published listing uses Supabase publishable access without waking t
           title: "Northstar ↔ Voltway",
           description: "Recorded protection",
           payment: "Tempo",
-          published_at: "2026-10-04T00:00:00.000Z",
+          published_at: "2026-10-04T05:30:00+05:30",
         },
       ]);
     },
@@ -124,7 +124,9 @@ test("public published listing uses Supabase publishable access without waking t
       new Request("https://rove.example/api/published-runs"),
     );
     assert.equal(response.status, 200);
-    assert.equal((await response.json())[0].id, "published");
+    const records = await response.json();
+    assert.equal(records[0].id, "published");
+    assert.equal(records[0].publishedAt, "2026-10-04T00:00:00.000Z");
   } finally {
     for (const key of Object.keys(env)) if (!(key in previous)) delete env[key];
     Object.assign(env, previous);
