@@ -18,7 +18,7 @@ export function LandingFooter() {
         >
           Recorded examples
         </a>
-        <DocsLink>Documentation</DocsLink>
+        <DocsLink compact>Documentation</DocsLink>
       </nav>
     </footer>
   );

@@ -11,11 +11,13 @@ export function DocsLink({
   reason,
   event,
   children,
+  compact = false,
 }: {
   topic?: DocsTopic;
   reason?: string | null;
   event?: string;
   children: ReactNode;
+  compact?: boolean;
 }) {
   const path =
     event !== undefined
@@ -28,7 +30,7 @@ export function DocsLink({
       href={`${docsOrigin}${path}`}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex min-h-11 items-center rounded-sm text-sm text-info underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-info"
+      className={`inline-flex items-center rounded-sm text-info underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-info ${compact ? "text-xs" : "min-h-11 text-sm"}`}
     >
       {children}
       <span className="sr-only"> (opens documentation in a new tab)</span>
