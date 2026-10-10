@@ -256,14 +256,12 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
           undefined,
       );
       if (requestedCursor === null) throw new StoreError("VALIDATION");
-      const view = await composeCorridorOperatingView(
-        store,
-        corridorLab,
-        corridorId,
-      );
-      const replayFloor = await store.getPresentationReplayFloor(corridorId);
-      if (runId && view.activeRun?.id !== runId)
-        throw new StoreError("NOT_FOUND");
+      const [projectionVersion, replayFloor, activeRunId] = await Promise.all([
+        store.getLatestEventOrdinal(corridorId),
+        store.getPresentationReplayFloor(corridorId),
+        labStore?.getLatestRunIdForCorridor(corridorId) ?? null,
+      ]);
+      if (runId && activeRunId !== runId) throw new StoreError("NOT_FOUND");
       let runVersion = runId ? await corridorLab?.runVersion(runId) : null;
       response.writeHead(200, {
         "content-type": "text/event-stream; charset=utf-8",
@@ -282,20 +280,20 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
       let closed = false;
       let checking = false;
       let heartbeat = 0;
-      if (cursor > view.projectionVersion || cursor < replayFloor) {
+      if (cursor > projectionVersion || cursor < replayFloor) {
         const resync = realtimePresentationEventSchema.parse({
-          id: String(view.projectionVersion),
+          id: String(projectionVersion),
           type: "resync_required",
           corridorId,
           laneId: null,
-          runId: view.activeRun?.id ?? null,
-          projectionVersion: view.projectionVersion,
+          runId: activeRunId,
+          projectionVersion,
           reasonCode: null,
           occurredAt: new Date().toISOString(),
           payload: { eventType: null, laneVersion: null },
         });
         response.write(encodePresentationEvent(resync));
-        cursor = view.projectionVersion;
+        cursor = projectionVersion;
       }
       const timer = setInterval(() => {
         if (closed || checking) return;
