@@ -15,7 +15,7 @@ Deployment setup was additionally verified on 2026-10-08 with Node 22.23.2 and p
 
 - Applied all migrations to a fresh isolated PostgreSQL 16 database using `pnpm deploy:db`, then published the checksum-verified recording using `pnpm deploy:seed`.
 - Passed workspace tests with PostgreSQL integration checks enabled. One environment-dependent Tempo accounting test was skipped because the live asset environment was not supplied.
-- Built both Vercel applications and the Koyeb Docker image. Loaded and verified the release recording inside the container under a 512 MB memory limit. This checks image startup dependencies and assets, not peak memory or CPU during a live run.
+- Built both Vercel applications and the engine Docker image. Loaded and verified the release recording inside the container under a 512 MB memory limit. This checks image startup dependencies and assets, not peak memory or CPU during a live run.
 - Verified private deployment settings are Git-ignored and setup refuses to overwrite existing credentials. The deployment check rejects incomplete provider settings before attempting network access.
 
 Still requires deployed Vercel/Supabase/engine targets: verified database TLS, Supabase PostgREST grants/configuration, HTTPS/origin checks against the actual domains, free-instance wake behavior, live-run resource measurements, and SSE through the hosting proxies. No cloud projects were created by these local checks.

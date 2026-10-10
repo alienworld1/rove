@@ -1,0 +1,33 @@
+# One sleeping demo engine. Supabase and Vercel remain separate projects.
+# Import deployment/engine/.env in Render after replacing ENGINE_ORIGIN.
+previews:
+  generation: off
+services:
+  - type: web
+    name: rove-engine
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./deployment/engine.Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: off
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ACCESS_MODE
+        value: hosted
+      - key: PORT
+        value: "4100"
+      - key: ENGINE_HOST
+        value: 0.0.0.0
+      - key: ENGINE_PORT
+        value: "4100"
+      - key: APP_ORIGIN
+        value: https://rove-labs.vercel.app
+      - key: ENGINE_ORIGIN
+        sync: false
+      - key: ENGINE_SERVICE_TOKEN
+        sync: false
+      - key: DATABASE_URL
+        sync: false

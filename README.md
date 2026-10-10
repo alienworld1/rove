@@ -6,7 +6,7 @@ Rove checks the service and integration boundaries needed for trusted charging e
 
 The hosted product offers public **Explore runs** analysis and **Invite access** to a private workspace. An invite enables **Run on Tempo testnet** for the approved three-Lane digital-twin preset. Published records include evidence, payments, protection history, and final reconciliation; recording playback never starts financial work.
 
-Set `ACCESS_MODE=hosted` explicitly. Invitations, opaque sessions, ownership, spending reservations, and pending work persist in PostgreSQL. Public records are published only through an operator command after verifying the real lifecycle. See [hosted deployment](docs/hosted-deployment.md) for Vercel web/docs, Supabase PostgreSQL, and a single persistent engine, including a Koyeb free-preview option and its sleep limitation.
+Set `ACCESS_MODE=hosted` explicitly. Invitations, opaque sessions, ownership, spending reservations, and pending work persist in PostgreSQL. Public records are published only through an operator command after verifying the real lifecycle. See [hosted deployment](docs/hosted-deployment.md) for Vercel web/docs, Supabase PostgreSQL, and a single persistent engine, including a Render free-preview option and its sleep limitation.
 
 For a new deployment, run `pnpm deploy:setup` to create private per-service settings with a shared service credential. Fill in your provider URLs and Supabase credentials, then run `pnpm deploy:db`, `pnpm deploy:seed`, and `pnpm deploy:check`. The [first deployment walkthrough](docs/hosted-deployment.md#first-deployment-from-a-fresh-account) covers provider settings, environment imports, and enabling live invites after public analysis works.
 
