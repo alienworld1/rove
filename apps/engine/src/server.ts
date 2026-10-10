@@ -370,7 +370,7 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
         else streamsBySession.delete(sessionKey);
         if (!response.writableEnded) response.end();
       };
-      const lifetime = setTimeout(cleanup, 55_000);
+      const lifetime = setTimeout(cleanup, 240_000);
       lifetime.unref();
       response.once("close", cleanup);
       return;

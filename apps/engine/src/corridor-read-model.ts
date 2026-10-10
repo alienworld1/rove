@@ -193,10 +193,8 @@ async function composeCorridorOperatingViewOnce(
   ]);
   const laneData = await Promise.all(
     laneIds.map(async (laneId) => {
-      const [projection, history] = await Promise.all([
-        store.getLane(laneId),
-        store.getHistory(laneId),
-      ]);
+      const projection = await store.getLane(laneId);
+      const history = await store.getHistory(laneId, projection);
       return { projection, history };
     }),
   );

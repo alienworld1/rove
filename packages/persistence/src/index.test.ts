@@ -125,6 +125,18 @@ test(
         consistent.history.at(-1)?.snapshot?.version,
         consistent.lane.version,
       );
+      assert.deepEqual(
+        await store.getHistory(started.id, consistent.lane),
+        consistent.history,
+      );
+      await assert.rejects(
+        store.getHistory(started.id, {
+          ...consistent.lane,
+          id: "another-lane",
+        }),
+        (error: unknown) =>
+          error instanceof StoreError && error.code === "VALIDATION",
+      );
       const rejectedTrace = await store.getInspector(
         started.id,
         rejectedEvent.id,

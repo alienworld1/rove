@@ -3,7 +3,52 @@ import { test } from "node:test";
 import { POST, GET } from "../api/access/[action]/route.ts";
 import { GET as published } from "../api/published-runs/route.ts";
 import { publishedDataResponse } from "../api/published-data.ts";
+import { GET as chargingRead } from "../api/charging/[...path]/route.ts";
+import { GET as labRead } from "../api/lab/[...path]/route.ts";
 import { readFile } from "node:fs/promises";
+
+test("non-JSON hosting failures return readable retry responses", async (context) => {
+  const previous = { ...process.env };
+  const env: Record<string, string | undefined> = process.env;
+  Object.assign(env, {
+    NODE_ENV: "production",
+    ACCESS_MODE: "hosted",
+    APP_ORIGIN: "https://rove.example",
+    ENGINE_ORIGIN: "https://engine.example",
+    ENGINE_SERVICE_TOKEN: "a".repeat(64),
+  });
+  delete env.SUPABASE_URL;
+  delete env.SUPABASE_PUBLISHABLE_KEY;
+  context.mock.method(
+    globalThis,
+    "fetch",
+    async () =>
+      new Response("<!DOCTYPE html><title>Unavailable</title>", {
+        status: 503,
+      }),
+  );
+  try {
+    const id = "16f36a9c-0a74-4ca0-8667-620c2b13d804";
+    for (const [read, path] of [
+      [chargingRead, ["corridors", id]],
+      [labRead, ["runs", id]],
+    ] as const) {
+      const response = await read(
+        new Request("https://rove.example/api/read"),
+        {
+          params: Promise.resolve({ path: [...path] }),
+        },
+      );
+      assert.equal(response.status, 503);
+      const value = await response.json();
+      assert.equal(typeof value.message, "string");
+      assert.doesNotMatch(value.message, /DOCTYPE|JSON|Unexpected token/);
+    }
+  } finally {
+    for (const key of Object.keys(env)) if (!(key in previous)) delete env[key];
+    Object.assign(env, previous);
+  }
+});
 
 test("hosted production redemption uses an opaque secure cookie and never returns the engine credential", async (context) => {
   const previous = { ...process.env };

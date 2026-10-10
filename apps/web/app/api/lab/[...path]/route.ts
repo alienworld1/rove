@@ -86,7 +86,7 @@ async function proxy(
         signal: AbortSignal.timeout(45_000),
       },
     );
-    return new Response(await upstream.text(), {
+    return Response.json(await upstream.json(), {
       status: upstream.status,
       headers: {
         "content-type": "application/json",

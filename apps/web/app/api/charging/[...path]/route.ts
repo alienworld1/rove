@@ -85,8 +85,8 @@ export async function GET(
       signal: AbortSignal.timeout(45_000),
     });
     const text = await upstream.text();
+    const value = JSON.parse(text) as unknown;
     if (upstream.ok) {
-      const value = JSON.parse(text) as unknown;
       if (path[0] === "corridors" && path.length === 2)
         corridorOperatingViewSchema.parse(value);
       if (path.at(-1) === "completion") completionSummarySchema.parse(value);

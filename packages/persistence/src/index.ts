@@ -11,6 +11,7 @@ import type {
   CausalInspectorTrace,
   CreateCorridorInput,
   LaneCommandInput,
+  LaneProjection,
   RealtimePresentationEvent,
   StartLaneInput,
 } from "@rove/contracts";
@@ -928,8 +929,9 @@ export class ChargingStore {
     return { lane: fromRow(row), corridor, channel, voucher };
   }
 
-  async getHistory(laneId: string) {
-    const current = await this.getLane(laneId);
+  async getHistory(laneId: string, projection?: LaneProjection) {
+    const current = projection ?? (await this.getLane(laneId));
+    if (current.id !== laneId) throw new StoreError("VALIDATION");
     const [material, checks] = await Promise.all([
       this.db
         .select()
