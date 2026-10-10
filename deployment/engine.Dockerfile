@@ -7,7 +7,9 @@ COPY packages packages
 RUN pnpm install --frozen-lockfile --filter @rove/engine... --ignore-scripts
 COPY apps/engine apps/engine
 COPY deployment/published-runs deployment/published-runs
+COPY deployment/certs deployment/certs
 ENV NODE_ENV=production ACCESS_MODE=hosted ENGINE_HOST=0.0.0.0 ENGINE_PORT=4100
+ENV NODE_EXTRA_CA_CERTS=/app/deployment/certs/supabase-prod-ca-2021.crt
 EXPOSE 4100
 USER node
 WORKDIR /app/apps/engine

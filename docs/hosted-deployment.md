@@ -13,8 +13,8 @@ Free hosting suits a supervised testnet demo. [Render Free](https://render.com/d
 ### First deployment, from a fresh account
 
 1. Connect this repository to Vercel and create two projects: app root `apps/web`, docs root `apps/docs`. Select Next.js and Node 22.x. Enable **Include source files outside of the Root Directory** for both projects so workspace packages are available. Record the assigned production domains; the example names below are placeholders, not reserved domains. A first build may fail until origins are configured.
-2. Create a Supabase project near the engine region. Save its database password privately, copy its HTTPS project URL and `sb_publishable_…` key, and copy the **Session pooler** connection from **Connect**, using port **5432**. URL-encode special characters in the password and add `?sslmode=verify-full` (or `&sslmode=verify-full` if the URL already has query parameters). This works over IPv4 without a paid IPv4 add-on. Use the pooler URL for both migrations and the engine. Do not weaken certificate verification if TLS fails; check the hostname and trusted certificate chain.
-3. In Render, select **New → Blueprint**, connect this repository, and use the root `render.yaml`. Review that the only resource is a **Free Web Service** named `rove-engine`; there is no Render database, disk, or paid worker. The manifest uses the existing Dockerfile, repository-root build context, port **4100**, and **/health** check, with automatic Git deployments and previews disabled. Supply the prompted database URL, shared engine token, and engine origin. If Render has not assigned a domain yet, use `https://your-engine.onrender.com` temporarily and replace it before allowing access. Record the actual generated HTTPS domain; the manifest's service name does not reserve a domain. The first deployment may fail until database migrations and all settings are ready.
+2. Create a Supabase project near the engine region. Save its database password privately, copy its HTTPS project URL and `sb_publishable_…` key, and copy the **Session pooler** connection from **Connect**, using port **5432**. URL-encode special characters in the password and add `?sslmode=verify-full` (or `&sslmode=verify-full` if the URL already has query parameters). This works over IPv4 without a paid IPv4 add-on. Use the pooler URL for both migrations and the engine. The committed Supabase CA is loaded automatically by the Docker image and `pnpm deploy:*` commands. Do not weaken certificate verification if TLS fails; check the hostname and trusted certificate chain.
+3. In Render, select **New → Blueprint**, connect this repository, and use the root `render.yaml`. Review that the only resource is a **Free Web Service** named `rove-engine`; there is no Render database, disk, or paid worker. The manifest uses the existing Dockerfile, repository-root build context, port **10000**, and **/health** check, with automatic Git deployments and previews disabled. Supply the prompted database URL, shared engine token, and engine origin. If Render has not assigned a domain yet, use `https://your-engine.onrender.com` temporarily and replace it before allowing access. Record the actual generated HTTPS domain; the manifest's service name does not reserve a domain. The first deployment may fail until database migrations and all settings are ready.
 4. From the repository root, initialize private settings:
 
    ```sh
@@ -61,7 +61,7 @@ For a free preview, paused unattended runs resume after 15 minutes while the eng
 
 ## Database first
 
-Create a Supabase project near the engine region. Take the PostgreSQL connection string from its Connect panel. Prefer the session pooler on port 5432 for both migrations and runtime; direct connections also work when the host supports the project's IP version and certificate chain. Avoid the transaction pooler for this setup: disabling prepared statements alone does not address all [transaction-mode limitations](https://supabase.com/docs/guides/database/connecting-to-postgres#transaction-mode-limitations), including query pipelining. Require TLS and retain certificate verification; never set `rejectUnauthorized: false`. Keep the privileged database credential exclusively on the engine and migration operator machine.
+Create a Supabase project near the engine region. Take the PostgreSQL connection string from its Connect panel. Prefer the session pooler on port 5432 for both migrations and runtime; direct connections also work when the host supports the project's IP version and certificate chain. Avoid the transaction pooler for this setup: disabling prepared statements alone does not address all [transaction-mode limitations](https://supabase.com/docs/guides/database/connecting-to-postgres#transaction-mode-limitations), including query pipelining. Require TLS and retain certificate verification; never set `rejectUnauthorized: false`. The engine image and local deployment commands trust the public certificate in `deployment/certs/supabase-prod-ca-2021.crt` through `NODE_EXTRA_CA_CERTS`. Keep the privileged database credential exclusively on the engine and migration operator machine.
 
 ```sh
 # With DATABASE_URL set to the privileged migration connection:
@@ -75,9 +75,9 @@ Set `SUPABASE_URL` and the new `sb_publishable_…` publishable key on the **web
 
 ## Engine settings
 
-Create a Render Free Web Service using `render.yaml` with Dockerfile `deployment/engine.Dockerfile`, port 4100, one replica, HTTPS endpoint, and HTTP health check `/health`. Configure:
+Create a Render Free Web Service using `render.yaml` with Dockerfile `deployment/engine.Dockerfile`, port 10000, one replica, HTTPS endpoint, and HTTP health check `/health`. Configure:
 
-- `NODE_ENV=production`, `ACCESS_MODE=hosted`, `ENGINE_HOST=0.0.0.0`, `ENGINE_PORT=4100`.
+- `NODE_ENV=production`, `ACCESS_MODE=hosted`, `ENGINE_HOST=0.0.0.0`, `PORT=10000`, `ENGINE_PORT=10000`.
 - `DATABASE_URL` with the privileged runtime PostgreSQL connection.
 - `APP_ORIGIN` with the exact production web HTTPS origin and `ENGINE_ORIGIN` with the engine HTTPS endpoint (also used by the web project).
 - A cryptographically random hex `ENGINE_SERVICE_TOKEN` of at least 64 characters, shared only with the web server.
@@ -138,3 +138,13 @@ Run Prettier, typechecks, tests with an isolated migrated PostgreSQL database, a
 5. Disconnect the engine/RPC and verify checked-state copy, reconnect/cursor recovery after 55 seconds, and continued Supabase public reads. Confirm all three real channel receipts, reconciliation, close, and refunds before publishing.
 
 These checks require deployed URLs and real service configuration; a local production build alone does not establish hosted readiness.
+
+## Deployment troubleshooting
+
+A cached Vercel installation may skip the docs postinstall hook. `check:references` explicitly runs `fumadocs-mdx` before reading the generated `.source` files, so every docs build has the source it needs. The Node 22 override warning is expected; it is not a build failure.
+
+After the Render image finishes building, the service still needs to start and pass `/health`. Startup logs include `engine.starting`, `engine.listening`, and either `engine.recovery_complete` or `engine.recovery_failed`. A failed recovery requires checking verified database TLS and applying migrations with `pnpm deploy:db`. An empty Supabase database cannot pass readiness. Run `pnpm deploy:seed` and `pnpm deploy:check` before sharing access. Never replace the HTTP health check with a TCP check to hide a readiness failure.
+
+For a missing CA (`SELF_SIGNED_CERT_IN_CHAIN`), rebuild the engine image with the committed CA and retain `sslmode=verify-full`. Update Render's `DATABASE_URL` from the private engine env file; local edits do not update provider settings. After a successful rebuild, verify the actual engine `/health` endpoint and the private workspace. Render cancels a new deployment if it cannot pass health checks within [15 minutes](https://render.com/docs/health-checks).
+
+If Render reports a service on port 4100 while health checks target port 10000, import the current engine env (`PORT=10000`, `ENGINE_PORT=10000`) and redeploy. The engine honors the platform's `PORT` before `ENGINE_PORT`, with port 4100 retained as the local fallback. Do not change the health path: it remains `/health`.

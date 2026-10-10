@@ -15,7 +15,7 @@
     "build": "pnpm -r build",
     "dev:docs": "pnpm --filter @rove/docs dev",
     "deploy:setup": "node deployment/setup.mjs",
-    "deploy:check": "pnpm --filter @rove/engine deploy:check",
+    "deploy:check": "node deployment/run.mjs check",
     "deploy:db": "node deployment/run.mjs migrate",
     "deploy:seed": "pnpm deploy:admin seed",
     "deploy:admin": "node deployment/run.mjs admin",

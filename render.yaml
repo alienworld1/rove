@@ -18,11 +18,11 @@ services:
       - key: ACCESS_MODE
         value: hosted
       - key: PORT
-        value: "4100"
+        value: "10000"
       - key: ENGINE_HOST
         value: 0.0.0.0
       - key: ENGINE_PORT
-        value: "4100"
+        value: "10000"
       - key: APP_ORIGIN
         value: https://rove-labs.vercel.app
       - key: ENGINE_ORIGIN

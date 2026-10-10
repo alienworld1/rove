@@ -17,9 +17,13 @@ const commands = {
     directory: "apps/engine/",
     args: ["--import", "tsx", "src/probe-payment.ts"],
   },
+  check: {
+    directory: "apps/engine/",
+    args: ["--import", "tsx", "src/deployment-check.ts"],
+  },
 };
 const command = commands[process.argv[2]];
-if (!command) throw new Error("Choose migrate, admin, or probe.");
+if (!command) throw new Error("Choose migrate, admin, probe, or check.");
 const settings = parseEnv(
   await readFile(new URL("engine/.env", import.meta.url), "utf8"),
 );
@@ -28,7 +32,16 @@ const child = spawn(
   [...command.args, ...process.argv.slice(3)],
   {
     cwd: fileURLToPath(new URL(command.directory, root)),
-    env: { ...process.env, ...settings },
+    env: {
+      ...process.env,
+      ...settings,
+      NODE_EXTRA_CA_CERTS:
+        settings.NODE_EXTRA_CA_CERTS ??
+        process.env.NODE_EXTRA_CA_CERTS ??
+        fileURLToPath(
+          new URL("certs/supabase-prod-ca-2021.crt", import.meta.url),
+        ),
+    },
     stdio: "inherit",
   },
 );

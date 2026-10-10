@@ -35,7 +35,18 @@ import {
   parsePresentationCursor,
 } from "./presentation-stream.js";
 
-const config = readBaseConfig();
+const config = readBaseConfig({
+  ...process.env,
+  ENGINE_PORT: process.env.PORT ?? process.env.ENGINE_PORT,
+});
+process.stdout.write(
+  `${JSON.stringify({
+    level: "info",
+    event: "engine.starting",
+    accessMode: config.ACCESS_MODE,
+    databaseConfigured: Boolean(config.DATABASE_URL),
+  })}\n`,
+);
 const store = config.DATABASE_URL
   ? new ChargingStore(config.DATABASE_URL)
   : null;
@@ -60,8 +71,19 @@ const paymentEffects =
     : null;
 const initialRecovery = store
   ? recoverCharging(store, paymentEffects).then(
-      () => true,
-      () => false,
+      () => {
+        process.stdout.write(
+          `${JSON.stringify({ level: "info", event: "engine.recovery_complete" })}\n`,
+        );
+        return true;
+      },
+      () => {
+        // Connection errors can contain credentials; report only the failed stage.
+        process.stderr.write(
+          `${JSON.stringify({ level: "error", event: "engine.recovery_failed", reason: "Check database connectivity and migrations" })}\n`,
+        );
+        return false;
+      },
     )
   : Promise.resolve(false);
 let activeStreams = 0;
@@ -705,7 +727,11 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
 const server = createServer((request, response) => {
   void handle(request, response);
 });
-server.listen(config.ENGINE_PORT, config.ENGINE_HOST);
+server.listen(config.ENGINE_PORT, config.ENGINE_HOST, () => {
+  process.stdout.write(
+    `${JSON.stringify({ level: "info", event: "engine.listening", host: config.ENGINE_HOST, port: config.ENGINE_PORT })}\n`,
+  );
+});
 
 if (store) {
   let working = false;
