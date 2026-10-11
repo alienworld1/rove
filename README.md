@@ -1,85 +1,144 @@
 # Rove
 
-Rove checks the service and integration boundaries needed for trusted charging evidence and payment protection.
+Rove is an EV-roaming credit protection engine that connects signed charging-meter evidence to funded payment channels. It tracks how much service has been delivered, how much is covered by valid payment authorization, and when the remaining exposure requires charging to pause.
 
-## Hosted access
+Each charging session has its own channel and exposure limit. Funding can grow through rolling top-ups as service progresses, with partial settlement during charging and final reconciliation before channel closure. The workspace shows evidence, payment operations, protection decisions, and accounting together so operators can inspect what supports each value.
 
-The hosted product offers public **Explore runs** analysis and **Invite access** to a private workspace. An invite enables **Run on Tempo testnet** for the approved three-Lane digital-twin preset. Published records include evidence, payments, protection history, and final reconciliation; recording playback never starts financial work.
-
-Set `ACCESS_MODE=hosted` explicitly. Invitations, opaque sessions, ownership, spending reservations, and pending work persist in PostgreSQL. Public records are published only through an operator command after verifying the real lifecycle. See [hosted deployment](docs/hosted-deployment.md) for Vercel web/docs, Supabase PostgreSQL, and a single persistent engine, including a Render free-preview option and its sleep limitation.
-
-For a new deployment, run `pnpm deploy:setup` to create private per-service settings with a shared service credential. Fill in your provider URLs and Supabase credentials, then run `pnpm deploy:db`, `pnpm deploy:seed`, and `pnpm deploy:check`. The [first deployment walkthrough](docs/hosted-deployment.md#first-deployment-from-a-fresh-account) covers provider settings, environment imports, and enabling live invites after public analysis works.
+Run the local scenario below to explore the mechanism without wallet keys or testnet funds. For integration work, the repository also includes a Tempo testnet adapter and a separate documentation application.
 
 ## Run locally
 
-Use Node.js 22 and pnpm 11.19.0. Prepare the ignored environment file and PostgreSQL described below before starting the services. From the repository root:
+Requirements: Node.js 22, pnpm 11.19.0, and a running PostgreSQL database.
 
 ```sh
-pnpm install
+pnpm install --frozen-lockfile
+```
+
+Create a database named `rove`, or use an existing development database. Create an ignored `.env` in the repository root with the following settings, adjusting the connection URL for your PostgreSQL installation:
+
+```dotenv
+NODE_ENV=development
+ACCESS_MODE=local
+DATABASE_URL=postgres://localhost:5432/rove
+ENGINE_ORIGIN=http://127.0.0.1:4100
+ENGINE_HOST=127.0.0.1
+ENGINE_PORT=4100
+DEMO_SESSION_TOKEN=<random-hex-access-key>
+NEXT_PUBLIC_DOCS_ORIGIN=http://localhost:3001
+NEXT_PUBLIC_APP_ORIGIN=http://localhost:3000
+```
+
+Replace the access-key placeholder with a random hexadecimal value of at least 48 characters. Generate one with:
+
+```sh
+node -p "require('node:crypto').randomBytes(32).toString('hex')"
+```
+
+The engine and migration command read their process environment; they do not automatically load the root `.env`. In a Bash terminal at the repository root:
+
+```sh
+set -a
+. ./.env
+set +a
+pnpm --filter @rove/persistence db:migrate
 pnpm dev:engine
 ```
 
-In another terminal:
+In a second terminal, load the same settings and start the web application:
 
 ```sh
+set -a
+. ./.env
+set +a
 pnpm dev:web
 ```
 
-Open `http://localhost:3000`. Enter the local access key, choose the Northstar Mobility ↔ Voltway scenario, and start a run. The Corridor keeps three charging Lanes, aggregate protection, playback, and event inspection in one view. Select a Lane or one of its recorded events to inspect it; the URL preserves that selection across refreshes. Live updates reconnect automatically, and the latest safely checked state remains visible if the stream is interrupted.
+Open [localhost:3000](http://localhost:3000), enter the access key, and start the Northstar Mobility ↔ Voltway scenario. The engine seeds this scenario at startup. It runs three digital-twin charging sessions with signed meter inputs and deterministic local payment channels. One session rejects a corrupted reading, reaches its exposure limit, and recovers after valid evidence and payment checks; the others progress independently.
 
-Pause and scrub the recorded trace to inspect committed Lane snapshots and their totals without changing playback or payment confirmation. The live stream pauses in background tabs and reconnects with capped exponential backoff and jitter. Each new connection supplies the validated last committed cursor in the query string because the client closes and recreates EventSource to control backoff; the server also accepts native `Last-Event-ID`. A cursor outside retained history triggers a fresh authoritative read.
+The Lab lets you edit readings, fault intervals, tariffs, reserve policy, and final accounting, then save and run a validated scenario. Recorded traces support event inspection and replay. Replaying a recording does not submit payments.
 
-Copy `.env.example` to an ignored `.env` file for local settings. The engine reads settings from its process environment; shell values may be loaded with `set -a; . ./.env; set +a` before starting it. The web process needs the same `ENGINE_ORIGIN` and `DEMO_SESSION_TOKEN` values. Generate a random hexadecimal token of at least 48 characters for the local access key. It is entered on the page and kept in an HTTP-only cookie.
+For the repeatable headless local check, use a terminal with the same environment:
 
-The Corridor requires PostgreSQL but the local deterministic payment scenario needs no payer key. Run `pnpm --filter @rove/persistence db:migrate` after setting `DATABASE_URL`. The source disclosure identifies whether payment is local simulation or Tempo. See [charging storage and local checks](docs/charging-storage.md) for the controlled live session path.
+```sh
+pnpm --filter @rove/engine lab:run
+```
 
-For local session completion, set `CDR_CURRENCY=USD`, `CDR_SETTLEMENT_ASSET_ID=TEST_ASSET`, and `CDR_SOURCE_PARTY_ID=controlled-cpo`. When switching to Tempo, set the accounting asset to the configured Tempo asset and restart the engine. A different asset is an accounting mismatch, not permission to correct the record automatically.
+The complete [environment example](.env.example) includes additional evidence, Tempo, accounting, and hosted settings. Use the minimal configuration above for local development; leave unused hosted credentials unset rather than exporting empty values.
 
-The local access-key flow requires controlled development mode. Hosted access uses separate explicit deployment configuration; a production build alone does not enable it. Public documentation remains available independently.
+## How protection works
 
-During an outage, the Corridor and selected event retain their last checked records. Their values and bounds describe that checked state. Commands remain unavailable until current reads succeed. **Check again** refreshes or reconciles existing work; it does not establish that an uncertain payment failed. If session access expires, protected caches and streams are cleared; enter the local access key again to restore validated URL context.
+A **Corridor** describes the relationship between an e-mobility service provider and a charging point operator: their settlement asset, fixed energy tariff, allowed meter identities, and protection policy. Each **Lane** is one charging session with an independent payment channel.
 
-The saved Northstar Mobility ↔ Voltway digital-twin scenario includes a rejected meter reading, an exact protection pause, and recovery. The scenario builder is available below the launch controls. Use `pnpm --filter @rove/engine lab:run` for the matching headless protection check. The three local payment channels are deterministic. With the funded Tempo testnet configuration, `pnpm --filter @rove/engine lab:run --live` separately runs three real channel workflows; see [charging storage and local checks](docs/charging-storage.md) before submitting testnet transactions.
+The engine verifies OCMF signatures over the original payload bytes using P-256 and SHA-256. It also checks meter identity, transport-supplied session binding, sequence continuity, timestamps, and nondecreasing energy. Accepted readings become integer Wh and billable value. Rejected readings cannot advance trusted value.
 
-## Documentation
+Cumulative payment vouchers must be supported by both accepted service and confirmed channel funding. Protected value is the lesser of trusted delivered value and verified authorization. Settlement is tracked separately: a signed voucher is not a settled payment, and a submitted transaction is not confirmed funding.
 
-The public integration manual runs independently of PostgreSQL, the engine, wallets, and RPC access:
+When evidence becomes stale or untrusted, the engine bounds possible additional service using maximum charger power, elapsed time, and tariff. The resulting unprotected exposure is:
+
+```text
+max(0, trusted delivered value + unverified service bound - protected value)
+```
+
+Reaching the configured maximum, including equality, produces `PAUSE_REQUIRED`. Recovery requires fresh evidence, current payment state, available signing, and valid protection invariants. Rove emits the pause requirement; a charging-management system must enforce it on physical equipment. The Lab enforces it within its digital twin.
+
+Completion verifies final meter evidence and an immutable charge detail record (CDR), then compares energy, accounting value, authorization, and settlement. Matching totals permit closure; mismatches remain unresolved. Tempo closure requires a matching channel-close receipt and attributed reserve refund.
+
+## Runtime and source layout
+
+The Node.js engine owns verification, protection decisions, and financial effects. PostgreSQL stores versioned session state, evidence, events, idempotent command results, and a transactional outbox. The worker submits and reconciles external operations after the state transaction commits. Startup recovery checks uncertain payment work before allowing further financial movement.
+
+The Next.js web application sends allowed commands through server-side proxies and displays sanitized engine projections. Server-sent events trigger authoritative refreshes. The browser does not calculate exposure or authorize payment amounts.
+
+| Location                                                                                                         | Responsibility                                              |
+| ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| [`apps/engine`](apps/engine)                                                                                     | HTTP API, scenario execution, payment worker, and recovery  |
+| [`apps/web`](apps/web)                                                                                           | Corridor workspace, Lab editor, and published-run viewer    |
+| [`apps/docs`](apps/docs)                                                                                         | Public integration manual and searchable API reference      |
+| [`packages/evidence`](packages/evidence), [`packages/protection`](packages/protection)                           | Meter verification and deterministic protection transitions |
+| [`packages/tempo`](packages/tempo), [`packages/ocpi`](packages/ocpi)                                             | Payment-channel adapter and final accounting validation     |
+| [`packages/persistence`](packages/persistence)                                                                   | PostgreSQL schema, Drizzle migrations, and durable stores   |
+| [`packages/contracts`](packages/contracts), [`packages/domain`](packages/domain), [`packages/lab`](packages/lab) | Shared schemas, domain types, and scenario compilation      |
+
+`packages/contracts` contains TypeScript API schemas. Tempo calls use the TIP-1034 channel-reserve precompile ABI in [`packages/tempo/src/protocol.ts`](packages/tempo/src/protocol.ts); this repository does not deploy a custom Solidity contract.
+
+## Tempo and hosted operation
+
+The live path uses Tempo Moderato testnet. Configure the `TEMPO_*` settings in [.env.example](.env.example) with funded test-only payer, payee, and voucher-signing accounts, following the [integration guide](docs/integrations.md). Load those settings into your shell before running:
+
+```sh
+pnpm --filter @rove/engine probe:payment
+pnpm --filter @rove/engine lab:run --live
+```
+
+The probe reads network configuration without sending transactions. The live run creates three channels and submits funding, top-ups, and partial settlements; it leaves the channels open. Follow [session completion](docs/session-completion.md) to reconcile, close, and verify returned reserve. Check existing transaction and channel state before retrying uncertain work.
+
+Hosted mode provides public analysis of explicitly published recordings and invite-based private workspaces for testnet execution. Invitations, ownership, run allowances, and funding and fee budgets persist in PostgreSQL. Public snapshots can be read through the Supabase Data API independently of the engine. Playback never starts financial work.
+
+See [hosted deployment](docs/hosted-deployment.md) for per-service configuration, database initialization, invitation management, and publication. The deployment includes separate Vercel web and docs applications and one persistent engine service. `ACCESS_MODE=hosted` must be configured explicitly; a production build does not enable hosted access.
+
+## Documentation and checks
+
+Run the public manual independently of the engine, database, and wallets:
 
 ```sh
 pnpm dev:docs
 ```
 
-Open [Rove Docs](http://localhost:3001/docs). The introduction links to EV roaming, protection, evidence, channel lifecycle, Lab, API, reasons, and final accounting. **Docs** and contextual guidance in the product open a new tab without changing the selected Lane/event.
+Open [localhost:3001/docs](http://localhost:3001/docs) for protection calculations, trust boundaries, scenario formats, API endpoints, and integration details. Repository guides cover [controlled charging sessions](docs/charging-storage.md) and [documentation maintenance](docs/documentation.md).
 
-Local development defaults to docs on port 3001 and the product on port 3000. For builds/deployment, explicitly set `NEXT_PUBLIC_DOCS_ORIGIN` for web and `NEXT_PUBLIC_APP_ORIGIN` for docs to their HTTP(S) origins, without paths, credentials, queries, or fragments. Local build example:
-
-```sh
-NEXT_PUBLIC_DOCS_ORIGIN=http://localhost:3001 NEXT_PUBLIC_APP_ORIGIN=http://localhost:3000 pnpm build
-```
-
-The versioned public narrative lives in `apps/docs/content/docs`; repository integration guides retain runnable setup and proof details. See [documentation maintenance and checks](docs/documentation.md).
-
-## Verification
+From a shell with the local configuration loaded:
 
 ```sh
 pnpm lint
 pnpm typecheck
 pnpm test
 pnpm build
-pnpm --filter @rove/engine probe:payment
-pnpm --filter @rove/engine proof:payment
-pnpm --filter @rove/engine proof:evidence accepted
-pnpm --filter @rove/engine proof:evidence tampered
-pnpm --filter @rove/engine proof:evidence wrong-meter
-pnpm --filter @rove/engine proof:evidence wrong-session
-pnpm --filter @rove/engine proof:evidence replay
-pnpm --filter @rove/engine proof:evidence stale
-pnpm --filter @rove/engine proof:evidence continuity
-pnpm --filter @rove/engine proof:evidence energy-regression
 ```
 
-Rejected evidence commands exit with status 1 and print a typed reason. The fixture is the published [SAFE e.V. transparency software example](https://github.com/SAFE-eV/transparenzsoftware/blob/main/XML_Format.md). The proof uses a historical injected clock. The external session identifier is supplied by the source container's `transactionId`; it is not a signed OCMF field. The verifier preserves the exact JSON payload bytes for signature verification and floors sub-Wh readings when exposing integer Wh.
+Use an isolated, migrated database for tests. Database-dependent suites skip when `DATABASE_URL` is absent; hosted persistence and access-control suites additionally require `HOSTED_TEST_DATABASE_URL`. Both public application origins must be set for builds.
 
-The evidence proof uses the fixture's public key and matching profile settings by default. Set `EVIDENCE_*` variables to check a different configured key, meter, session, or freshness policy against the fixture. The example environment contains the published public key; it is not a secret.
+## Current scope
 
-The payment environment probe reads the RPC chain ID, asset decimals, and reserve voucher digest without a transaction. The payment proof requires a funded test payer and payee and submits real Moderato transactions. It halts on a pending or failed operation; inspect the emitted transaction reference before rerunning. See [integration notes](docs/integrations.md) for setup and a verified run.
+Rove implements a controlled charging and testnet environment. It supports one OCMF cryptographic profile and fixed energy tariffs. The accounting adapter accepts energy-only, tax-free records with explicit currency-to-asset equivalence; it does not perform currency conversion or implement the full OCPI protocol.
+
+Digital-twin readings establish reproducible scenarios, not production charger telemetry. Connecting physical equipment requires authenticated meter transport, trusted key provisioning, and external pause enforcement. The supplied access flows are not an enterprise identity or partner-authorization system.
