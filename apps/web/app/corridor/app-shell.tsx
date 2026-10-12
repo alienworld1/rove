@@ -37,7 +37,7 @@ export function AppShell({
           <Image src="/rove-logo.png" alt="" width={120} height={40} />
         </Link>
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-tertiary">
-          Charging assurance
+          Payment protection
         </p>
       </div>
       <div className="flex min-w-0 flex-wrap items-center gap-3 text-xs text-ink-secondary">

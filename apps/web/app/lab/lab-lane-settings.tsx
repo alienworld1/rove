@@ -60,17 +60,17 @@ export function LabLaneSettings({
         onChange={(value) => patch({ maxPowerWatts: value })}
       />
       <LabValueField
-        label="Proof cadence (seconds)"
+        label="Expected reading interval (seconds)"
         path={`${path}.expectedProofIntervalMs`}
         value={lane.expectedProofIntervalMs}
         decimals={3}
         onChange={(value) => patch({ expectedProofIntervalMs: Number(value) })}
-        help="Expected evidence cadence. Use Generate readings to change the source schedule."
+        help="Sets how often a reading is expected. Existing readings stay at their current times; use Generate readings to replace their schedule."
       />
       {lane.expectedProofIntervalMs >
       scenario.corridor.protectionPolicy.evidenceMaxAgeMs ? (
         <p className="border-l-2 border-risk pl-3 text-xs text-risk-deep">
-          This cadence exceeds the freshness limit. Evidence can become stale
+          This interval exceeds the freshness limit. Evidence can become stale
           between readings.
         </p>
       ) : null}
@@ -97,7 +97,7 @@ export function LabLaneSettings({
       <fieldset className="space-y-3 border-t border-line pt-4">
         <legend className="text-sm font-semibold">Final accounting</legend>
         <label className="block text-xs font-semibold text-ink-secondary">
-          CDR totals
+          Final charging record (CDR) totals
           <select
             className={field}
             value={accounting?.mode ?? "matching"}
@@ -118,9 +118,7 @@ export function LabLaneSettings({
             }
           >
             <option value="matching">Match accepted final evidence</option>
-            <option value="custom">
-              Custom totals · Exercise reconciliation
-            </option>
+            <option value="custom">Custom totals · Compare accounting</option>
           </select>
         </label>
         {accounting?.mode === "custom" ? (
@@ -168,7 +166,8 @@ export function LabLaneSettings({
           </>
         ) : (
           <p className="text-xs text-ink-secondary">
-            Final totals derive from accepted evidence when you finish the Lane.
+            Rove creates the final accounting totals from accepted meter
+            readings when the session finishes.
           </p>
         )}
       </fieldset>

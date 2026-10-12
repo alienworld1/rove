@@ -1,23 +1,35 @@
 ---
 title: "How Rove Works"
-description: "Understand the causal path from signed evidence to protection and closure."
+description: "Follow a charging session from verified delivery to payment protection, risk control, and final accounting."
 ---
 
-Rove advances protection only when the evidence and payment boundaries agree. The browser displays the engine's persisted projection; it does not authorize money or decide risk.
+Rove helps the charging operator see what can be collected and helps the mobility provider see what has become payable and how much funding remains available. Payment protection advances only when signed meter readings and confirmed funding support it.
 
-## The operating loop
+## Follow your first example
 
-1. Bind the Lane to a Corridor, external session, charger, meter key, fixed tariff, power limit, and separate channel.
-2. Parse and verify original signed meter bytes. Accepted cumulative readings become trusted Wh and integer billable value.
-3. Confirm channel funding. A cooperating signer supplies a cumulative voucher no larger than trusted value or confirmed deposit.
-4. Verify that authorization. Protected value is the lesser of trusted value and valid authorization; it is distinct from settlement.
-5. Request rolling top-ups as headroom narrows. Only confirmed observations extend funded capacity. Partial settlement may capture protected value during service.
-6. When evidence is untrusted/stale, grow a conservative upper bound. At the configured exposure boundary, require a pause. Rove emits a pause requirement. Your CPMS must enforce it on a physical charger.
-7. Recover through accepted evidence, current channel truth, restored signing, and invariant checks. Recovery is not a UI reset.
-8. Verify final signed evidence and immutable accounting, settle the final total, compare totals, and close with attributed reserve refund proof.
+1. From Rove’s home page, open **Recorded examples** and choose **Open recorded example**. No invite or wallet is needed.
+2. Each **Lane** represents one charging session. Select a Lane to inspect its charger, tariff, exposure limit, and latest accepted reading. Together, the Lanes form one **Corridor**, or business relationship.
+3. Compare **Trusted value** (verified electricity priced at the tariff), **Protected value** (the portion backed by funded payment authorization), and **Settled value** (payment already collected).
+4. Select an event to open its Inspector. An accepted reading supports verified service value; the payment record shows whether funding and authorization protect it. A rejected reading does not increase verified value.
+5. Use **Jump to fault**, **Jump to pause**, or **Jump to recovery** where available. The amber risk envelope shows a conservative exposure bound. The calculation explains why a session can continue or must pause.
+6. Review the completion checklist for final readings, matching accounting totals, confirmed payment, channel closure, and returned reserve. A finished trace alone does not prove the funds were returned.
 
-## Inspect the cause
+The timeline and **Play recording** change which recorded state you see. They do not rerun the scenario or move money. With an invite, [Rove Lab](/docs/lab) lets you execute a new scenario on Tempo testnet.
 
-The Corridor groups independent Lanes. An attached Inspector shows the evidence or payment cause behind an event. A rejection freezes trusted advancement, even while a digital twin's potential service bound grows. [Protection calculations](/docs/concepts/protection-window) explain that difference.
+## What happens during charging?
 
-[Rove Lab](/docs/lab) reproduces the loop using controlled signed inputs and local payment simulation. The explicitly selected live CLI instead waits for Tempo confirmations. [Failure and recovery](/docs/architecture/failure-and-recovery) explains why an unknown outcome must be checked before retrying.
+1. The session is assigned its meter, fixed tariff, maximum charger power, exposure policy, and separate payment channel.
+2. Rove verifies signed cumulative meter readings. Accepted energy determines trusted billable value.
+3. Confirmed channel funding and a valid cumulative payment authorization establish protected value. Authorization cannot exceed verified service value or funded capacity.
+4. As available reserve runs low, Rove requests a top-up. Only confirmed funding increases that capacity. The charging operator may collect protected value during charging; this increases settled value.
+5. If a reading cannot be trusted or is too old, Rove estimates the maximum possible additional service from charger power and elapsed time. If possible unprotected exposure reaches the agreed limit, Rove requires charging to pause.
+6. Charging can resume once accepted readings, current payment status, available signing, and sufficient authorization restore protection.
+7. After service ends, final signed evidence and the charge detail record are checked against authorization and collected payment. Matching totals permit channel closure and return of unused reserve to the payer.
+
+Rove issues the pause requirement. Your charging management system must enforce it on physical equipment. The examples use a simulated charger that obeys the requirement.
+
+## When a session needs attention
+
+Select the relevant event and read its reason before taking action. [Protection calculations](/docs/concepts/protection-window) explain growing uncertainty; [failure and recovery](/docs/architecture/failure-and-recovery) explains what must be restored. If a payment outcome is unknown, check the existing operation before starting another one.
+
+The browser displays recorded state and sends allowed requests. Meter verification, payment confirmation, and protection decisions are handled by Rove’s service. [Trust and authority](/docs/architecture/trust-and-authority) explains these responsibilities for integration engineers.

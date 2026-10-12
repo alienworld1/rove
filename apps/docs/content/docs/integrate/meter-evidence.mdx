@@ -3,6 +3,10 @@ title: "Meter Evidence"
 description: "Integrate the supported signed OCMF profile without rewriting signed bytes."
 ---
 
+Signed meter evidence tells Rove how much charging service it can trust. A signature alone is not enough: the meter, session, reading sequence, and freshness must also match. Rejected readings cannot increase billable value or payment protection.
+
+This page is for engineers connecting a meter source. Preserve the original signed data and supply authenticated session and key context.
+
 `verifyOcmf` in `packages/evidence/src/index.ts` supports `OCMF|<original JSON data>|<signature JSON>` with a DER ECDSA P-256 / SHA-256 signature (`SD`) over the original UTF-8 data section. The configured public key is DER SPKI hex on `prime256v1`. Reserializing or normalizing the signed JSON changes the bytes and can invalidate the signature.
 
 Supported profile identifier: `ocmf-secp256r1-sha256`.

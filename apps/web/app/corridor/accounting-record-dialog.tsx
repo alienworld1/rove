@@ -35,10 +35,11 @@ export function AccountingRecordDialog({
             Accounting record
           </Dialog.Title>
           <Dialog.Description className="mt-2 text-sm text-ink-secondary">
-            The original concluded-session record and its exact normalization.
+            The original final charging record and its total expressed in the
+            payment asset’s units.
           </Dialog.Description>
           <p className="mt-3 text-sm tabular-nums">
-            Normalized settlement total:{" "}
+            Accounting total in payment units:{" "}
             {formatOperationalValue(normalizedTotal, assetDecimals)} {assetUnit}
           </p>
           {record.isFetching ? (

@@ -7,7 +7,7 @@ import { paymentBalances } from "./payment-balances";
 
 const operationCopy = {
   open: "Open channel",
-  voucher: "Offchain authorization",
+  voucher: "Payment authorization",
   top_up: "Top-up",
   settle: "Settlement",
   close: "Close channel",
@@ -187,7 +187,7 @@ export function PaymentInspector({
       {trace.voucher ? (
         <div className="mt-4 border-t border-line pt-3 text-xs">
           <p className="font-semibold text-ink-secondary">
-            Offchain cumulative authorization · {assetUnit}
+            Cumulative payment authorization · {assetUnit}
           </p>
           <p className="mt-2 tabular-nums text-ink">
             {formatOperationalValue(

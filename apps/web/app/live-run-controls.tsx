@@ -38,7 +38,7 @@ export function LiveRunControls({
           {run.status === "awaiting_chain" || run.awaiting
             ? "Waiting for Tempo confirmation"
             : run.status === "completed"
-              ? "Trace complete. Final accounting continues; matching Lanes can close."
+              ? "Scenario events complete. Rove is checking final totals and returning reserves for matching sessions."
               : run.status === "initializing"
                 ? "Preparing payment channels…"
                 : run.status === "running"
@@ -68,7 +68,7 @@ export function LiveRunControls({
             {action === "play"
               ? "Continue run"
               : action === "pause"
-                ? "Pause"
+                ? "Pause run"
                 : action === "step"
                   ? "Next event"
                   : "Check payment state"}
@@ -95,9 +95,11 @@ export function LiveRunControls({
         </p>
       ) : null}
       <p className="mt-3 text-xs text-ink-tertiary">
-        Live controls process the saved scenario. After the channels close,
-        start a new run from your workspace to replay. Unattended paused runs
-        continue after 15 minutes so their reserve can be returned.
+        These controls execute your scenario with testnet payments. Pause run
+        holds upcoming scenario events; it is separate from a charging pause
+        required by the exposure policy. Paused runs continue after 15 minutes
+        without interaction so completion can proceed. Check the checklist for
+        returned reserves; accounting differences can keep funds reserved.
       </p>
     </section>
   );

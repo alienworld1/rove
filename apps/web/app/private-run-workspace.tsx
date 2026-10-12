@@ -48,8 +48,9 @@ export function PrivateRunWorkspace({ session }: { session: HostedSession }) {
       </div>
       <p className="mt-2 max-w-2xl text-sm text-ink-secondary">
         Run three independent simulated charging sessions with signed meter
-        readings and real Tempo testnet payments. The approved scenario shows an
-        invalid reading, a protection pause, and recovery.
+        readings and real Tempo testnet payments. The built-in scenario shows an
+        invalid reading, a required charging pause, and recovery. Rove supplies
+        the test funds; you do not need a wallet.
       </p>
       <div className="mt-5 flex flex-wrap items-center gap-4">
         <button
@@ -95,7 +96,7 @@ export function PrivateRunWorkspace({ session }: { session: HostedSession }) {
               href={`/?run=${encodeURIComponent(run.id)}`}
               className="text-ink underline"
             >
-              Open scenario · {new Date(run.createdAt).toLocaleString()}
+              Open run · {new Date(run.createdAt).toLocaleString()}
             </Link>
             <span className="text-ink-secondary">
               {run.status.replaceAll("_", " ")}

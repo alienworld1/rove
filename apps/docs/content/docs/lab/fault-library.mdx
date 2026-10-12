@@ -3,7 +3,9 @@ title: "Fault Library"
 description: "Select controlled inputs without mistaking them for real network failures."
 ---
 
-These are actual `labEventSchema` discriminants, not persisted event names. All inputs use the shared timing envelope in [scenario schema](/docs/lab/scenario-schema). Readings require `{ cumulativeMilliWh: "<integer>" }`; other inputs require strict empty parameters.
+Use these inputs to see what happens when a meter reading or payment dependency fails. In the scenario builder, select an event to see its description and settings, then place a recovery event after the fault when needed. These inputs simulate conditions within the run; they do not disrupt the real Tempo network.
+
+The identifiers below are the input types accepted by `labEventSchema`, not the names in recorded event history. All inputs use the shared timing envelope in [scenario schema](/docs/lab/scenario-schema). Readings require `{ cumulativeMilliWh: "<integer>" }`; other inputs require strict empty parameters.
 
 | Input                | Parameters | Effect and supported recovery                                                     |
 | -------------------- | ---------- | --------------------------------------------------------------------------------- |

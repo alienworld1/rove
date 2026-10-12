@@ -216,9 +216,10 @@ export function TraceScrubber({
         className="sr-only focus:not-sr-only focus:mt-2 focus:w-full focus:accent-info"
       />
       <p className="text-[11px] text-ink-tertiary">
-        Milestone markers show committed states. Inspection changes only the
-        recorded view. It does not move the run or payment confirmation. Fault
-        and recovery become available after they are recorded.
+        The timeline shows recorded session states. Selecting a point opens that
+        moment for inspection without changing the running scenario or its
+        payments. Fault, pause, and recovery shortcuts become available when
+        those events have been recorded.
       </p>
     </section>
   );

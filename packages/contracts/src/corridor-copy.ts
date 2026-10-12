@@ -24,7 +24,7 @@ const reasonText = {
   PAYMENT_SETTLEMENT_PENDING: "Settlement awaiting confirmation.",
   RISK_WINDOW_WARNING: "Remaining protection capacity is narrowing.",
   RISK_WINDOW_EXHAUSTED: "The protection limit has been reached.",
-  CONTROL_PAUSE_REQUIRED: "Charging should pause until protection is restored.",
+  CONTROL_PAUSE_REQUIRED: "Charging must pause until protection is restored.",
   PROTECTION_AWAITING_TRUST_AND_FUNDING:
     "Waiting for trusted readings and confirmed funding.",
 } as const;
@@ -57,8 +57,8 @@ export function eventLabelFor(type: string) {
     type.includes("settlement_confirmed")
   )
     return "Settlement confirmed";
-  if (type.includes("pause")) return "Protection limit reached";
-  if (type.includes("recover")) return "Protection restored";
+  if (type.includes("pause")) return "Charging pause required";
+  if (type.includes("recover")) return "Protection recovery update";
   if (type.includes("initializing")) return "Preparing protection";
   return "Protection state updated";
 }

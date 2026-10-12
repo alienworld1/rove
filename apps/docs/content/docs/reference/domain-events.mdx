@@ -3,6 +3,8 @@ title: "Domain Events"
 description: "Distinguish persisted causal records from commands, observations, effects, and SSE."
 ---
 
+Use this reference to interpret a session’s recorded history or build an integration that follows it. A request means work was queued; it does not mean funding, payment, or a physical pause has been confirmed. Browser update notifications are separate from these retained records.
+
 The persisted event envelope is defined by `domainEvents` in `packages/persistence/src/schema.ts`. It includes ID, ordinal, type, schema version, Corridor/Lane/version/correlation/causation identifiers, reason, trace/occurred time, optional evidence/channel/transaction/CDR references, and a JSON payload. Ordinals order recorded notifications; trace time describes the controlled scenario independently of wall time.
 
 ## Emitted names and conditions

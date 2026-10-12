@@ -30,11 +30,12 @@ export function LabAdvancedJson({
       }}
     >
       <summary className="cursor-pointer text-sm font-semibold">
-        Advanced · JSON import and export
+        Advanced · Scenario JSON
       </summary>
       <p className="mt-3 text-xs text-ink-secondary">
-        Apply replaces the draft’s settings and events. Saving still checks the
-        complete scenario on the server.
+        Import loads JSON for review. Apply JSON replaces the draft’s settings
+        and events; Save scenario checks the complete scenario. Export draft
+        downloads your current settings.
       </p>
       <textarea
         aria-label="Scenario JSON"

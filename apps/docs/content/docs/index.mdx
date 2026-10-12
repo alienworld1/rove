@@ -1,25 +1,35 @@
 ---
 title: "What is Rove?"
-description: "An integration manual for charging evidence, funded payment protection, and final accounting."
+description: "Understand payment protection for EV roaming, explore a charging session, and plan your integration."
 ---
 
-Rove bounds bilateral credit exposure while a charging session is still delivering service. This manual is for CPO, CPMS, and eMSP engineers integrating the current evidence, payment, and control boundaries.
+Rove helps charging operators limit the payment risk of serving another mobility provider’s customers. Signed meter readings establish the value of electricity delivered. The mobility provider funds a small rolling reserve and authorizes payment as charging progresses. Rove tracks how much service could remain unprotected and requires a pause when that exposure reaches the agreed limit.
+
+This guide is for **finance and roaming operators** at charging and mobility businesses, and for **engineers** connecting their charging, payment, and accounting systems. Drivers do not use Rove or connect a wallet.
 
 ## Start with your question
 
-- New to the business? Read [EV Roaming in 5 Minutes](/docs/start/ev-roaming).
-- Following a Lane decision? Read [how Rove works](/docs/start/how-rove-works) and the [protection window](/docs/concepts/protection-window).
-- Connecting a source? Read [meter evidence](/docs/integrate/meter-evidence), [Tempo channels](/docs/integrate/tempo/channel-lifecycle), and [accounting](/docs/integrate/cdr-reconciliation).
-- Reproducing a failure? Use [Rove Lab](/docs/lab) and the [reason reference](/docs/reference/reason-codes).
+- **What problem does Rove solve?** Start with [EV Roaming in 5 Minutes](/docs/start/ev-roaming).
+- **How do I read a session and know what needs attention?** Follow [how Rove works](/docs/start/how-rove-works), then learn about [Corridors and Lanes](/docs/concepts/corridor-and-lane).
+- **How much is protected, collected, or still at risk?** Read [the protection window](/docs/concepts/protection-window).
+- **How do I try it?** Open a recorded example from Rove’s home page, or use an invite to [run your own scenario in Rove Lab](/docs/lab).
+- **How do I connect our systems?** Start with [trust and authority](/docs/architecture/trust-and-authority), then [meter evidence](/docs/integrate/meter-evidence), [Tempo channels](/docs/integrate/tempo/channel-lifecycle), and [final accounting](/docs/integrate/cdr-reconciliation).
+- **Why did a session pause or fail to close?** Check [failure and recovery](/docs/architecture/failure-and-recovery) and the [reason codes](/docs/reference/reason-codes).
 
-## Supported scope
+## The terms you will see
 
-Each Lane owns one channel, a bound meter/session identity, an immutable fixed energy tariff, and an explicit exposure policy. Accepted evidence establishes trusted service. A verified cumulative voucher backed by confirmed funding establishes payment protection. Settlement captures value separately. Final accounting checks four monetary totals and two energy totals before closure.
+A **Corridor** is one business relationship between the mobility provider that pays and the charging operator that receives payment. A **Lane** is one charging session within that relationship, with its own payment channel and reserve.
 
-Rove supports a narrow P-256 OCMF profile, a controlled OCPI-style accounting input, and the configured Tempo reserve precompile. It is not a full OCPI transport, OCPP control server, invoice system, or production PKI. No FX, tax, parking, or multipart tariffs are supported.
+**Protected value** is verified charging value backed by funded payment authorization: it can be collected under the channel’s rules. **Settled value** is payment already collected. The **exposure bound** is a conservative estimate of service value that could exceed protection; it is not a bill or an exact meter reading.
 
-## Integration prerequisites
+## Explore Rove without setup
 
-An authenticated meter transport must bind the correct session and select an allowed meter key. Payment requires cooperating payer, payee, and voucher signers, a supported configured asset/network, and confirmed reserve. Operational state requires the persistent engine and PostgreSQL. A production CPMS must consume and enforce the pause output on the physical charger.
+On Rove’s home page, choose **Explore a recorded example** or browse **Recorded examples**. Select a Lane or event to inspect its meter reading, payment record, and protection decision. **Play recording** and the timeline let you review past states; viewing a recording never starts a payment.
 
-The manual and search are public and run independently of these services. On Rove’s home page, **Explore a recorded example** opens published charging scenarios without sign-in. **Have an invite?** opens a private workspace for running the approved three-session example or building your own scenario on Tempo testnet. **Your workspace** returns to your private examples, and **Scenario builder** opens Rove Lab. A business relationship is called a Corridor; each charging session is a Lane. Charging equipment is a digital twin; payment receipts identify real testnet activity. Recorded playback changes only your view and never starts a payment. [Trust and authority](/docs/architecture/trust-and-authority) explains what each source can prove. [API reference](/docs/reference/api) describes hosted permissions and the separate local integration boundary.
+Choose **Have an invite?** to open **Your workspace**. You can **Run on Tempo testnet** using the built-in three-session example, or open **Scenario builder** to create your own. Rove supplies test funds; you do not need to connect a wallet. Charging equipment is simulated. Tempo receipts identify real activity on the test network, not production payments.
+
+## What is supported today?
+
+Rove currently supports a fixed energy tariff, a specific signed OCMF meter format, an OCPI-style final accounting record, and the configured Tempo payment channel. Final accounting compares verified energy, billable value, authorized payment, and collected payment before closure returns unused reserve.
+
+A production integration needs authenticated meter readings, approved meter keys, payment signers and funding, and a charging management system that enforces Rove’s pause requirement. Rove does not provide a full roaming platform, physical charger controller, driver billing, tax calculation, currency conversion, or parking and time-based tariffs. Read [supported boundaries](/docs/reference/security) before planning an integration.

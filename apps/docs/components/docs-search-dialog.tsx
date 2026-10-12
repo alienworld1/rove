@@ -66,9 +66,9 @@ export default function DocsSearchDialog(props: SharedProps) {
               ? "Searching…"
               : query.data !== "empty" && query.data
                 ? query.data.length === 0
-                  ? "No matching pages. Try a concept or reason code."
+                  ? "No matching pages. Try “protected value”, “reserve”, or a reason code."
                   : `${query.data.length} results. Use the arrow keys to choose a page.`
-                : "Search concepts, integrations, and reason codes."}
+                : "Search session guidance, payment protection, integrations, and reason codes."}
         </p>
         {query.error ? (
           <button

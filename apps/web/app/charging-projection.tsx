@@ -20,11 +20,11 @@ const stateText: Record<ChargingView["lane"]["state"], string> = {
   PROTECTED: "Protection is ready",
   WATCH: "Protection needs attention",
   AT_RISK: "Protection is at risk",
-  PAUSE_REQUIRED: "Charging should pause until protection is restored",
+  PAUSE_REQUIRED: "Charging must pause until protection is restored",
   RECOVERING: "Restoring protection",
   COMPLETING: "Charging is finishing",
-  RECONCILED: "Charging is reconciled",
-  CLOSED: "Charging is closed",
+  RECONCILED: "Session totals match",
+  CLOSED: "Payment channel is closed",
 };
 
 function reasonText(reasons: string[]) {
@@ -208,7 +208,9 @@ export function ChargingProjection() {
               <div className="space-y-1 border-l-2 border-info pl-3 text-sm text-ink-secondary">
                 {lane.meterSource === "controlled-fixture" ||
                 lane.paymentSource === "local-simulation" ? (
-                  <p>Meter input is from a controlled charging fixture.</p>
+                  <p>
+                    Meter readings come from the simulated charging example.
+                  </p>
                 ) : null}
                 {lane.paymentSource === "local-simulation" ? (
                   <p>

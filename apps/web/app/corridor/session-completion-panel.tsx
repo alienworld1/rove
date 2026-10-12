@@ -107,7 +107,7 @@ export function SessionCompletionPanel({
       "Final accounting total",
       completion?.cdr?.normalizedTotal,
       completion?.cdr?.source === "controlled_fixture"
-        ? "Controlled accounting fixture"
+        ? "Example final accounting record"
         : "Accounting record",
     ],
   ];

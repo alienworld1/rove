@@ -5,7 +5,7 @@ import "./globals.css";
 export const metadata = {
   title: { default: "Rove Docs", template: "%s · Rove Docs" },
   description:
-    "Engineering guidance for evidence, payment protection, and session reconciliation.",
+    "Guidance for EV roaming operators and integration engineers: payment protection, session risk, and final accounting.",
 };
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

@@ -19,8 +19,9 @@ export function LabCorridorSettings({
   return (
     <div className="space-y-6">
       <p className="text-xs leading-relaxed text-ink-secondary">
-        These commercial and protection settings apply to every Lane in this
-        Corridor.
+        These settings apply to each charging session (Lane) in this business
+        relationship (Corridor). Money amounts use the payment asset shown
+        below. Each Lane has its own reserve and exposure limit.
       </p>
       <fieldset className="space-y-3">
         <legend className="mb-3 text-sm font-semibold">Tariff</legend>
@@ -64,7 +65,7 @@ export function LabCorridorSettings({
           }
         />
         <LabValueField
-          label="Top-up trigger headroom"
+          label="Top up when available funding falls to"
           path="corridor.protectionPolicy.lowHeadroomThreshold"
           value={corridor.protectionPolicy.lowHeadroomThreshold}
           decimals={decimals}
@@ -130,7 +131,7 @@ export function LabCorridorSettings({
               })
             }
           />{" "}
-          Require immediate pause when protection fails
+          Pause immediately when meter evidence becomes untrusted or stale
         </label>
       </fieldset>
       <fieldset className="space-y-3 border-t border-line pt-4">

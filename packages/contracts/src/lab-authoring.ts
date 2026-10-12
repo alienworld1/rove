@@ -48,13 +48,13 @@ export const labFaultDescriptions: Partial<
   sequence_break:
     "The reading skips the expected sequence and fails continuity checks.",
   evidence_gap:
-    "Signed evidence is unavailable. Physical uncertainty grows until fresh evidence returns.",
+    "Simulate a gap in signed readings. Possible unverified service grows until a fresh, accepted reading restores evidence.",
   signer_unavailable:
-    "Trusted evidence may advance while payment authorization is unavailable.",
+    "Simulate unavailable payment signing. Valid readings can increase billable value, but new payment protection needs authorization.",
   top_up_failure:
-    "The next funding attempt cannot supply additional payment headroom.",
+    "Simulate a failed top-up. The next funding attempt adds no capacity for further payment authorization.",
   tempo_unavailable:
-    "Payment state is unavailable. Funding and settlement cannot be treated as confirmed.",
+    "Simulate unavailable payment status within this run. New funding and settlement cannot be treated as confirmed; this does not cause a real Tempo outage.",
 };
 export function orderLabEvents(events: LabScenarioEvent[]) {
   return [...events].sort(

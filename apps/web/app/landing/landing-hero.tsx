@@ -24,8 +24,8 @@ export function LandingHero() {
         <p className="mt-7 max-w-xl text-base leading-relaxed text-ink-secondary sm:text-lg">
           When a customer of another mobility provider uses your charger, you
           supply electricity before that provider pays you. Rove uses verified
-          meter readings and a small rolling payment reserve to keep that
-          business’s unpaid exposure within a limit you set.
+          meter readings and a small rolling payment reserve to keep your
+          exposure to unprotected service within a limit you set.
         </p>
         <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
           <RecordedExampleLink />
@@ -37,7 +37,8 @@ export function LandingHero() {
           </a>
         </div>
         <p className="mt-4 text-xs leading-relaxed text-ink-secondary">
-          No sign-in needed. Simulated charging, real Tempo testnet payments.
+          Recorded examples need no sign-in. Simulated charging, real Tempo
+          testnet payments.
         </p>
       </div>
       <HeroRelationship />

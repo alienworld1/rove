@@ -15,7 +15,7 @@ export function ProtectionCalculation({
   if (!snapshot || !calculation)
     return (
       <p className="mt-3 text-xs text-ink-secondary">
-        Calculation operands were not recorded for this event.
+        The inputs for this calculation are unavailable for this event.
       </p>
     );
   const money = (value: string) =>
@@ -89,8 +89,8 @@ export function ProtectionCalculation({
       </p>
       {snapshot.remainingMargin === "0" ? (
         <p className="mt-2 font-semibold text-critical">
-          The exposure limit is exhausted. Rove requires a pause; the digital
-          twin obeys this control output.
+          The exposure limit has been reached. Rove requires charging to pause;
+          the simulated charger obeys this requirement.
         </p>
       ) : null}
     </section>

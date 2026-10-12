@@ -13,7 +13,7 @@ const reasons: Record<string, string> = {
   PAYMENT_TOPUP_FAILED: "The top-up could not be confirmed.",
   LOW_FUNDED_HEADROOM: "Funded headroom is running low.",
   RISK_WINDOW_EXHAUSTED: "The exposure bound has reached its limit.",
-  CONTROL_PAUSE_REQUIRED: "Charging should pause until protection is restored.",
+  CONTROL_PAUSE_REQUIRED: "Charging must pause until protection is restored.",
   RECOVERY_CHECKS_PENDING: "Protection is still being restored.",
 };
 

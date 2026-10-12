@@ -5,6 +5,14 @@ description: "Keep unavailable authority conservative and inspect uncertain oper
 
 A rejection, a known failed transaction, and an unknown chain outcome are different facts. The engine retains causal reasons and durable outbox status rather than treating every error as permission to retry money movement.
 
+## Find the next action in the app
+
+Select the affected Lane or event and read its Inspector. **Jump to fault** takes you to a recorded failure where available. Check whether the issue is a rejected reading, insufficient funding, missing authorization, or an unconfirmed payment.
+
+In a private run, **Check payment state** checks retained work. In the completion panel, **Check again** checks final evidence, accounting, payment, and closure progress. If totals differ, inspect **View accounting record** and the final evidence; repeating a check cannot make different totals match. For a recorded example, these views explain what happened without restarting the run.
+
+The sections below describe the source repairs an integration engineer may need to make. A business operator cannot restore a meter key, signer, or payment connection by dismissing the warning.
+
 ## Evidence failures
 
 Malformed, wrong-key, invalid-signature, wrong-identity/session, duplicate, discontinuous, stale, and regressing readings cannot advance trusted value. Check the [reason](/docs/reference/reason-codes), authenticate the correct source, and deliver the next valid signed reading with expected continuity. A current accepted cumulative reading replaces conservative uncertainty; it does not rewrite rejected history.

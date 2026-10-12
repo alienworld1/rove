@@ -146,7 +146,7 @@ export function CorridorViewport({
         lane.projection.state === "PAUSE_REQUIRED"
       )
         setAssertiveAnnouncement(
-          "Charging should pause until protection is restored.",
+          "Charging must pause until protection is restored.",
         );
       if (
         previous === "PAUSE_REQUIRED" &&

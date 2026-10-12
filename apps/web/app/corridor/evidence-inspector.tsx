@@ -109,7 +109,7 @@ export function EvidenceInspector({
       )}
       <div className="mt-4 border-t border-line pt-3">
         <p className="text-xs font-semibold text-ink-secondary">
-          Value consequence · {assetUnit}
+          Effect on session values · {assetUnit}
         </p>
         {trace.calculation ? (
           <p className="mt-2 text-xs text-ink-tertiary">
@@ -163,7 +163,7 @@ export function EvidenceInspector({
           {evidence?.accepted === false
             ? "This reading cannot advance trusted service or payment authorization. Electricity may still be delivered, so Rove calculates a conservative upper bound."
             : trace.voucher
-              ? `Offchain authorization of ${formatOperationalValue(trace.voucher.cumulativeAmount, assetDecimals)} ${assetUnit} was recorded.`
+              ? `Cumulative payment approval of ${formatOperationalValue(trace.voucher.cumulativeAmount, assetDecimals)} ${assetUnit} was recorded. Approval makes funded value collectible; it is separate from payment collected.`
               : "No new payment authorization is linked to this event."}
         </p>
       </div>

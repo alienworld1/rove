@@ -3,6 +3,8 @@ title: "Tempo Channel Lifecycle"
 description: "Separate funded capacity, cumulative authorization, captured value, and canonical closure."
 ---
 
+A **payment channel** holds funding for one Lane and lets the mobility provider authorize cumulative payment as verified charging value grows. The charging operator collects that authorized value through settlement. Closure returns unused reserve to the payer after final accounting matches.
+
 The current adapter uses the configured TIP-1034 reserve precompile. `packages/tempo/src/index.ts`, `channel.ts`, and `protocol.ts` implement the calls, typed configuration, descriptor binding, receipt checks, and voucher domain. One channel belongs to each Lane.
 
 ## Open and fund

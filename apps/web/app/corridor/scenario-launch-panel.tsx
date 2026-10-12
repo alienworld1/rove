@@ -26,19 +26,19 @@ export function ScenarioLaunchPanel({
       <div className="flex flex-wrap items-end gap-5">
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-tertiary">
-            Digital twin
+            Simulated charging
           </p>
           <h1
             id="start-corridor-title"
             className="mt-1 text-3xl font-semibold text-ink"
           >
-            Open a protected charging Corridor
+            Explore payment protection across charging sessions
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-secondary">
-            Start a controlled run to observe signed meter evidence, funded
-            protection, a bounded fault, and recovery across independent
-            charging Lanes, then reconcile totals, close channels, and return
-            unused reserves.
+            Start a scenario with signed readings and simulated payments. Each
+            Lane is one charging session with its own reserve. Follow an invalid
+            reading through growing risk, a required pause, and recovery, then
+            compare final totals and return unused reserves.
           </p>
         </div>
         <label className="w-64 text-xs text-ink-secondary">

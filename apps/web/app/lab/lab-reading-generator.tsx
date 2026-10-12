@@ -44,9 +44,10 @@ export function LabReadingGenerator({
         Generate readings
       </summary>
       <p className="mt-3 text-xs leading-relaxed text-ink-secondary">
-        Replace this Lane’s ordinary readings with a constant-power source
-        schedule. Faults stay in place; recovery uses a conservative cumulative
-        reading. The engine still enforces its pause interlock.
+        Replace this Lane’s ordinary readings with a constant-power schedule.
+        Faults stay at their current times; recovery uses a conservative
+        cumulative reading. The simulated charger still pauses when the exposure
+        policy requires it.
       </p>
       <div className="mt-3 grid grid-cols-2 gap-3">
         <label className="text-xs">
@@ -75,8 +76,8 @@ export function LabReadingGenerator({
         </label>
       </div>
       <p className="mt-3 text-xs text-ink-secondary">
-        Cadence: {displayLabDecimal(String(lane.expectedProofIntervalMs), 3)}{" "}
-        seconds
+        Reading interval:{" "}
+        {displayLabDecimal(String(lane.expectedProofIntervalMs), 3)} seconds
       </p>
       <button
         className="mt-3 min-h-11 border border-line-strong px-3 text-sm"

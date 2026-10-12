@@ -107,7 +107,7 @@ export function CorridorCompletionChecklist({
       className="mt-6 border-y border-line-strong py-5 text-sm text-ink"
     >
       <h2 className="font-semibold">
-        Finish this Corridor · {closed}/{view.lanes.length} channels closed
+        Session completion · {closed}/{view.lanes.length} channels closed
       </h2>
       <p role="status" className="mt-2 text-ink-secondary">
         {closed === view.lanes.length && closed > 0
@@ -115,8 +115,8 @@ export function CorridorCompletionChecklist({
           : totalsMatch
             ? "Session totals match and final payments are confirmed. Close eligible channels, then wait for confirmed reserve returns."
             : view.activeRun?.status === "completed"
-              ? "Trace recovered. Review and finish the sessions, then close eligible channels to return unused reserves."
-              : "Complete the protection trace before finishing the sessions."}
+              ? "Scenario events complete. Review each session’s final totals, payment, and reserve return below."
+              : "Wait for the scenario events to finish before completing the sessions."}
       </p>
       <ul className="mt-3 divide-y divide-line">
         {view.lanes.map((lane, index) => {

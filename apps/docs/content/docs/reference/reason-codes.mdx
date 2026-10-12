@@ -5,7 +5,7 @@ description: "Interpret exact recorded identifiers and the boundary they preserv
 
 Reasons explain rejection, protection, completion, or adapter validation. A reason is not itself a command or a guarantee that retrying is safe. The inventory below classifies exact current names and links each to its source.
 
-This reason isn't listed here. Inspect the recorded evidence and payment state. Unknown runtime identifiers link to this index instead of a fabricated heading.
+If your reason is not listed, inspect the selected event’s evidence and payment status. The app links unlisted reasons to this page; an unlisted reason does not establish that protection is restored or that a payment is safe to retry.
 
 ## Evidence signature invalid
 
@@ -19,13 +19,13 @@ Source: `packages/evidence/src/index.ts` → `verifyOcmf`.
 
 ### cdr accounting mismatch
 
-`CDR_ACCOUNTING_MISMATCH` — Recorded protection/completion/operation reason. Accounting total differs from trusted service value. Preserve the immutable input; closure remains blocked.
+`CDR_ACCOUNTING_MISMATCH` — Accounting total differs from trusted service value. Preserve the immutable input; closure remains blocked.
 
 Source: `packages/ocpi/src/index.ts`.
 
 ### cdr authorization mismatch
 
-`CDR_AUTHORIZATION_MISMATCH` — Recorded protection/completion/operation reason. Final authorization differs from trusted service. Inspect final voucher and funding before proceeding.
+`CDR_AUTHORIZATION_MISMATCH` — Final authorization differs from trusted service. Inspect final voucher and funding before proceeding.
 
 Source: `packages/ocpi/src/index.ts`.
 
@@ -43,13 +43,13 @@ Source: `packages/ocpi/src/index.ts`.
 
 ### cdr energywh mismatch
 
-`CDR_ENERGYWH_MISMATCH` — Recorded protection/completion/operation reason. CDR Wh differs from final accepted meter Wh. Retain the mismatch; there is no force-match action.
+`CDR_ENERGYWH_MISMATCH` — CDR Wh differs from final accepted meter Wh. Retain the mismatch; there is no force-match action.
 
 Source: `packages/ocpi/src/index.ts`.
 
 ### cdr missing
 
-`CDR_MISSING` — Recorded protection/completion/operation reason. Completion awaits immutable accounting input. Obtain the bound final record.
+`CDR_MISSING` — Completion awaits immutable accounting input. Obtain the bound final record.
 
 Source: `packages/protection/src/completion.ts`.
 
@@ -61,7 +61,7 @@ Source: `packages/ocpi/src/index.ts`.
 
 ### cdr service mismatch
 
-`CDR_SERVICE_MISMATCH` — Recorded protection/completion/operation reason. Final accounting energy or cost differs from trusted service. Keep the mismatch visible and block close.
+`CDR_SERVICE_MISMATCH` — Final accounting energy or cost differs from trusted service. Keep the mismatch visible and block close.
 
 Source: `packages/protection/src/completion.ts`.
 
@@ -73,7 +73,7 @@ Source: `packages/ocpi/src/index.ts`.
 
 ### cdr settlement mismatch
 
-`CDR_SETTLEMENT_MISMATCH` — Recorded protection/completion/operation reason. Captured cumulative value differs from final trusted value. Inspect settlement authority; closure is blocked.
+`CDR_SETTLEMENT_MISMATCH` — Captured cumulative value differs from final trusted value. Inspect settlement authority; closure is blocked.
 
 Source: `packages/ocpi/src/index.ts`.
 
@@ -91,43 +91,43 @@ Source: `packages/ocpi/src/index.ts`.
 
 ### channel closed
 
-`CHANNEL_CLOSED` — Recorded protection/completion/operation reason. Canonical closure and exact refund were verified. Historical settlement remains retained after cleared storage.
+`CHANNEL_CLOSED` — Canonical closure and exact refund were verified. Historical settlement remains retained after cleared storage.
 
 Source: `packages/protection/src/transition.ts`.
 
 ### control pause required
 
-`CONTROL_PAUSE_REQUIRED` — Recorded protection/completion/operation reason. Service must pause until protection is restored. The external CPMS must enforce the requirement.
+`CONTROL_PAUSE_REQUIRED` — Service must pause until protection is restored. The external CPMS must enforce the requirement.
 
 Source: `packages/protection/src/transition.ts`.
 
 ### effect failed
 
-`EFFECT_FAILED` — Recorded protection/completion/operation reason. An effect failed without a more specific adapter reason. Inspect its operation and authoritative outcome before retrying.
+`EFFECT_FAILED` — An effect failed without a more specific adapter reason. Inspect its operation and authoritative outcome before retrying.
 
 Source: `apps/engine/src/outbox-worker.ts`.
 
 ### evidence energy regression
 
-`EVIDENCE_ENERGY_REGRESSION` — Recorded protection/completion/operation reason. Cumulative signed energy moved backward. Reject it and restore valid continuity.
+`EVIDENCE_ENERGY_REGRESSION` — Cumulative signed energy moved backward. Reject it and restore valid continuity.
 
 Source: `packages/evidence/src/index.ts`.
 
 ### evidence key unsupported
 
-`EVIDENCE_KEY_UNSUPPORTED` — Recorded protection/completion/operation reason. Configured key cannot be decoded as supported P-256 SPKI. Authenticate and configure the appropriate key.
+`EVIDENCE_KEY_UNSUPPORTED` — Configured key cannot be decoded as supported P-256 SPKI. Authenticate and configure the appropriate key.
 
 Source: `packages/evidence/src/index.ts`.
 
 ### evidence parse error
 
-`EVIDENCE_PARSE_ERROR` — Recorded protection/completion/operation reason. Raw signed data cannot be decoded under the supported profile. Preserve bytes and reject this input.
+`EVIDENCE_PARSE_ERROR` — Raw signed data cannot be decoded under the supported profile. Preserve bytes and reject this input.
 
 Source: `packages/evidence/src/index.ts`.
 
 ### evidence replay
 
-`EVIDENCE_REPLAY` — Recorded protection/completion/operation reason. A processed raw hash was delivered again. Trusted value cannot advance twice.
+`EVIDENCE_REPLAY` — A processed raw hash was delivered again. Trusted value cannot advance twice.
 
 Source: `packages/evidence/src/index.ts`.
 
@@ -139,61 +139,61 @@ Source: `packages/protection/src/transition.ts`.
 
 ### evidence sequence invalid
 
-`EVIDENCE_SEQUENCE_INVALID` — Recorded protection/completion/operation reason. Pagination or reading time is discontinuous. Submit the expected valid sequence; do not skip verification.
+`EVIDENCE_SEQUENCE_INVALID` — Pagination or reading time is discontinuous. Submit the expected valid sequence; do not skip verification.
 
 Source: `packages/evidence/src/index.ts`.
 
 ### evidence session mismatch
 
-`EVIDENCE_SESSION_MISMATCH` — Recorded protection/completion/operation reason. Authenticated transport session differs from the bound session. Reject input from the other session.
+`EVIDENCE_SESSION_MISMATCH` — Authenticated transport session differs from the bound session. Reject input from the other session.
 
 Source: `packages/evidence/src/index.ts`.
 
 ### evidence source mismatch
 
-`EVIDENCE_SOURCE_MISMATCH` — Recorded protection/completion/operation reason. Signed meter identity differs from the bound meter. Restore the correct authenticated source.
+`EVIDENCE_SOURCE_MISMATCH` — Signed meter identity differs from the bound meter. Restore the correct authenticated source.
 
 Source: `packages/evidence/src/index.ts`.
 
 ### evidence stale
 
-`EVIDENCE_STALE` — Recorded protection/completion/operation reason. Latest signed reading is too old or future-dated for the injected/current clock. Reject it; obtain current valid evidence.
+`EVIDENCE_STALE` — Latest signed reading is too old or future-dated for the injected/current clock. Reject it; obtain current valid evidence.
 
 Source: `packages/evidence/src/index.ts`.
 
 ### evidence untrusted
 
-`EVIDENCE_UNTRUSTED` — Recorded protection/completion/operation reason. Rejected evidence supplied no specific verifier reason. Freeze trusted advancement and inspect the source.
+`EVIDENCE_UNTRUSTED` — Rejected evidence supplied no specific verifier reason. Freeze trusted advancement and inspect the source.
 
 Source: `packages/protection/src/transition.ts`.
 
 ### evidence untrusted or stale
 
-`EVIDENCE_UNTRUSTED_OR_STALE` — Recorded protection/completion/operation reason. Evidence no longer supports current trusted advancement. The conservative service bound can grow.
+`EVIDENCE_UNTRUSTED_OR_STALE` — Evidence no longer supports current trusted advancement. The conservative service bound can grow.
 
 Source: `packages/protection/src/transition.ts`.
 
 ### evidence zero grace exhausted
 
-`EVIDENCE_ZERO_GRACE_EXHAUSTED` — Recorded protection/completion/operation reason. Zero-grace policy has lost fresh evidence. Pause is required without waiting for a larger exposure.
+`EVIDENCE_ZERO_GRACE_EXHAUSTED` — Zero-grace policy has lost fresh evidence. Pause is required without waiting for a larger exposure.
 
 Source: `packages/protection/src/transition.ts`.
 
 ### exposure risk threshold
 
-`EXPOSURE_RISK_THRESHOLD` — Recorded protection/completion/operation reason. Exposure has reached the risk threshold. Inspect evidence/payment authority before the maximum boundary.
+`EXPOSURE_RISK_THRESHOLD` — Exposure has reached the risk threshold. Inspect evidence/payment authority before the maximum boundary.
 
 Source: `packages/protection/src/transition.ts`.
 
 ### exposure warning threshold
 
-`EXPOSURE_WARNING_THRESHOLD` — Recorded protection/completion/operation reason. Exposure has reached the warning threshold. Remaining safe operating room is narrowing.
+`EXPOSURE_WARNING_THRESHOLD` — Exposure has reached the warning threshold. Remaining safe operating room is narrowing.
 
 Source: `packages/protection/src/transition.ts`.
 
 ### final authorization pending
 
-`FINAL_AUTHORIZATION_PENDING` — Recorded protection/completion/operation reason. Final trusted value is not fully authorized. Await sufficient confirmed funding and verified signing.
+`FINAL_AUTHORIZATION_PENDING` — Final trusted value is not fully authorized. Await sufficient confirmed funding and verified signing.
 
 Source: `packages/protection/src/completion.ts`.
 
@@ -205,19 +205,19 @@ Source: `packages/protection/src/transition.ts`.
 
 ### final evidence missing
 
-`FINAL_EVIDENCE_MISSING` — Recorded protection/completion/operation reason. Completion awaits explicitly final accepted evidence. Rejected or ordinary late readings cannot satisfy it.
+`FINAL_EVIDENCE_MISSING` — Completion awaits explicitly final accepted evidence. Rejected or ordinary late readings cannot satisfy it.
 
 Source: `packages/protection/src/transition.ts`.
 
 ### final settlement pending
 
-`FINAL_SETTLEMENT_PENDING` — Recorded protection/completion/operation reason. Final authorized value has not been captured. Await authoritative settlement confirmation.
+`FINAL_SETTLEMENT_PENDING` — Final authorized value has not been captured. Await authoritative settlement confirmation.
 
 Source: `packages/protection/src/completion.ts`.
 
 ### payment amount invalid
 
-`PAYMENT_AMOUNT_INVALID` — Recorded protection/completion/operation reason. Requested amount is invalid for the adapter. Reject movement and inspect configured integer units.
+`PAYMENT_AMOUNT_INVALID` — Requested amount is invalid for the adapter. Reject movement and inspect configured integer units.
 
 Source: `apps/engine/src/charging-effects.ts`.
 
@@ -235,13 +235,13 @@ Source: `packages/protection/src/transition.ts`.
 
 ### payment chain state stale
 
-`PAYMENT_CHAIN_STATE_STALE` — Recorded protection/completion/operation reason. Channel observation is outside the freshness policy. Check current chain authority before advancement.
+`PAYMENT_CHAIN_STATE_STALE` — Channel observation is outside the freshness policy. Check current chain authority before advancement.
 
 Source: `packages/protection/src/transition.ts`.
 
 ### payment chain state unavailable
 
-`PAYMENT_CHAIN_STATE_UNAVAILABLE` — Recorded protection/completion/operation reason. Current channel authority cannot be obtained. Keep protection conservative until checked.
+`PAYMENT_CHAIN_STATE_UNAVAILABLE` — Current channel authority cannot be obtained. Keep protection conservative until checked.
 
 Source: `packages/protection/src/transition.ts`.
 
@@ -253,7 +253,7 @@ Source: `packages/protection/src/transition.ts`.
 
 ### payment environment unsupported
 
-`PAYMENT_ENVIRONMENT_UNSUPPORTED` — Recorded protection/completion/operation reason. Adapter configuration does not select the supported environment. Resolve configuration before financial work.
+`PAYMENT_ENVIRONMENT_UNSUPPORTED` — Adapter configuration does not select the supported environment. Resolve configuration before financial work.
 
 Source: `apps/engine/src/charging-effects.ts`.
 
@@ -265,55 +265,55 @@ Source: `packages/protection/src/transition.ts`.
 
 ### payment outcome unknown
 
-`PAYMENT_OUTCOME_UNKNOWN` — Recorded protection/completion/operation reason. Submitted operation outcome is unresolved. Discover receipt/channel truth before another money movement.
+`PAYMENT_OUTCOME_UNKNOWN` — Submitted operation outcome is unresolved. Discover receipt/channel truth before another money movement.
 
 Source: `apps/engine/src/recover-charging.ts`.
 
 ### payment refund unverified
 
-`PAYMENT_REFUND_UNVERIFIED` — Recorded protection/completion/operation reason. Exact reserve refund cannot be attributed to this channel. Keep closure unconfirmed.
+`PAYMENT_REFUND_UNVERIFIED` — Exact reserve refund cannot be attributed to this channel. Keep closure unconfirmed.
 
 Source: `apps/engine/src/charging-effects.ts`.
 
 ### payment settlement failed
 
-`PAYMENT_SETTLEMENT_FAILED` — Recorded protection/completion/operation reason. Settlement has a known failure. Inspect the retained operation and check/retry through the supported recovery path.
+`PAYMENT_SETTLEMENT_FAILED` — Settlement has a known failure. Inspect the retained operation and check/retry through the supported recovery path.
 
 Source: `apps/engine/src/charging-effects.ts`.
 
 ### payment signer unavailable
 
-`PAYMENT_SIGNER_UNAVAILABLE` — Recorded protection/completion/operation reason. Cooperating voucher signing is unavailable. Restore signing; funding alone cannot authorize service.
+`PAYMENT_SIGNER_UNAVAILABLE` — Cooperating voucher signing is unavailable. Restore signing; funding alone cannot authorize service.
 
 Source: `packages/protection/src/transition.ts`.
 
 ### payment topup failed
 
-`PAYMENT_TOPUP_FAILED` — Recorded protection/completion/operation reason. Top-up failed. Unconfirmed capacity cannot increase headroom; inspect/recover the operation.
+`PAYMENT_TOPUP_FAILED` — Top-up failed. Unconfirmed capacity cannot increase headroom; inspect/recover the operation.
 
 Source: `apps/engine/src/charging-effects.ts`.
 
 ### payment transaction failed
 
-`PAYMENT_TRANSACTION_FAILED` — Recorded protection/completion/operation reason. Receipt establishes transaction failure. This differs from a timeout/unknown result; inspect before retry.
+`PAYMENT_TRANSACTION_FAILED` — Receipt establishes transaction failure. This differs from a timeout/unknown result; inspect before retry.
 
 Source: `packages/persistence/src/index.ts`.
 
 ### protection awaiting trust and funding
 
-`PROTECTION_AWAITING_TRUST_AND_FUNDING` — Recorded protection/completion/operation reason. Initial Lane lacks trusted service plus confirmed funded authorization. Service protection is not ready.
+`PROTECTION_AWAITING_TRUST_AND_FUNDING` — Initial Lane lacks trusted service plus confirmed funded authorization. Service protection is not ready.
 
 Source: `packages/protection/src/transition.ts`.
 
 ### protection ready
 
-`PROTECTION_READY` — Recorded protection/completion/operation reason. Current trust, payment authority, and exposure invariants allow protected operation.
+`PROTECTION_READY` — Current trust, payment authority, and exposure invariants allow protected operation.
 
 Source: `packages/protection/src/transition.ts`.
 
 ### recovery checks pending
 
-`RECOVERY_CHECKS_PENDING` — Recorded protection/completion/operation reason. Recovery began but current authority/invariants are not yet restored. A UI reset cannot clear it.
+`RECOVERY_CHECKS_PENDING` — Recovery began but current authority/invariants are not yet restored. A UI reset cannot clear it.
 
 Source: `packages/protection/src/transition.ts`.
 
@@ -325,13 +325,13 @@ Source: `packages/protection/src/transition.ts`.
 
 ### risk window exhausted
 
-`RISK_WINDOW_EXHAUSTED` — Recorded protection/completion/operation reason. Exposure is at or above the maximum, including equality. Pause is required.
+`RISK_WINDOW_EXHAUSTED` — Exposure is at or above the maximum, including equality. Pause is required.
 
 Source: `packages/protection/src/transition.ts`.
 
 ### session totals match
 
-`SESSION_TOTALS_MATCH` — Recorded protection/completion/operation reason. Final four monetary totals and energy comparison permit reconciliation. Close still requires resolved payment work.
+`SESSION_TOTALS_MATCH` — Final four monetary totals and energy comparison permit reconciliation. Close still requires resolved payment work.
 
 Source: `packages/protection/src/completion.ts`.
 

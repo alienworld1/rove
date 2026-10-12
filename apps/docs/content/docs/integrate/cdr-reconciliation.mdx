@@ -3,6 +3,8 @@ title: "CDR Reconciliation"
 description: "Check immutable accounting against final meter, authorization, and settlement totals."
 ---
 
+A **CDR** (Charge Detail Record) is the final accounting record for a charging session. Reconciliation checks whether its energy and cost agree with accepted meter readings, authorized payment, and payment collected. Matching totals permit closure; a mismatch keeps the channel open and may retain unused reserve.
+
 The narrow OCPI-style adapter in `packages/ocpi/src/index.ts` accepts a concluded-session energy-only tax-free record. It follows relevant [OCPI CDR concepts](https://github.com/ocpi/ocpi/blob/2.3.0/release/core/mod_cdrs.asciidoc); it does not implement full OCPI transport or claim protocol conformance.
 
 ## Binding and exact precision
@@ -153,6 +155,6 @@ Compare final trusted service value, final authorized value, final settled value
 
 ## Finish and close
 
-After the controlled service trace stops, focus its Lane and choose **Finish session**. The server supplies final signed evidence and its immutable fixture, authorizes remaining trusted value, and requests final settlement. **Check again** inspects existing work. Pending operations continue after navigation. **Close channel** becomes available only when matching totals, accepted final evidence, fresh authority, and resolved earlier work permit it.
+After the controlled service trace stops, review its Lane’s completion panel. Hosted runs submit final accounting automatically; where manual completion is available, choose **Finish session**. The server supplies final signed evidence and its immutable fixture, authorizes remaining trusted value, and requests final settlement. **Check again** inspects existing work. Pending operations continue after navigation. **Close channel** becomes available only when matching totals, accepted final evidence, fresh authority, and resolved earlier work permit it.
 
 Zero-service totals and zero-refund closure must be verified, not confused with absent values. The canonical close receipt and exact returned reserve are retained after refresh/restart. A mismatch remains visible and blocks closure. Read [final settlement and refund proof](/docs/integrate/tempo/channel-lifecycle#close-and-refund) and [failure recovery](/docs/architecture/failure-and-recovery).

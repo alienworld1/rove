@@ -42,8 +42,9 @@ export function CreditComparison() {
             <dt className="text-sm font-semibold">With Rove</dt>
             <dd className="text-sm leading-relaxed text-ink-secondary">
               Fund consumed service progressively, plus a small rolling reserve.
-              Verified readings and funded approval determine secured value; a
-              configured limit bounds possible exposure.
+              Verified readings and funded payment approval establish protected
+              value. Rove requires charging to pause when possible unprotected
+              exposure reaches your limit.
             </dd>
           </div>
         </dl>

@@ -39,10 +39,12 @@ export function ControlledSessionGate({
   return (
     <section className="mx-auto max-w-md py-16">
       <h2 className="text-xl font-semibold text-ink">
-        Connect to the controlled session
+        Open your local workspace
       </h2>
       <p className="mt-3 text-sm text-ink-secondary">
-        Enter your local access key to open the Corridor.
+        Enter the local access key configured for your Rove services to explore
+        simulated charging sessions. Hosted invite codes are used on the hosted
+        app.
       </p>
       <form
         onSubmit={(event) => void connect(event)}
@@ -73,7 +75,7 @@ export function ControlledSessionGate({
           disabled={busy}
           className="min-h-11 rounded-sm bg-ink px-5 py-2 text-sm font-semibold text-pure focus-visible:outline-2 focus-visible:outline-info disabled:opacity-50"
         >
-          {busy ? "Connecting…" : "Open Corridor"}
+          {busy ? "Connecting…" : "Open workspace"}
         </button>
       </form>
     </section>

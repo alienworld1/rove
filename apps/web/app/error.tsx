@@ -10,7 +10,8 @@ export default function ErrorPage({ reset }: { reset: () => void }) {
         This page could not load
       </h1>
       <p className="mt-3 text-ink-secondary">
-        Please try again. If the problem continues, check the service settings.
+        Try again in a moment. If the problem continues, return to Rove’s home
+        page or contact the person who provided your invite.
       </p>
       <button
         onClick={reset}

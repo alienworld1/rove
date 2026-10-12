@@ -1,7 +1,15 @@
 ---
 title: "Protection Window"
-description: "Read protected value, uncertainty, headroom, and the exact pause boundary."
+description: "Understand what is protected, collected, available to fund, or still at risk."
 ---
+
+A **protection window** is the maximum possible gap your policy permits between service delivered and payment protected. It is an exposure limit, not simply the money held in reserve.
+
+For example, if verified service is worth 10 units and funded authorization covers 10, protected value is 10. If only 6 has been collected, settled value is 6: the remaining 4 is protected but not yet collected. If stale readings mean up to 2 more units of service could have been delivered, the exposure bound is 2. A limit of 2 requires a pause at that point.
+
+For the charging operator, watch **protected value**, **settled value**, and the **exposure bound**. For the mobility provider, also watch **funded headroom**: capacity for additional authorization, distinct from the remaining balance held in the channel. Unknown values mean unavailable information, not zero.
+
+## Integration units
 
 The protection engine uses integer arithmetic. Monetary values below are settlement-asset base units; energy is Wh, maximum power is W, elapsed time is ms. Tariff precision and asset precision are explicit.
 

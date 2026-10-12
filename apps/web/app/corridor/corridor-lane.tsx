@@ -27,7 +27,7 @@ const stateCopy = {
   PROTECTED: "Protection ready",
   WATCH: "Watch",
   AT_RISK: "At risk",
-  PAUSE_REQUIRED: "Charging should pause",
+  PAUSE_REQUIRED: "Charging must pause",
   RECOVERING: "Restoring protection",
   COMPLETING: "Completing",
   RECONCILED: "Reconciled",

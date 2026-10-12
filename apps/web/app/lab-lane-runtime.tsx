@@ -36,7 +36,7 @@ export function LabLaneRuntime({ lanes }: { lanes: LabRunView["lanes"] }) {
                 }
               >
                 {projection?.state === "PAUSE_REQUIRED"
-                  ? "Charging should pause until protection is restored."
+                  ? "Charging must pause until protection is restored."
                   : projection?.state === "PROTECTED"
                     ? "Protection ready"
                     : projection?.state === "RECOVERING"

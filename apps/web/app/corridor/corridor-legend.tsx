@@ -5,9 +5,10 @@ export function CorridorLegend() {
       className="border-b border-line py-3 text-xs text-ink-secondary"
     >
       <p>
-        The charging operator delivers electricity to the mobility provider’s
-        customer. Signed meter evidence supports funded payment protection as
-        service progresses.
+        This Corridor is one relationship between a mobility provider (payer)
+        and a charging operator (payee). Each Lane is one charging session with
+        its own reserve. Select a Lane or event to inspect its readings, payment
+        protection, and possible exposure.
       </p>
       <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
         <div>
@@ -20,7 +21,10 @@ export function CorridorLegend() {
         </div>
         <div>
           <dt className="font-semibold text-protected">Protected value</dt>
-          <dd>Verified service backed by funded authorization</dd>
+          <dd>
+            Verified service with funded approval · collectible, not yet
+            necessarily collected
+          </dd>
         </div>
         <div>
           <dt className="font-semibold text-ink">Settled value</dt>
@@ -28,7 +32,7 @@ export function CorridorLegend() {
         </div>
         <div>
           <dt className="font-semibold text-risk-deep">Risk envelope</dt>
-          <dd>Worst-case service beyond protected value</dd>
+          <dd>Possible service value beyond protection · an upper bound</dd>
         </div>
       </dl>
     </section>

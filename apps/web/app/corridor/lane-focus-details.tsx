@@ -53,9 +53,9 @@ export function LaneFocusDetails({
             Why the risk envelope grows
           </dt>
           <dd>
-            The last trusted reading remains the billing frontier. Maximum
-            charger power and elapsed trace time bound possible additional
-            electricity.{" "}
+            Only accepted readings establish billable service. Maximum charger
+            power and time since the last trusted reading bound the value of
+            possible additional electricity.{" "}
             {projection.state === "PAUSE_REQUIRED"
               ? "The exposure limit is exhausted, so this Lane must pause."
               : "Select a risk event to inspect the calculation."}

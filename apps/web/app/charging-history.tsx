@@ -7,7 +7,7 @@ const labels: Record<string, string> = {
   "payment.chain_observed": "Payment channel checked",
   "payment.voucher_verified": "Cumulative protection advanced",
   "payment.chain_unavailable": "Payment status needs checking",
-  "lane.pause_required": "Charging should pause",
+  "lane.pause_required": "Charging must pause",
   "lane.at_risk": "Protection needs attention",
   "lane.watch": "Protection is being watched",
   "lane.protected": "Protection is ready",
@@ -35,7 +35,7 @@ export function ChargingHistory({ history }: { history: LaneHistory }) {
         id="charging-history-title"
         className="text-sm font-semibold text-ink"
       >
-        Causal history
+        Session event history
       </h4>
       {history.length === 0 ? (
         <p className="mt-3 text-sm text-ink-secondary">

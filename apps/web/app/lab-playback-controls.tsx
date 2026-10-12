@@ -48,9 +48,9 @@ export function LabPlaybackControls({
           {run.status === "running"
             ? "Running"
             : run.status === "completed"
-              ? "Trace recovered. Review the completion checklist for session totals and reserve returns."
+              ? "Scenario events complete. Review the completion checklist for session totals and reserve returns."
               : run.status === "failed"
-                ? "This run needs attention. Check again or replay it."
+                ? "This run needs attention. Check again before starting another run."
                 : run.status === "awaiting_chain"
                   ? "Waiting on payment confirmation"
                   : run.status === "paused"
@@ -89,7 +89,7 @@ export function LabPlaybackControls({
           }
           className="min-h-11 rounded-sm border border-line-strong bg-raised px-4 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
         >
-          Step event
+          Next event
         </button>
         <button
           type="button"
@@ -97,7 +97,7 @@ export function LabPlaybackControls({
           disabled={busy}
           className="min-h-11 rounded-sm border border-line-strong bg-raised px-4 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
         >
-          Replay
+          Start another run
         </button>
         {run.status === "awaiting_chain" || run.status === "failed" ? (
           <button
@@ -146,8 +146,10 @@ export function LabPlaybackControls({
         onInspect={onInspect}
       />
       <p className="mt-2 text-xs text-ink-tertiary">
-        Speed changes the time between trace events. Payment confirmation
-        follows the network.
+        Speed changes the time between scenario events. Pausing holds upcoming
+        events; it is separate from a charging pause required by the exposure
+        policy. Start another run creates fresh channels and retains this run’s
+        history.
       </p>
     </section>
   );

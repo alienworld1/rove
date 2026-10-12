@@ -40,11 +40,12 @@ export function LabWorkspaceToolbar({
             Rove Lab · {hosted ? "Private workspace" : "Engineering workspace"}
           </p>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">
-            Instrument the Corridor.
+            Build a charging scenario
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-ink-secondary">
-            Build reproducible charging traces. Follow evidence failure through
-            to payment protection and recovery.
+            Choose a starting scenario, set the tariff and exposure limits, then
+            edit each session’s readings and faults. Save and run to follow
+            their effect on payment protection and recovery.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -75,7 +76,7 @@ export function LabWorkspaceToolbar({
       <div className="flex flex-wrap items-center justify-between gap-3 py-4 text-xs">
         <p role="status" className="text-ink-secondary">
           {savedDigest && !Object.keys(pending).length
-            ? "Saved · Server validated"
+            ? "Saved · Scenario checked"
             : "Unsaved draft"}
           {hosted ? ` · ${remainingRuns ?? "…"} runs remaining` : ""}
         </p>
@@ -160,8 +161,9 @@ export function LabWorkspaceToolbar({
               transactions maximum
             </p>
             <p className="mt-1 text-xs text-ink-secondary">
-              Uses one of {quote.remainingRuns} remaining runs. Admission
-              rechecks available funding.
+              Uses one of {quote.remainingRuns} remaining runs. Rove checks
+              available funding again before starting. Test funds are supplied
+              for you; no wallet is needed.
             </p>
           </div>
           <button
